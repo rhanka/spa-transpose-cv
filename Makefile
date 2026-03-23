@@ -153,8 +153,8 @@ deploy-api-init: check-scw ## Create API container in Scaleway namespace (first 
 .PHONY: deploy-api
 deploy-api: check-scw ## Update API container with new image (rollout)
 	@echo "Updating $(API_IMAGE_NAME) to $(API_VERSION)..."
-	@API_CONTAINER_ID=$$(scw container container list | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}'); \
-	scw container container update $${API_CONTAINER_ID} registry-image="$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)"
+	@API_CONTAINER_ID=$$(scw container container list region=fr-par | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}'); \
+	scw container container update $${API_CONTAINER_ID} registry-image="$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)" region=fr-par > .deploy_output.log
 	@echo "Deployment initiated."
 
 .PHONY: deploy
