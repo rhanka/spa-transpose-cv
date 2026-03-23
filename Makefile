@@ -172,6 +172,47 @@ wait-for-api: check-scw ## Wait for API container to be ready
 	echo " ready!"
 
 # -----------------------------------------------------------------------------
+# DNS (Cloudflare) + SCW custom domains
+# -----------------------------------------------------------------------------
+
+SCW_API_CONTAINER_ID ?= $(shell scw container container list 2>/dev/null | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}')
+SCW_API_DOMAIN       = transposecv8smikinq-transpose-cv-api.functions.fnc.fr-par.scw.cloud
+CUSTOM_API_DOMAIN    = scalian-cv-api.sent-tech.ca
+CUSTOM_UI_DOMAIN     = scalian-cv.sent-tech.ca
+
+.PHONY: dns-setup
+dns-setup: dns-api dns-ui scw-custom-domain ## Setup all DNS records + SCW custom domain
+
+.PHONY: dns-api
+dns-api: ## Create CNAME scalian-cv-api.sent-tech.ca → SCW (Cloudflare)
+	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
+		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
+	fi
+	@echo "Creating CNAME $(CUSTOM_API_DOMAIN) → $(SCW_API_DOMAIN)..."
+	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
+		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
+		-H "Content-Type: application/json" \
+		--data '{"type":"CNAME","name":"scalian-cv-api","content":"$(SCW_API_DOMAIN)","ttl":1,"proxied":false}' \
+		| python3 -c "import sys,json; r=json.load(sys.stdin); print('OK' if r.get('success') else f'Error: {r.get(\"errors\",r)}')"
+
+.PHONY: dns-ui
+dns-ui: ## Create CNAME scalian-cv.sent-tech.ca → rhanka.github.io (Cloudflare)
+	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
+		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
+	fi
+	@echo "Creating CNAME $(CUSTOM_UI_DOMAIN) → rhanka.github.io..."
+	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
+		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
+		-H "Content-Type: application/json" \
+		--data '{"type":"CNAME","name":"scalian-cv","content":"rhanka.github.io","ttl":1,"proxied":false}' \
+		| python3 -c "import sys,json; r=json.load(sys.stdin); print('OK' if r.get('success') else f'Error: {r.get(\"errors\",r)}')"
+
+.PHONY: scw-custom-domain
+scw-custom-domain: check-scw ## Register custom domain on SCW API container
+	@echo "Registering $(CUSTOM_API_DOMAIN) on SCW container $(SCW_API_CONTAINER_ID)..."
+	@scw container domain create container-id=$(SCW_API_CONTAINER_ID) hostname=$(CUSTOM_API_DOMAIN)
+
+# -----------------------------------------------------------------------------
 # Utilities
 # -----------------------------------------------------------------------------
 
