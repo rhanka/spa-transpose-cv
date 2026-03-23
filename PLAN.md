@@ -9,20 +9,20 @@
 - [x] SPEC.md (spec raffinée)
 - [x] PLAN.md (ce fichier)
 
-### Phase 1 — Monorepo & infra de base
-- [ ] Structure monorepo `api/` + `ui/` (inspiré top-ai-ideas-fullstack)
-- [ ] `api/package.json` — Hono, @anthropic-ai/sdk, jszip, zod, pino
-- [ ] `api/tsconfig.json` + build esbuild
-- [ ] `api/src/index.ts` — serveur Hono minimal + health check
-- [ ] `api/Dockerfile` — multi-stage (dev/build/prod)
-- [ ] `ui/package.json` — SvelteKit 2 + Svelte 5, Tailwind, adapter-static
-- [ ] `ui/svelte.config.js` + `ui/vite.config.ts`
-- [ ] `ui/Dockerfile` — multi-stage (dev/build/prod avec Nginx)
-- [ ] `docker-compose.yml` + `docker-compose.dev.yml`
-- [ ] `Makefile` — targets: dev, build, publish, deploy
-- [ ] `.env.example` — template des variables
-- [ ] `.gitignore` + `.dockerignore`
-- [ ] Commit atomique
+### Phase 1 — Monorepo & infra de base ✅
+- [x] Structure monorepo `api/` + `ui/` (inspiré top-ai-ideas-fullstack)
+- [x] `api/package.json` — Hono, @anthropic-ai/sdk, jszip, zod, pino
+- [x] `api/tsconfig.json` + build esbuild
+- [x] `api/src/index.ts` — serveur Hono minimal + health check
+- [x] `api/Dockerfile` — multi-stage (dev/build/prod)
+- [x] `ui/package.json` — SvelteKit 2 + Svelte 5, Tailwind, adapter-static
+- [x] `ui/svelte.config.js` + `ui/vite.config.ts`
+- [x] `ui/Dockerfile` — multi-stage (dev/build/prod avec Nginx)
+- [x] `docker-compose.yml` + `docker-compose.dev.yml`
+- [x] `Makefile` — targets: dev, build, publish, deploy
+- [x] `.env.example` — template des variables
+- [x] `.gitignore` + `.dockerignore`
+- [x] Commit atomique
 
 ### Phase 2 — API core (sessions + chiffrement)
 - [ ] `api/src/config/env.ts` — validation env (Zod)
