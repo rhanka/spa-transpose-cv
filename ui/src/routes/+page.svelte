@@ -14,31 +14,18 @@
     e.preventDefault();
     dragOver = false;
     const dropped = Array.from(e.dataTransfer?.files || []);
-    const valid = dropped.filter(f =>
-      f.name.match(/\.(pdf|docx?|doc)$/i)
-    );
-    files = [...files, ...valid];
+    files = [...files, ...dropped.filter(f => f.name.match(/\.(pdf|docx?|doc)$/i))];
   }
 
-  function handleDragOver(e: DragEvent) {
-    e.preventDefault();
-    dragOver = true;
-  }
-
-  function handleDragLeave() {
-    dragOver = false;
-  }
+  function handleDragOver(e: DragEvent) { e.preventDefault(); dragOver = true; }
+  function handleDragLeave() { dragOver = false; }
 
   function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
-    if (input.files) {
-      files = [...files, ...Array.from(input.files)];
-    }
+    if (input.files) files = [...files, ...Array.from(input.files)];
   }
 
-  function removeFile(index: number) {
-    files = files.filter((_, i) => i !== index);
-  }
+  function removeFile(index: number) { files = files.filter((_, i) => i !== index); }
 
   function formatSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} o`;
@@ -51,19 +38,10 @@
     loading = true;
     error = '';
     try {
-      // 1. Create session
       const { sessionId: sid } = await createSession(password);
-
-      // 2. Upload files
       await uploadFiles(sid, password, files);
-
-      // 3. Mark ready with prompt
       await markReady(sid, password, prompt);
-
-      // 4. Start processing
       await startProcessing(sid, password);
-
-      // 5. Navigate to session page
       sessionId.set(sid);
       sessionPassword.set(password);
       goto(`/session/${sid}`);
@@ -75,26 +53,27 @@
   }
 </script>
 
-<div class="max-w-[1248px] mx-auto px-4 py-16">
-  <!-- Hero -->
-  <section class="text-center mb-16">
-    <h1 class="text-4xl md:text-5xl mb-4" style="color: var(--color-purple-dark);">
-      Convertissez vos CVs au format Scalian
+<!-- Hero section — purple bg like scalian.com -->
+<section class="bg-[#1D1148] text-white" style="padding: 5rem 0 4rem;">
+  <div class="max-w-[1216px] mx-auto px-4 text-center">
+    <h1 class="text-4xl md:text-5xl mb-5" style="color: white; line-height: 1.2;">
+      Convertissez vos CVs<br/>au format Scalian
     </h1>
-    <p class="text-lg max-w-2xl mx-auto" style="color: var(--color-purple-light);">
-      Uploadez un lot de CVs, ajoutez un prompt d'orientation, et laissez l'IA transformer
-      chaque profil au format Scalian en parallèle.
+    <p class="text-lg max-w-2xl mx-auto" style="color: rgba(255,255,255,0.65); font-weight: 300;">
+      Uploadez un lot de CVs, ajoutez un prompt d'orientation, et laissez l'IA
+      transformer chaque profil en parall&egrave;le.
     </p>
-  </section>
+  </div>
+</section>
 
-  <!-- Upload card -->
-  <section class="max-w-2xl mx-auto">
-    <div class="border-2 p-8 bg-white" style="border-color: var(--color-purple-border); box-shadow: 0 20px 40px 0 rgba(29, 17, 72, 0.1);">
+<!-- Upload card — floating on white bg -->
+<section class="bg-white" style="padding: 3rem 0 5rem; margin-top: -2rem;">
+  <div class="max-w-2xl mx-auto px-4">
+    <div class="card p-8">
       <!-- File drop zone -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="border-2 border-dashed p-12 text-center mb-6 transition-colors cursor-pointer"
-        class:border-scalian-green={dragOver}
+        class="border-2 border-dashed p-10 text-center mb-6 transition-colors cursor-pointer"
         style="border-color: {dragOver ? 'var(--color-green)' : 'var(--color-purple-border)'};"
         ondrop={handleDrop}
         ondragover={handleDragOver}
@@ -104,100 +83,72 @@
         tabindex="0"
         onkeydown={(e) => { if (e.key === 'Enter') document.getElementById('file-input')?.click(); }}
       >
-        <input
-          id="file-input"
-          type="file"
-          multiple
-          accept=".pdf,.docx,.doc"
-          class="hidden"
-          onchange={handleFileSelect}
-        />
+        <input id="file-input" type="file" multiple accept=".pdf,.docx,.doc" class="hidden" onchange={handleFileSelect} />
         {#if files.length === 0}
-          <p style="color: var(--color-purple-light);" class="mb-2">
-            Glissez vos fichiers ici ou cliquez pour sélectionner
-          </p>
-          <p class="text-xs" style="color: var(--color-purple-light); opacity: 0.6;">
-            PDF, DOCX, DOC — 50 Mo max au total
-          </p>
+          <div class="mb-3">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-purple-lighter)" stroke-width="1.5" class="mx-auto">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            </svg>
+          </div>
+          <p class="text-sm" style="color: var(--color-purple-light);">Glissez vos fichiers ici ou cliquez pour s&eacute;lectionner</p>
+          <p class="text-xs mt-1" style="color: var(--color-purple-lighter);">PDF, DOCX, DOC &mdash; 50 Mo max au total</p>
         {:else}
-          <p class="text-sm font-medium mb-3">{files.length} fichier{files.length > 1 ? 's' : ''} sélectionné{files.length > 1 ? 's' : ''}</p>
+          <p class="text-sm font-semibold mb-3">{files.length} fichier{files.length > 1 ? 's' : ''}</p>
           <div class="text-left max-h-48 overflow-y-auto space-y-1">
             {#each files as file, i}
-              <div class="flex items-center justify-between text-sm py-1 px-2 bg-gray-50">
+              <div class="flex items-center justify-between text-sm py-1.5 px-3" style="background: var(--color-purple-bg);">
                 <span class="truncate flex-1">{file.name}</span>
-                <span class="text-xs mx-2" style="color: var(--color-purple-light);">{formatSize(file.size)}</span>
-                <button
-                  class="text-red-400 hover:text-red-600 text-xs font-bold"
-                  onclick={(e) => { e.stopPropagation(); removeFile(i); }}
-                >✕</button>
+                <span class="text-xs mx-3" style="color: var(--color-purple-lighter);">{formatSize(file.size)}</span>
+                <button class="text-red-400 hover:text-red-600 text-xs font-bold" onclick={(e) => { e.stopPropagation(); removeFile(i); }}>&#x2715;</button>
               </div>
             {/each}
           </div>
-          <p class="text-xs mt-2" style="color: var(--color-purple-light); opacity: 0.6;">
-            Cliquez ou glissez pour ajouter d'autres fichiers
-          </p>
+          <p class="text-xs mt-2" style="color: var(--color-purple-lighter);">Cliquez ou glissez pour en ajouter</p>
         {/if}
       </div>
 
       <!-- Password -->
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-2" for="password">
-          Mot de passe de chiffrement
-        </label>
+      <div class="mb-5">
+        <label class="block text-sm font-medium mb-1.5" for="password">Mot de passe de chiffrement</label>
         <input
           id="password"
           type="password"
           bind:value={password}
-          placeholder="Choisissez un mot de passe pour protéger cette session"
-          class="w-full px-4 py-3 border-2 focus:outline-none text-sm"
+          placeholder="Choisissez un mot de passe pour cette session"
+          class="w-full px-4 py-3 border-2 text-sm"
           style="border-color: var(--color-purple-border);"
-          onfocus={(e) => (e.target as HTMLElement).style.borderColor = 'var(--color-purple)'}
-          onblur={(e) => (e.target as HTMLElement).style.borderColor = 'var(--color-purple-border)'}
         />
-        <p class="text-xs mt-1" style="color: var(--color-purple-light); opacity: 0.6;">
-          Nécessaire pour accéder aux résultats. Communiquez-le au destinataire du lien.
+        <p class="text-xs mt-1" style="color: var(--color-purple-lighter);">
+          N&eacute;cessaire pour d&eacute;chiffrer les r&eacute;sultats. Communiquez-le au destinataire.
         </p>
       </div>
 
       <!-- Prompt -->
       <div class="mb-6">
-        <label class="block text-sm font-medium mb-2" for="prompt">
-          Prompt d'orientation <span style="color: var(--color-purple-light); opacity: 0.6;" class="font-normal">(optionnel)</span>
+        <label class="block text-sm font-medium mb-1.5" for="prompt">
+          Prompt d'orientation <span style="color: var(--color-purple-lighter);" class="font-normal">(optionnel)</span>
         </label>
         <textarea
           id="prompt"
           rows={3}
           bind:value={prompt}
           placeholder="Ex: Focus cloud/DevOps, profils anglais, consolider les postes > 20 ans..."
-          class="w-full px-4 py-3 border-2 focus:outline-none text-sm resize-none"
+          class="w-full px-4 py-3 border-2 text-sm resize-none"
           style="border-color: var(--color-purple-border);"
-          onfocus={(e) => (e.target as HTMLElement).style.borderColor = 'var(--color-purple)'}
-          onblur={(e) => (e.target as HTMLElement).style.borderColor = 'var(--color-purple-border)'}
         ></textarea>
       </div>
 
-      <!-- Error -->
       {#if error}
-        <div class="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm">
-          {error}
-        </div>
+        <div class="mb-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
       {/if}
 
-      <!-- Submit -->
       <button
         onclick={handleSubmit}
         disabled={!files.length || !password || loading}
-        class="w-full py-4 text-sm font-semibold text-white border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        style="border-color: var(--color-green); background: var(--color-green); transition-timing-function: var(--ease-smooth);"
-        onmouseenter={(e) => { if (!loading) (e.target as HTMLElement).style.background = 'var(--color-green-hover)'; }}
-        onmouseleave={(e) => (e.target as HTMLElement).style.background = 'var(--color-green)'}
+        class="w-full btn-primary"
       >
-        {#if loading}
-          Traitement en cours...
-        {:else}
-          Lancer la conversion
-        {/if}
+        {loading ? 'Traitement en cours...' : 'Lancer la conversion'}
       </button>
     </div>
-  </section>
-</div>
+  </div>
+</section>

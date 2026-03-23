@@ -4,43 +4,30 @@
 </script>
 
 <div class="min-h-screen flex flex-col">
-  <!-- Header -->
-  <header class="bg-scalian-dark text-white">
-    <div class="max-w-[1248px] mx-auto px-4 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <!-- Scalian S logo (gradient) -->
-        <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-          <defs>
-            <linearGradient id="scalian-grad" x1="100%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#E4005B" />
-              <stop offset="31%" stop-color="#4B2979" />
-              <stop offset="65%" stop-color="#5A8C8F" />
-              <stop offset="100%" stop-color="#61BA9A" />
-            </linearGradient>
-          </defs>
-          <rect width="40" height="40" rx="8" fill="url(#scalian-grad)" />
-          <text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle"
-                font-family="Poppins, sans-serif" font-weight="600" font-size="22" fill="white">S</text>
-        </svg>
-        <span class="text-lg font-semibold tracking-wide uppercase" style="font-family: 'Poppins', sans-serif;">
-          Scalian
-        </span>
-      </div>
-      <nav class="text-sm font-medium text-white/70">
+  <!-- Header — Scalian dark purple -->
+  <header class="bg-[#1D1148]">
+    <div class="max-w-[1216px] mx-auto px-4 flex items-center justify-between" style="padding-top: 1.25rem; padding-bottom: 1.25rem;">
+      <a href="/" class="flex items-center">
+        <img src="/logo-scalian.svg" alt="Scalian" class="h-8" style="filter: brightness(0) invert(1);" />
+      </a>
+      <span class="text-white/60 text-sm font-medium" style="font-family: 'Inter', sans-serif;">
         CV Transpose
-      </nav>
+      </span>
     </div>
   </header>
 
   <!-- Content -->
-  <main class="flex-1">
+  <main class="flex-1 bg-white">
     {@render children()}
   </main>
 
-  <!-- Footer -->
-  <footer class="bg-scalian-dark text-white/50 text-xs py-6">
-    <div class="max-w-[1248px] mx-auto px-4 text-center">
-      Scalian CV Transpose &mdash; Outil interne &mdash; Donn&eacute;es chiffr&eacute;es, purg&eacute;es sous 48h
+  <!-- Footer — Scalian dark purple -->
+  <footer class="bg-[#1D1148]" style="padding-top: 2.25rem; padding-bottom: 2.25rem;">
+    <div class="max-w-[1216px] mx-auto px-4 flex items-center justify-between">
+      <img src="/logo-scalian.svg" alt="Scalian" class="h-5 opacity-40" style="filter: brightness(0) invert(1);" />
+      <p class="text-white/40 text-xs" style="font-family: 'Inter', sans-serif;">
+        Outil interne &mdash; Donn&eacute;es chiffr&eacute;es AES-256, purg&eacute;es sous 48h
+      </p>
     </div>
   </footer>
 </div>
