@@ -22,7 +22,6 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      global: ${{ steps.filter.outputs.global }}
       api: ${{ steps.filter.outputs.api }}
       ui: ${{ steps.filter.outputs.ui }}
     steps:
@@ -31,63 +30,55 @@ jobs:
         id: filter
         with:
           filters: |
-            global:
+            api:
+              - 'api/**'
               - 'Makefile'
               - 'docker-compose.yml'
               - '.github/workflows/ci.yml'
-            api:
-              - 'api/**'
             ui:
               - 'ui/**'
+              - '.github/workflows/ci.yml'
 
-  # ── Build API image ──────────────────────────────────────────────
+  # ── Build & typecheck API ────────────────────────────────────────
   build-api:
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.global == 'true'
-    env:
-      DOCKER_USERNAME: nologin
-      DOCKER_PASSWORD: ${{ secrets.SCW_SECRET_KEY }}
+    if: needs.changes.outputs.api == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build API image
         run: make build-api
-      - name: Save API image as artifact
+      - name: Save API image
         run: |
-          API_VERSION=$(make -s version | grep API | awk '{print $2}')
-          docker save $REGISTRY/transpose-cv-api:${API_VERSION} -o api-image.tar
+          IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep transpose-cv-api | head -1)
+          docker save $IMAGE -o api-image.tar
       - uses: actions/upload-artifact@v4
         with:
           name: api-image
           path: api-image.tar
 
-  # ── Typecheck API ────────────────────────────────────────────────
   typecheck-api:
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.global == 'true'
+    if: needs.changes.outputs.api == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: api/package-lock.json
       - run: cd api && npm install && npx tsc --noEmit
 
-  # ── Build & Typecheck UI ─────────────────────────────────────────
+  # ── Build & typecheck UI ─────────────────────────────────────────
   build-ui:
     runs-on: ubuntu-latest
     needs: [changes]
-    if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.global == 'true'
+    if: needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
       - name: Install & typecheck
         working-directory: ui
         run: npm install && npm run check
@@ -98,16 +89,15 @@ jobs:
         run: npm run build
       - name: Add CNAME
         run: echo "scalian-cv.sent-tech.ca" > ui/build/CNAME
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: ui/build
 
-  # ── Publish API image to SCW registry ────────────────────────────
+  # ── Publish API to SCW registry ──────────────────────────────────
   publish-api:
     runs-on: ubuntu-latest
     needs: [changes, build-api, typecheck-api]
-    if: (needs.changes.outputs.api == 'true' || needs.changes.outputs.global == 'true') && github.ref == 'refs/heads/master'
+    if: needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/master'
     env:
       DOCKER_USERNAME: nologin
       DOCKER_PASSWORD: ${{ secrets.SCW_SECRET_KEY }}
@@ -117,21 +107,20 @@ jobs:
         with:
           name: api-image
           path: .
-      - name: Load and push API image
+      - name: Load and push
         run: |
           docker load -i api-image.tar
           echo "$DOCKER_PASSWORD" | docker login $REGISTRY -u $DOCKER_USERNAME --password-stdin
           make publish-api
 
-  # ── Deploy API to Scaleway ───────────────────────────────────────
+  # ── Deploy API (rollout SCW container) ───────────────────────────
   deploy-api:
     runs-on: ubuntu-latest
     needs: [changes, publish-api]
-    if: (needs.changes.outputs.api == 'true' || needs.changes.outputs.global == 'true') && github.ref == 'refs/heads/master'
+    if: needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Scaleway CLI
-        uses: scaleway/action-scw@v0
+      - uses: scaleway/action-scw@v0
         with:
           save-config: true
           export-config: true
@@ -144,10 +133,27 @@ jobs:
         run: make deploy-api
 
   # ── Deploy UI to GitHub Pages ────────────────────────────────────
-  deploy-ui:
+  # If BOTH api+ui changed: UI deploys AFTER API succeeds
+  # If ONLY ui changed: UI deploys immediately after build
+  deploy-ui-after-api:
+    runs-on: ubuntu-latest
+    needs: [changes, build-ui, deploy-api]
+    if: needs.changes.outputs.ui == 'true' && needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/master'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  deploy-ui-only:
     runs-on: ubuntu-latest
     needs: [changes, build-ui]
-    if: (needs.changes.outputs.ui == 'true' || needs.changes.outputs.global == 'true') && github.ref == 'refs/heads/master'
+    if: needs.changes.outputs.ui == 'true' && needs.changes.outputs.api != 'true' && github.ref == 'refs/heads/master'
     permissions:
       pages: write
       id-token: write
