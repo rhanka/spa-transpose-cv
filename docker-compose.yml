@@ -1,0 +1,41 @@
+services:
+  api:
+    image: ${REGISTRY:-local}/${API_IMAGE_NAME:-transpose-cv-api}:${API_VERSION:-latest}
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      target: ${TARGET:-development}
+    environment:
+      - NODE_ENV=${TARGET:-development}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:${UI_PORT:-5173},http://127.0.0.1:${UI_PORT:-5173},http://ui:5173}
+      - SESSION_MAX_AGE_HOURS=${SESSION_MAX_AGE_HOURS:-48}
+      - MAX_CONCURRENT_AGENTS=${MAX_CONCURRENT_AGENTS:-5}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
+      - DATA_DIR=/data
+    ports:
+      - "${API_PORT:-8787}:8787"
+    volumes:
+      - api_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8787/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tty: true
+
+  ui:
+    image: ${REGISTRY:-local}/${UI_IMAGE_NAME:-transpose-cv-ui}:${UI_VERSION:-latest}
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      target: ${TARGET:-development}
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:${API_PORT:-8787}/api}
+    ports:
+      - "${UI_PORT:-5173}:5173"
+    tty: true
+
+volumes:
+  api_data:

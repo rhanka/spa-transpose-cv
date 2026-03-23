@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@500;600&display=swap');
+
+:root {
+  --color-purple-dark: #1D1148;
+  --color-purple: #4B2882;
+  --color-purple-light: #635A84;
+  --color-purple-border: #E9E4F8;
+  --color-purple-bg: #F2F3FE;
+  --color-green: #60BB9B;
+  --color-green-hover: #6DD4AF;
+  --color-white: #FFFFFF;
+  --color-gradient-start: #E4005B;
+  --color-gradient-end: #61BA9A;
+  --ease-smooth: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  color: var(--color-purple-dark);
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3 {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 500;
+}
