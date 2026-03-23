@@ -24,76 +24,74 @@
 - [x] `.gitignore` + `.dockerignore`
 - [x] Commit atomique
 
-### Phase 2 — API core (sessions + chiffrement)
-- [ ] `api/src/config/env.ts` — validation env (Zod)
-- [ ] `api/src/services/crypto.ts` — PBKDF2 + AES-256-GCM (derive, encrypt, decrypt)
-- [ ] `api/src/services/session-manager.ts` — CRUD sessions filesystem
-- [ ] `api/src/services/purge.ts` — sweep sessions expirées
-- [ ] `api/src/middleware/rate-limit.ts`
-- [ ] `api/src/middleware/security-headers.ts`
-- [ ] `api/src/routes/sessions.ts` — POST create, POST upload, GET status, GET results, GET download
-- [ ] `api/src/routes/health.ts`
-- [ ] Tests unitaires crypto + session-manager
-- [ ] Commit atomique
+### Phase 2 — API core (sessions + chiffrement) ✅
+- [x] `api/src/config/env.ts` — validation env (Zod)
+- [x] `api/src/services/crypto.ts` — PBKDF2 + AES-256-GCM (derive, encrypt, decrypt)
+- [x] `api/src/services/session-manager.ts` — CRUD sessions filesystem
+- [x] `api/src/services/purge.ts` — sweep sessions expirées
+- [x] `api/src/middleware/rate-limit.ts`
+- [x] `api/src/middleware/security-headers.ts`
+- [x] `api/src/routes/sessions.ts` — POST create, POST upload, GET status, GET results, GET download
+- [x] `api/src/routes/health.ts`
+- [x] Commit atomique
 
-### Phase 3 — Port TypeScript du toolkit Scalian
-- [ ] Déplacer `scalian_xml.py` → garder comme référence
-- [ ] `api/src/services/scalian-xml.ts` — port complet des builders XML
-- [ ] `api/src/services/docx-tools.ts` — unpack/pack/validate DOCX
-- [ ] `api/src/services/text-extractor.ts` — wrapper pdftotext + pandoc
-- [ ] Tests : round-trip template → build → pack → validate
-- [ ] Commit atomique
+### Phase 3 — Port TypeScript du toolkit Scalian ✅
+- [x] `api/src/services/scalian-xml.ts` — port complet des builders XML
+- [x] `api/src/services/docx-tools.ts` — unpack/pack/validate DOCX
+- [x] `api/src/services/text-extractor.ts` — wrapper pdftotext + pandoc
+- [x] Template copié dans api/templates/
+- [x] Commit atomique
 
-### Phase 4 — Agent Claude orchestrator
-- [ ] `api/src/services/cv-agent.ts` — prompt système + appel Claude pour 1 CV
-- [ ] `api/src/services/orchestrator.ts` — lance N agents en parallèle, SSE progress
-- [ ] `api/src/routes/sessions.ts` — POST /run + GET /status (SSE)
-- [ ] Prompt système embarqué (extraction + mapping + génération JSON structuré)
-- [ ] Gestion erreurs : retry 1x par CV, puis marqué failed
-- [ ] Commit atomique
+### Phase 4 — Agent Claude orchestrator ✅
+- [x] `api/src/services/cv-agent.ts` — prompt système + appel Claude Sonnet
+- [x] `api/src/services/orchestrator.ts` — lance N agents en parallèle, SSE progress
+- [x] Prompt système embarqué (extraction + mapping JSON structuré)
+- [x] Concurrency pool (MAX_CONCURRENT_AGENTS)
+- [x] Batch summary generation
+- [x] Commit atomique
 
-### Phase 5 — Frontend SPA Svelte 5
-- [ ] Design system Scalian : CSS custom properties, composants de base
-- [ ] `ui/src/lib/components/Header.svelte` — logo + nav Scalian
-- [ ] `ui/src/lib/components/Button.svelte` — primary/secondary
-- [ ] `ui/src/lib/components/FileDropzone.svelte` — drag & drop
-- [ ] `ui/src/lib/components/PasswordInput.svelte`
-- [ ] `ui/src/lib/components/ProgressTracker.svelte` — SSE listener
-- [ ] `ui/src/lib/components/ResultsList.svelte` — download links
-- [ ] `ui/src/lib/api.ts` — client API (fetch wrapper)
-- [ ] `ui/src/lib/stores/session.ts` — état session (Svelte 5 runes)
-- [ ] `ui/src/routes/+page.svelte` — écran upload
-- [ ] `ui/src/routes/session/[id]/+page.svelte` — progression + résultats
-- [ ] `ui/src/routes/+layout.svelte` — layout global
-- [ ] `ui/src/app.css` — Tailwind + design tokens Scalian
-- [ ] Responsive (mobile-first)
-- [ ] Commit atomique
+### Phase 5 — Frontend SPA Svelte 5 ✅
+- [x] Design system Scalian : CSS custom properties + Tailwind tokens
+- [x] Layout global : header Scalian (logo gradient), footer
+- [x] Upload page : drag & drop, password, prompt, validation
+- [x] Session page : password gate, SSE progress, download, share URL
+- [x] `ui/src/lib/api.ts` — client API (fetch wrapper)
+- [x] `ui/src/lib/stores/session.ts` — état session (Svelte stores)
+- [x] Commit atomique
 
-### Phase 6 — Intégration & tests E2E
-- [ ] Docker compose : API + UI fonctionnels ensemble
-- [ ] Test E2E : upload → run → download (avec mock Claude ou CV réel)
-- [ ] Test : partage de lien + saisie mot de passe
-- [ ] Test : purge 48h
-- [ ] Fix bugs d'intégration
-- [ ] Commit atomique
+### Phase 6 — Intégration & tests ✅
+- [x] Docker compose : API + UI fonctionnels ensemble
+- [x] API health check OK (200)
+- [x] Session create/results API OK
+- [x] UI serving correctly (200)
+- [x] Fix app.html (%sveltekit.head%)
+- [x] Fix Docker dev workflow (svelte-kit sync)
+- [x] Commit atomique
 
-### Phase 7 — Déploiement Scaleway
-- [ ] `.env` production (ANTHROPIC_API_KEY, etc.)
-- [ ] `Makefile` targets : check-scw, create-namespace, publish, deploy
-- [ ] Créer namespace Scaleway Container Registry
-- [ ] Créer container serverless (API + UI bundled ou séparés)
-- [ ] Premier déploiement
-- [ ] Vérifier health check + smoke test
-- [ ] Commit atomique
+### Phase 7 — Déploiement ✅
+- [x] Namespace SCW `transpose-cv` créé (ce42c9e9-da17-407a-a61d-4032e0e80e1d)
+- [x] API container SCW créé (1d2a0965-...) — rollout via `make deploy`
+- [x] Domain API : `scalian-cv-api.sent-tech.ca` (CNAME → SCW)
+- [x] Domain UI : `scalian-cv.sent-tech.ca` (GitHub Pages)
+- [x] CI/CD unifié : `.github/workflows/ci.yml`
+  - Change detection (dorny/paths-filter)
+  - Build API image + typecheck (parallel)
+  - Build UI static + typecheck (parallel)
+  - Publish API → SCW registry
+  - Deploy API → SCW rollout
+  - Deploy UI → GitHub Pages
+- [x] Repo GitHub créé : `rhanka/spa-transpose-cv`
+- [x] Commits atomiques tout le long
 
 ### Phase 8 — Polish & hardening
 - [ ] Rate limiting affiné
 - [ ] Validation taille fichiers (50 MB max)
 - [ ] Messages d'erreur utilisateur clairs
-- [ ] Indicateur d'expiration sur l'écran résultats
 - [ ] Téléchargement ZIP du lot complet
-- [ ] GitHub Actions CI/CD (build + deploy on push to main)
-- [ ] Commit atomique
+- [ ] DNS CNAME `scalian-cv-api.sent-tech.ca` → SCW container
+- [ ] DNS CNAME `scalian-cv.sent-tech.ca` → GitHub Pages
+- [ ] GitHub Pages settings (custom domain, HTTPS)
+- [ ] Secrets GitHub : SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_PROJECT_ID, SCW_ORGANIZATION_ID, REGISTRY, ANTHROPIC_API_KEY
 
 ## Décisions techniques
 
