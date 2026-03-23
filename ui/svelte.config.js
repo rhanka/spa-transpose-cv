@@ -12,6 +12,7 @@ const config = {
     },
     prerender: {
       handleHttpError: 'warn',
+      handleUnseenRoutes: 'ignore',
     },
   },
   preprocess: vitePreprocess(),
