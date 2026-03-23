@@ -12,9 +12,7 @@ export VITE_API_BASE_URL ?= http://localhost:$(API_PORT)/api
 export CORS_ALLOWED_ORIGINS ?= http://localhost:$(UI_PORT),http://127.0.0.1:$(UI_PORT),http://ui:5173
 
 export API_VERSION    ?= $(shell find api/src api/package.json api/Dockerfile -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | sha1sum | sed 's/\(......\).*/\1/')
-export UI_VERSION     ?= $(shell find ui/src ui/package.json ui/Dockerfile ui/vite.config.ts ui/svelte.config.js -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | sha1sum | sed 's/\(......\).*/\1/')
 export API_IMAGE_NAME ?= transpose-cv-api
-export UI_IMAGE_NAME  ?= transpose-cv-ui
 
 .DEFAULT_GOAL := help
 
@@ -72,17 +70,15 @@ install-ui: ## Install UI dependencies in container
 # -----------------------------------------------------------------------------
 
 .PHONY: build
-build: build-api build-ui ## Build all images for production
+build: build-api ## Build API image for production
 
 .PHONY: build-api
 build-api: ## Build API Docker image for production
 	TARGET=production $(DOCKER_COMPOSE) build --no-cache api
 
 .PHONY: build-ui
-build-ui: ## Build UI Docker image for production
-	TARGET=production $(DOCKER_COMPOSE) -f docker-compose.yml build --no-cache \
-		--build-arg VITE_API_BASE_URL=/api \
-		ui
+build-ui: ## Build UI locally (SvelteKit static, deployed via GH Pages)
+	cd ui && VITE_API_BASE_URL=https://scalian-cv-api.sent-tech.ca/api npm run build
 
 # -----------------------------------------------------------------------------
 # Type checking
@@ -112,13 +108,8 @@ publish-api: docker-login ## Push API image to registry
 	@echo "Pushing $(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)"
 	@docker push $(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)
 
-.PHONY: publish-ui
-publish-ui: docker-login ## Push UI image to registry
-	@echo "Pushing $(REGISTRY)/$(UI_IMAGE_NAME):$(UI_VERSION)"
-	@docker push $(REGISTRY)/$(UI_IMAGE_NAME):$(UI_VERSION)
-
 .PHONY: publish
-publish: publish-api publish-ui ## Push all images to registry
+publish: publish-api ## Push API image to registry
 
 # -----------------------------------------------------------------------------
 # Scaleway deployment
@@ -159,45 +150,15 @@ deploy-api-init: check-scw ## Create API container in Scaleway namespace (first 
 		echo "Container created."; \
 	fi
 
-.PHONY: deploy-ui-init
-deploy-ui-init: check-scw ## Create UI container in Scaleway namespace (first time)
-	@echo "Creating container $(UI_IMAGE_NAME) in namespace $(SCW_NAMESPACE_ID)..."
-	@UI_CONTAINER_ID=$$(scw container container list | awk '($$2=="$(UI_IMAGE_NAME)"){print $$1}'); \
-	if [ -n "$${UI_CONTAINER_ID}" ]; then \
-		echo "Container $(UI_IMAGE_NAME) already exists (ID: $${UI_CONTAINER_ID})"; \
-	else \
-		scw container container create \
-			name=$(UI_IMAGE_NAME) \
-			namespace-id=$(SCW_NAMESPACE_ID) \
-			registry-image=$(REGISTRY)/$(UI_IMAGE_NAME):$(UI_VERSION) \
-			port=5173 \
-			min-scale=0 \
-			max-scale=1 \
-			memory-limit=256 \
-			cpu-limit=500 \
-			timeout=60s \
-			privacy=public \
-			protocol=http1 \
-			http-option=redirected; \
-		echo "Container created."; \
-	fi
-
 .PHONY: deploy-api
-deploy-api: check-scw ## Update API container with new image
+deploy-api: check-scw ## Update API container with new image (rollout)
 	@echo "Updating $(API_IMAGE_NAME) to $(API_VERSION)..."
 	@API_CONTAINER_ID=$$(scw container container list | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}'); \
 	scw container container update $${API_CONTAINER_ID} registry-image="$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)"
 	@echo "Deployment initiated."
 
-.PHONY: deploy-ui
-deploy-ui: check-scw ## Update UI container with new image
-	@echo "Updating $(UI_IMAGE_NAME) to $(UI_VERSION)..."
-	@UI_CONTAINER_ID=$$(scw container container list | awk '($$2=="$(UI_IMAGE_NAME)"){print $$1}'); \
-	scw container container update $${UI_CONTAINER_ID} registry-image="$(REGISTRY)/$(UI_IMAGE_NAME):$(UI_VERSION)"
-	@echo "Deployment initiated."
-
 .PHONY: deploy
-deploy: deploy-api deploy-ui ## Deploy all containers
+deploy: build-api publish deploy-api wait-for-api ## Full deploy: build, push, rollout, wait
 
 .PHONY: wait-for-api
 wait-for-api: check-scw ## Wait for API container to be ready
@@ -215,9 +176,8 @@ wait-for-api: check-scw ## Wait for API container to be ready
 # -----------------------------------------------------------------------------
 
 .PHONY: version
-version: ## Show image versions
+version: ## Show image version
 	@echo "API_VERSION: $(API_VERSION)"
-	@echo "UI_VERSION: $(UI_VERSION)"
 
 .PHONY: commit
 commit: ## Create a git commit (MSG="type: message")
