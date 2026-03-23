@@ -182,26 +182,31 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
   const sessionKey = getSessionKey(sessionId);
   if (!sessionKey) throw new Error(`No key in cache for session ${sessionId}`);
 
-  // Process CVs in parallel, limited by MAX_CONCURRENT_AGENTS
+  // Launch ALL CVs in parallel, capped at MAX_CONCURRENT_AGENTS via semaphore
   const concurrency = env.MAX_CONCURRENT_AGENTS;
-  const fileIndexes = meta.files.map((_, i) => i);
+  let running = 0;
+  const queue: (() => void)[] = [];
 
-  // Simple concurrency pool
-  const pool: Promise<void>[] = [];
-  for (const idx of fileIndexes) {
-    const p = processOneCV(sessionId, idx, sessionKey, meta.prompt);
-    pool.push(p);
-
-    if (pool.length >= concurrency) {
-      await Promise.race(pool);
-      // Remove settled promises
-      for (let i = pool.length - 1; i >= 0; i--) {
-        const status = await Promise.race([pool[i].then(() => 'done'), Promise.resolve('pending')]);
-        if (status === 'done') pool.splice(i, 1);
-      }
-    }
+  function acquire(): Promise<void> {
+    if (running < concurrency) { running++; return Promise.resolve(); }
+    return new Promise<void>(resolve => queue.push(resolve));
   }
-  await Promise.allSettled(pool);
+  function release(): void {
+    running--;
+    const next = queue.shift();
+    if (next) { running++; next(); }
+  }
+
+  const tasks = meta.files.map(async (_, idx) => {
+    await acquire();
+    try {
+      await processOneCV(sessionId, idx, sessionKey, meta.prompt);
+    } finally {
+      release();
+    }
+  });
+
+  await Promise.allSettled(tasks);
 
   // Final status
   const finalMeta = await getMeta(sessionId);
