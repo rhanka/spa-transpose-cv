@@ -48,6 +48,15 @@
 
   onDestroy(() => { eventSource?.close(); });
 
+  // Svelte action: auto-scroll via MutationObserver (pattern from top-ai-ideas)
+  function scrollToEnd(node: HTMLElement) {
+    const scroll = () => { try { node.scrollTop = node.scrollHeight; } catch { /* */ } };
+    scroll();
+    const obs = new MutationObserver(scroll);
+    obs.observe(node, { childList: true, subtree: true, characterData: true });
+    return { destroy() { obs.disconnect(); } };
+  }
+
   function authenticate() {
     if (!password) return;
     sessionPassword.set(password);
@@ -176,10 +185,10 @@
               <div class="col-label">Source</div>
               <div class="text-sm truncate" title={file.name}>{file.name}</div>
             </div>
-            <div class="p-3 border-r" style="border-color: var(--color-purple-border);">
+            <div class="p-3 border-r" style="border-color: var(--color-purple-border); min-width: 0;">
               <div class="col-label">DOCX</div>
               {#if file.output}
-                <button onclick={() => handleDownload(file.output!)} class="text-sm font-semibold truncate block" style="color: var(--color-green);" title={file.output}>{file.output}</button>
+                <button onclick={() => handleDownload(file.output!)} class="text-sm font-semibold block truncate max-w-full" style="color: var(--color-green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title={file.output}>{file.output}</button>
               {/if}
             </div>
             <div class="p-3 border-r attention-cell" style="border-color: var(--color-purple-border);">
@@ -219,14 +228,12 @@
                 <span class="text-xs" style="color: var(--color-purple-lighter);">En attente</span>
               {/if}
             </div>
-            <div class="stream-panel">
+            <div class="stream-panel" use:scrollToEnd>
               {#if stream?.thinking}
                 <pre class="stream-text">{stream.thinking}</pre>
               {:else if !isProcessing}
                 <div class="text-xs" style="color: var(--color-purple-lighter); padding: 0.75rem;">En attente...</div>
               {/if}
-              <!-- Scroll anchor: browser keeps this in view automatically -->
-              <div class="scroll-anchor"></div>
             </div>
           </div>
         {/if}
@@ -280,21 +287,24 @@
 
   .result-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1.5fr 1.5fr;
+    grid-template-columns: 25% 25% 25% 25%;
     gap: 0;
+  }
+
+  .result-grid > div,
+  .stream-grid > div {
+    min-width: 0;
   }
 
   .stream-grid {
     display: grid;
-    grid-template-columns: 1fr 2fr;
+    grid-template-columns: 33.33% 66.67%;
     gap: 0;
   }
 
-  /* Fixed height streaming panel with CSS-based auto-scroll */
   .stream-panel {
     height: 160px;
     overflow-y: auto;
-    overflow-anchor: none; /* disable on container */
     padding: 0.75rem;
   }
 
@@ -305,12 +315,6 @@
     color: var(--color-purple-light);
     opacity: 0.65;
     margin: 0;
-  }
-
-  /* The anchor element at the bottom — browser keeps it in view */
-  .scroll-anchor {
-    overflow-anchor: auto;
-    height: 1px;
   }
 
   /* Fixed height attention cells with overflow */
