@@ -57,6 +57,7 @@ export interface StreamEvent {
   error?: string;
   attention_cv?: string;
   attention_trad?: string;
+  tokenInfo?: string;
 }
 
 export interface StatusEvent {

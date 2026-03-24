@@ -1,7 +1,10 @@
 <script>
   import '../app.css';
+  import Disclaimer from '$lib/components/Disclaimer.svelte';
   let { children } = $props();
 </script>
+
+<Disclaimer />
 
 <div class="min-h-screen flex flex-col">
   <!-- Header — Scalian dark purple -->

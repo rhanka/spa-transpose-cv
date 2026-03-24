@@ -31,6 +31,7 @@
     parsed_keys: Record<string, unknown>;
     attention_cv: string;
     attention_trad: string;
+    tokenInfo: string;
     lastUpdate: number;
   }>>({});
 
@@ -76,7 +77,7 @@
         }
       } else if (data.type === 'stream') {
         const ev = data as StreamEvent;
-        const prev = fileStreams[ev.fileIndex] || { phase: '', thinking: '', elapsed_ms: 0, parsed_keys: {}, attention_cv: '', attention_trad: '', lastUpdate: Date.now() };
+        const prev = fileStreams[ev.fileIndex] || { phase: '', thinking: '', elapsed_ms: 0, parsed_keys: {}, attention_cv: '', attention_trad: '', tokenInfo: '', lastUpdate: Date.now() };
         const newThinking = prev.thinking + (ev.thinking_delta || '');
         // Reassign entire object to trigger Svelte reactivity on deep changes
         fileStreams = {
@@ -88,6 +89,7 @@
             parsed_keys: ev.parsed_keys ? { ...prev.parsed_keys, ...ev.parsed_keys } : prev.parsed_keys,
             attention_cv: ev.attention_cv || prev.attention_cv,
             attention_trad: ev.attention_trad || prev.attention_trad,
+            tokenInfo: ev.tokenInfo || prev.tokenInfo,
             lastUpdate: Date.now(),
           },
         };
@@ -189,6 +191,9 @@
               <div class="col-label">DOCX</div>
               {#if file.output}
                 <button onclick={() => handleDownload(file.output!)} class="text-sm font-semibold block truncate max-w-full" style="color: var(--color-green); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title={file.output}>{file.output}</button>
+                {#if stream?.tokenInfo}
+                  <div class="text-xs mt-1" style="color: var(--color-purple-lighter);">{stream.tokenInfo}</div>
+                {/if}
               {/if}
             </div>
             <div class="p-3 border-r attention-cell" style="border-color: var(--color-purple-border);">
