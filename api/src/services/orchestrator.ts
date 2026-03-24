@@ -30,6 +30,44 @@ export interface SseEvent {
   attention_trad?: string;
 }
 
+/**
+ * Convert DOCX to PDF via LibreOffice, extract page 1 text, verify
+ * that WORK EXPERIENCE is NOT on page 1 (= skills/sectors fit on page 1).
+ */
+async function validatePage1WithPdf(docxPath: string): Promise<string[]> {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const execFileAsync = promisify(execFile);
+  const errors: string[] = [];
+
+  try {
+    const pdfDir = '/tmp';
+    const baseName = docxPath.split('/').pop()!.replace('.docx', '');
+    await execFileAsync('libreoffice', [
+      '--headless', '--convert-to', 'pdf', docxPath, '--outdir', pdfDir,
+    ], { timeout: 30_000 });
+
+    const pdfPath = join(pdfDir, `${baseName}.pdf`);
+    const { stdout: page1 } = await execFileAsync('pdftotext', ['-f', '1', '-l', '1', pdfPath, '-'], {
+      maxBuffer: 1024 * 1024,
+    });
+
+    // Page 1 should contain skills and sectors only. WORK EXPERIENCE should start on page 2+.
+    if (page1.includes('WORK EXPERIENCE')) {
+      errors.push('Page 1 overflow: WORK EXPERIENCE found on page 1 — skills/sectors are too short or page break missing');
+    }
+
+    // Check that SECTOR-SPECIFIC SKILLS is on page 1
+    if (!page1.includes('SECTOR')) {
+      errors.push('Page 1 overflow: SECTOR-SPECIFIC SKILLS not found on page 1 — skills descriptions are too long');
+    }
+  } catch (err) {
+    logger.warn({ docxPath, err: (err as Error).message }, 'PDF validation skipped (LibreOffice error)');
+  }
+
+  return errors;
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -118,13 +156,16 @@ async function processOneCV(
     const outputData = await readFile(outputPath);
     const validation = await validateDocxBuffer(outputData);
 
-    if (!validation.valid) {
-      logger.warn({ sessionId, file: originalName, errors: validation.errors }, 'DOCX validation failed');
-      emitSse?.(fileIndex, { phase: 'validating', thinking_delta: `Validation errors: ${validation.errors.join(', ')}. Retrying...`, elapsed_ms: Date.now() - startTime });
-      // Retry: re-extract with error feedback
+    // 4b. PDF validation: check page 1 doesn't overflow
+    const pdfErrors = await validatePage1WithPdf(outputPath);
+    const allErrors = [...validation.errors, ...pdfErrors];
+
+    if (allErrors.length > 0) {
+      logger.warn({ sessionId, file: originalName, errors: allErrors }, 'DOCX validation failed');
+      emitSse?.(fileIndex, { phase: 'validating', thinking_delta: `Validation errors: ${allErrors.join(', ')}. Retrying with shorter descriptions...`, elapsed_ms: Date.now() - startTime });
       const retryData = await extractCvDataWithRetry(
         text,
-        `${userPrompt}\n\nVALIDATION ERRORS FROM PREVIOUS ATTEMPT: ${validation.errors.join('; ')}. Fix these issues.`,
+        `${userPrompt}\n\nVALIDATION ERRORS: ${allErrors.join('; ')}. IMPORTANT: shorten all skill descriptions to max 100 characters. Reduce sectors to max 4, domains to max 4.`,
         originalName,
         streamCallbacks,
       );
@@ -266,18 +307,29 @@ async function conductorValidate(
     const qaResponse = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1024,
-      system: `You are a QA analyst reviewing a CV conversion from source to Scalian format.
-Compare the source CV text with the generated output text.
-Return ONLY a concise markdown analysis (3-5 bullet points max) covering:
-- Job titles that may have been misinterpreted
-- Ambiguous technical terms in the mapping
-- Company names or certifications that may have been altered
-- Questionable consolidation choices (long careers)
-- Sections that seem too thin or too dense vs source
-- Overall format completeness and translation quality
+      system: `You are a QA analyst checking the transposition quality of a CV into Scalian format.
 
-If everything looks good, return "— RAS".
-Be CONCISE — a few bullet points max, 1 short sentence each. Only significant issues. No filler.`,
+Do NOT comment on the CV content itself (career, skills, relevance).
+ONLY check the fidelity and conformity of the transposition.
+
+Start directly with bullet points. NO title, NO introduction, NO "QA Analysis" header.
+
+Check:
+- Company names, certifications: reproduced exactly, not translated or altered
+- Dates: taken as-is, no added estimates
+- Number of positions: consistent with source (no missing or invented roles)
+- Achievements: all from source (no fabrication)
+- Skill descriptions: descriptive format (not just tool lists)
+- Experience durations (>Ny): consistent with career dates
+
+If you find a factual error (invented tech, wrong date, missing role), mark it **error to fix**.
+
+If the transposition required an ACCEPTABLE restructuring choice, do NOT mention it.
+Only mention a restructuring choice if it is questionable and needs human review.
+
+If no significant issue, return exactly: — RAS
+
+Each bullet: 1 short sentence, max 10 words. No explanation. Markdown.`,
       messages: [{
         role: 'user',
         content: `SOURCE FILE: ${originalName}\n\nSOURCE TEXT (first 3000 chars):\n${sourceText.substring(0, 3000)}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText.substring(0, 3000)}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
@@ -332,12 +384,30 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
 
       if (result) {
         // Conductor validation
-        const attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse);
-        emitSse?.(idx, { phase: 'done', attention_trad });
+        let attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse);
+
+        // If conductor found errors to fix, relay once (no second retry)
+        if (attention_trad.toLowerCase().includes('error to fix')) {
+          logger.info({ sessionId, file: f.originalName }, 'Conductor found errors, relaunching agent');
+          emitSse?.(idx, { phase: 'validating', thinking_delta: `Conductor: errors detected, retrying...` });
+          const retryResult = await processOneCV(sessionId, idx, sessionKey,
+            `${meta.prompt}\n\nCONDUCTOR QA FEEDBACK: ${attention_trad}. Fix the flagged errors.`,
+            f.originalName, f.encryptedName, emitSse);
+          if (retryResult) {
+            attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, retryResult.outputName, retryResult.sourceText, emitSse);
+          }
+        }
+
+        // Normalize markdown: ensure line breaks between bullets
+        const normalizeMd = (s: string) => s.replace(/ - \*\*/g, '\n- **').replace(/ - /g, '\n- ');
+        const normalizedCv = normalizeMd(result.cvData.attention_cv || '—');
+        attention_trad = normalizeMd(attention_trad);
+
+        emitSse?.(idx, { phase: 'done', attention_trad, attention_cv: normalizedCv });
         results.push({
           originalName: f.originalName,
           outputName: result.outputName,
-          attention_cv: result.cvData.attention_cv || '—',
+          attention_cv: normalizedCv,
           attention_trad,
         });
       } else {

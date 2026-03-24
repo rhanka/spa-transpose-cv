@@ -42,15 +42,17 @@ Given the raw text of a CV, extract and return a JSON object with exactly this s
   "education": [
     { "year": "string — graduation year", "description": "string — degree and institution (use en-dash)" }
   ],
-  "attention_cv": "string — Concise markdown, a few bullet points. Each bullet: 1 short sentence. Focus only on what a recruiter must know — missing data, inconsistencies, profile type. No filler, no explanations."
+  "attention_cv": "string — Concise markdown bullet points (use actual newlines between bullets, not inline). Each bullet starts with **bold keyword** then short sentence. Focus only on what a recruiter must know: missing data, inconsistencies, profile type. No filler. Example format:\n- **Anonymized** — ID 138282, no personal info\n- **No certifications** — despite 10y cloud experience\n- **Career gap** — 6 months between roles in 2022"
 }
 
 CONSTRAINTS:
 - title_line1: MAXIMUM 25 characters. If your title is longer, shorten it.
 - title_line2: MAXIMUM 25 characters. Can be empty string "".
-- technicalSkills: 5-7 items. Each description must be DESCRIPTIVE, NOT just tool lists.
+- technicalSkills: 5-7 items. Each description must be DESCRIPTIVE, NOT just tool lists. MAX 130 CHARACTERS per description (keep it to ~1.5 printed lines). Be concise.
   BAD: "AWS, Azure, GCP, Terraform, Ansible (>5y)"
   GOOD: "Defining cloud infrastructure and migration strategies for enterprise workloads (>5y)"
+  BAD (too long): "Multi-distribution Linux administration (RHEL 5-9, CentOS, Rocky Linux, Oracle Linux) across enterprise, banking, and cloud environments, including patching, LVM/filesystem management (>10y)"
+  GOOD (concise): "Enterprise Linux administration (RHEL, CentOS, Rocky) including patching, LVM, and L3 support (>10y)"
 - sectors: 3-5 items extracted from work experience industries.
 - domains: 3-5 functional domains.
 - experience: reverse chronological order (most recent first). 3-6 tasks per role, action verbs.
