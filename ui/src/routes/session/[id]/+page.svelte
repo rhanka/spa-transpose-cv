@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy } from 'svelte';
+  import { marked } from 'marked';
   import {
     subscribeStatus,
     getResults,
@@ -22,6 +23,7 @@
   let eventSource: EventSource | null = null;
   let error = $state('');
 
+  // Per-file streaming state — reassign whole object for Svelte reactivity
   let fileStreams = $state<Record<number, {
     phase: string;
     thinking: string;
@@ -32,9 +34,16 @@
     lastUpdate: number;
   }>>({});
 
+  // Configure marked for inline rendering (no <p> wrapping)
+  marked.setOptions({ breaks: true, gfm: true });
+
   $effect(() => {
     const storedPwd = $sessionPassword;
-    if (storedPwd) { password = storedPwd; authenticated = true; startListening(); }
+    if (storedPwd && !authenticated) {
+      password = storedPwd;
+      authenticated = true;
+      startListening();
+    }
   });
 
   onDestroy(() => { eventSource?.close(); });
@@ -60,23 +69,21 @@
         const ev = data as StreamEvent;
         const prev = fileStreams[ev.fileIndex] || { phase: '', thinking: '', elapsed_ms: 0, parsed_keys: {}, attention_cv: '', attention_trad: '', lastUpdate: Date.now() };
         const newThinking = prev.thinking + (ev.thinking_delta || '');
-        fileStreams[ev.fileIndex] = {
-          phase: ev.phase || prev.phase,
-          thinking: newThinking.length > 2000 ? '...' + newThinking.slice(-1500) : newThinking,
-          elapsed_ms: ev.elapsed_ms ?? prev.elapsed_ms,
-          parsed_keys: ev.parsed_keys ? { ...prev.parsed_keys, ...ev.parsed_keys } : prev.parsed_keys,
-          attention_cv: ev.attention_cv || prev.attention_cv,
-          attention_trad: ev.attention_trad || prev.attention_trad,
-          lastUpdate: Date.now(),
+        // Reassign entire object to trigger Svelte reactivity on deep changes
+        fileStreams = {
+          ...fileStreams,
+          [ev.fileIndex]: {
+            phase: ev.phase || prev.phase,
+            thinking: newThinking.length > 2000 ? '...' + newThinking.slice(-1500) : newThinking,
+            elapsed_ms: ev.elapsed_ms ?? prev.elapsed_ms,
+            parsed_keys: ev.parsed_keys ? { ...prev.parsed_keys, ...ev.parsed_keys } : prev.parsed_keys,
+            attention_cv: ev.attention_cv || prev.attention_cv,
+            attention_trad: ev.attention_trad || prev.attention_trad,
+            lastUpdate: Date.now(),
+          },
         };
-        tick().then(() => autoScroll(ev.fileIndex));
       }
     });
-  }
-
-  function autoScroll(idx: number) {
-    const el = document.getElementById(`stream-${idx}`);
-    if (el) el.scrollTop = el.scrollHeight;
   }
 
   async function loadResults() {
@@ -115,13 +122,9 @@
     return !!s && s.phase !== 'done' && s.phase !== 'error' && Date.now() - s.lastUpdate > 120_000;
   }
 
-  /** Simple markdown → HTML for attention columns (bullet points only) */
-  function mdToHtml(md: string): string {
-    if (!md || md === '—') return '<span style="opacity:0.5">—</span>';
-    return md
-      .replace(/^- /gm, '&bull; ')
-      .replace(/\n/g, '<br/>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  function renderMd(md: string): string {
+    if (!md || md === '—' || md === '— RAS') return '<span style="opacity:0.5">—</span>';
+    return marked.parse(md) as string;
   }
 </script>
 
@@ -179,21 +182,21 @@
                 <button onclick={() => handleDownload(file.output!)} class="text-sm font-semibold truncate block" style="color: var(--color-green);" title={file.output}>{file.output}</button>
               {/if}
             </div>
-            <div class="p-3 border-r overflow-y-auto" style="border-color: var(--color-purple-border); max-height: 160px;">
+            <div class="p-3 border-r attention-cell" style="border-color: var(--color-purple-border);">
               <div class="col-label">Attention CV</div>
-              <div class="text-xs leading-relaxed" style="color: var(--color-purple-light);">{@html mdToHtml(stream?.attention_cv || '')}</div>
+              <div class="attention-content">{@html renderMd(stream?.attention_cv || '')}</div>
             </div>
-            <div class="p-3 overflow-y-auto" style="max-height: 160px;">
+            <div class="p-3 attention-cell">
               <div class="col-label">Attention trad</div>
               {#if stream?.attention_trad}
-                <div class="text-xs leading-relaxed" style="color: var(--color-purple-light);">{@html mdToHtml(stream.attention_trad)}</div>
+                <div class="attention-content">{@html renderMd(stream.attention_trad)}</div>
               {:else}
                 <div class="text-xs animate-pulse" style="color: var(--color-purple-lighter);">Analyse conductor en cours...</div>
               {/if}
             </div>
           </div>
         {:else}
-          <!-- STREAMING: 2-column grid -->
+          <!-- STREAMING: 2-column grid, fixed height -->
           <div class="card stream-grid">
             <div class="p-3 border-r flex flex-col" style="border-color: var(--color-purple-border);">
               <div class="text-sm font-medium truncate mb-2">{file.name}</div>
@@ -216,39 +219,33 @@
                 <span class="text-xs" style="color: var(--color-purple-lighter);">En attente</span>
               {/if}
             </div>
-            <div id={`stream-${idx}`} class="p-3 overflow-y-auto stream-panel">
+            <div class="stream-panel">
               {#if stream?.thinking}
-                <pre class="text-xs font-mono whitespace-pre-wrap" style="color: var(--color-purple-light); opacity: 0.65; margin: 0;">{stream.thinking}</pre>
+                <pre class="stream-text">{stream.thinking}</pre>
               {:else if !isProcessing}
-                <div class="text-xs" style="color: var(--color-purple-lighter);">En attente...</div>
+                <div class="text-xs" style="color: var(--color-purple-lighter); padding: 0.75rem;">En attente...</div>
               {/if}
+              <!-- Scroll anchor: browser keeps this in view automatically -->
+              <div class="scroll-anchor"></div>
             </div>
           </div>
         {/if}
       {/each}
     </div>
 
-    <!-- Batch results -->
+    <!-- Batch results: ZIP only -->
     {#if sessionStatus === 'done' || sessionStatus === 'error'}
       <div class="card p-6 mb-6">
         <h3 class="text-lg font-semibold mb-4">Téléchargements</h3>
-        <div class="space-y-2">
-          {#each outputs.filter(o => o.endsWith('.zip')) as zipFile}
-            <div class="flex items-center justify-between p-3" style="background: var(--color-purple-bg);">
-              <div>
-                <span class="text-sm font-semibold">Tous les profils (ZIP)</span>
-                <span class="text-xs ml-2" style="color: var(--color-purple-lighter);">{zipFile}</span>
-              </div>
-              <button onclick={() => handleDownload(zipFile)} class="btn-primary text-xs py-2 px-4">Télécharger</button>
+        {#each outputs.filter(o => o.endsWith('.zip')) as zipFile}
+          <div class="flex items-center justify-between p-3" style="background: var(--color-purple-bg);">
+            <div>
+              <span class="text-sm font-semibold">Tous les profils (ZIP)</span>
+              <span class="text-xs ml-2" style="color: var(--color-purple-lighter);">{zipFile}</span>
             </div>
-          {/each}
-          {#each outputs.filter(o => o === 'batch_summary.md') as summaryFile}
-            <div class="flex items-center justify-between p-2" style="background: var(--color-purple-bg);">
-              <span class="text-sm">Rapport de synthèse</span>
-              <button onclick={() => handleDownload(summaryFile)} class="btn-secondary text-xs py-1 px-3">Télécharger</button>
-            </div>
-          {/each}
-        </div>
+            <button onclick={() => handleDownload(zipFile)} class="btn-primary text-xs py-2 px-4">Télécharger</button>
+          </div>
+        {/each}
         {#if expiresAt}
           <p class="text-xs mt-4" style="color: var(--color-purple-lighter);">Suppression le {formatExpiry(expiresAt)}</p>
         {/if}
@@ -291,21 +288,66 @@
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 0;
-    min-height: 120px;
   }
 
+  /* Fixed height streaming panel with CSS-based auto-scroll */
   .stream-panel {
     height: 160px;
-    max-height: 160px;
+    overflow-y: auto;
+    overflow-anchor: none; /* disable on container */
+    padding: 0.75rem;
+  }
+
+  .stream-text {
+    font-size: 0.75rem;
+    font-family: monospace;
+    white-space: pre-wrap;
+    color: var(--color-purple-light);
+    opacity: 0.65;
+    margin: 0;
+  }
+
+  /* The anchor element at the bottom — browser keeps it in view */
+  .scroll-anchor {
+    overflow-anchor: auto;
+    height: 1px;
+  }
+
+  /* Fixed height attention cells with overflow */
+  .attention-cell {
+    height: 160px;
+    overflow-y: auto;
+  }
+
+  .attention-content {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--color-purple-light);
+  }
+
+  .attention-content :global(ul) {
+    padding-left: 1rem;
+    margin: 0;
+  }
+
+  .attention-content :global(li) {
+    margin-bottom: 0.25rem;
+  }
+
+  .attention-content :global(p) {
+    margin: 0 0 0.25rem 0;
+  }
+
+  .attention-content :global(strong) {
+    color: var(--color-purple-dark);
   }
 
   @media (max-width: 768px) {
     .result-grid, .stream-grid {
       grid-template-columns: 1fr !important;
     }
-    .stream-panel {
+    .stream-panel, .attention-cell {
       height: 120px;
-      max-height: 120px;
     }
   }
 </style>
