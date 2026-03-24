@@ -284,10 +284,10 @@ Be CONCISE — only major issues. Markdown bullet points.`,
       }],
     });
 
-    const text = qaResponse.content
-      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-      .map(b => b.text)
-      .join('');
+    let text = '';
+    for (const block of qaResponse.content) {
+      if (block.type === 'text') text += block.text;
+    }
 
     return text.trim() || '—';
   } catch (err) {
