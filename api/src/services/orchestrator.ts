@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { cp, writeFile, readFile } from 'node:fs/promises';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-import { getMeta, writeMeta, updateStatus, getSessionKey } from './session-manager.js';
+import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
 import { extractCvData, type CvData } from './cv-agent.js';
@@ -38,29 +38,26 @@ async function processOneCV(
   fileIndex: number,
   sessionKey: Buffer,
   userPrompt: string,
+  originalName: string,
+  encryptedName: string,
 ): Promise<void> {
-  const meta = await getMeta(sessionId);
-  if (!meta) throw new Error(`Session ${sessionId} not found`);
-
-  const file = meta.files[fileIndex];
   const sessionDir = join(env.DATA_DIR, sessionId);
 
   // Mark as processing
-  file.status = 'processing';
-  await writeMeta(meta);
+  await updateFileStatus(sessionId, fileIndex, 'processing');
 
   try {
     // 1. Decrypt input
-    const encryptedData = await readFile(join(sessionDir, 'inputs', file.encryptedName));
+    const encryptedData = await readFile(join(sessionDir, 'inputs', encryptedName));
     const rawData = decrypt(encryptedData, sessionKey);
 
     // 2. Extract text
-    const text = await extractTextFromBuffer(rawData, file.originalName);
-    logger.info({ sessionId, file: file.originalName, textLength: text.length }, 'Text extracted');
+    const text = await extractTextFromBuffer(rawData, originalName);
+    logger.info({ sessionId, file: originalName, textLength: text.length }, 'Text extracted');
 
     // 3. Call Claude to extract structured data
     const cvData = await extractCvData(text, userPrompt);
-    logger.info({ sessionId, file: file.originalName, name: cvData.fullName }, 'CV data extracted');
+    logger.info({ sessionId, file: originalName, name: cvData.fullName }, 'CV data extracted');
 
     // 4. Build DOCX
     const outputName = `Scalian_Profile_${cvData.fullName.replace(/[^a-zA-Z0-9]/g, '_')}_EN.docx`;
@@ -71,23 +68,13 @@ async function processOneCV(
     const encryptedOutput = encrypt(outputDocx, sessionKey);
     await writeFile(join(sessionDir, 'outputs', `${outputName}.enc`), encryptedOutput);
 
-    // 6. Update meta
-    const freshMeta = await getMeta(sessionId);
-    if (freshMeta) {
-      freshMeta.files[fileIndex].status = 'done';
-      freshMeta.files[fileIndex].outputName = outputName;
-      await writeMeta(freshMeta);
-    }
+    // 6. Update meta (mutex-protected)
+    await updateFileStatus(sessionId, fileIndex, 'done', { outputName });
 
-    logger.info({ sessionId, file: file.originalName, output: outputName }, 'CV processed');
+    logger.info({ sessionId, file: originalName, output: outputName }, 'CV processed');
   } catch (err) {
-    logger.error({ sessionId, file: file.originalName, err }, 'CV processing failed');
-    const freshMeta = await getMeta(sessionId);
-    if (freshMeta) {
-      freshMeta.files[fileIndex].status = 'error';
-      freshMeta.files[fileIndex].error = (err as Error).message;
-      await writeMeta(freshMeta);
-    }
+    logger.error({ sessionId, file: originalName, err }, 'CV processing failed');
+    await updateFileStatus(sessionId, fileIndex, 'error', { error: (err as Error).message });
   }
 }
 
@@ -197,10 +184,18 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
     if (next) { running++; next(); }
   }
 
+  logger.info({ sessionId, fileCount: meta.files.length, concurrency }, 'Launching parallel CV processing');
+
   const tasks = meta.files.map(async (_, idx) => {
     await acquire();
     try {
-      await processOneCV(sessionId, idx, sessionKey, meta.prompt);
+      const f = meta.files[idx];
+      logger.info({ sessionId, fileIndex: idx, file: f.originalName }, 'Processing CV');
+      await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName);
+      logger.info({ sessionId, fileIndex: idx }, 'CV done');
+    } catch (err) {
+      logger.error({ sessionId, fileIndex: idx, err: (err as Error).message }, 'CV task failed');
+      await updateFileStatus(sessionId, idx, 'error', { error: (err as Error).message });
     } finally {
       release();
     }

@@ -2,12 +2,12 @@ SHELL := /bin/bash
 
 -include .env
 
-ENV ?= dev
+ENV ?= tcv
 export COMPOSE_PROJECT_NAME ?= $(ENV)
 DOCKER_COMPOSE ?= docker compose
 
-export API_PORT ?= 8787
-export UI_PORT ?= 5173
+export API_PORT ?= 8686
+export UI_PORT ?= 5175
 export VITE_API_BASE_URL ?= http://localhost:$(API_PORT)/api
 export CORS_ALLOWED_ORIGINS ?= http://localhost:$(UI_PORT),http://127.0.0.1:$(UI_PORT),http://ui:5173
 

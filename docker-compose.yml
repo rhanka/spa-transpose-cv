@@ -14,11 +14,11 @@ services:
       - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
       - DATA_DIR=/data
     ports:
-      - "${API_PORT:-8787}:8787"
+      - "${API_PORT:-8686}:8686"
     volumes:
       - api_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8787/api/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8686/api/health >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -32,7 +32,7 @@ services:
       target: ${TARGET:-development}
     environment:
       - NODE_ENV=development
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:${API_PORT:-8787}/api}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:${API_PORT:-8686}/api}
     ports:
       - "${UI_PORT:-5173}:5173"
     tty: true

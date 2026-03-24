@@ -76,7 +76,7 @@ export async function extractCvData(cvText: string, userPrompt: string): Promise
   logger.info({ textLength: cvText.length }, 'Calling Claude API for CV extraction');
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 8192,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],

@@ -27,6 +27,22 @@ export interface SessionMeta {
 // In-memory key cache (cleared on restart — acceptable for ephemeral sessions)
 const keyCache = new Map<string, Buffer>();
 
+// Mutex per session to prevent meta.json race conditions
+const metaLocks = new Map<string, Promise<void>>();
+
+async function withMetaLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const prev = metaLocks.get(id) ?? Promise.resolve();
+  let resolve: () => void;
+  const next = new Promise<void>(r => { resolve = r; });
+  metaLocks.set(id, next);
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    resolve!();
+  }
+}
+
 function sessionDir(id: string): string {
   return join(env.DATA_DIR, id);
 }
@@ -76,10 +92,28 @@ export async function writeMeta(meta: SessionMeta): Promise<void> {
 }
 
 export async function updateStatus(id: string, status: SessionStatus): Promise<void> {
-  const meta = await getMeta(id);
-  if (!meta) throw new Error(`Session ${id} not found`);
-  meta.status = status;
-  await writeMeta(meta);
+  await withMetaLock(id, async () => {
+    const meta = await getMeta(id);
+    if (!meta) throw new Error(`Session ${id} not found`);
+    meta.status = status;
+    await writeMeta(meta);
+  });
+}
+
+export async function updateFileStatus(
+  id: string,
+  fileIndex: number,
+  status: FileEntry['status'],
+  extra?: { outputName?: string; error?: string },
+): Promise<void> {
+  await withMetaLock(id, async () => {
+    const meta = await getMeta(id);
+    if (!meta) throw new Error(`Session ${id} not found`);
+    meta.files[fileIndex].status = status;
+    if (extra?.outputName) meta.files[fileIndex].outputName = extra.outputName;
+    if (extra?.error) meta.files[fileIndex].error = extra.error;
+    await writeMeta(meta);
+  });
 }
 
 export function authenticateSession(id: string, password: string, salt: string): Buffer {
