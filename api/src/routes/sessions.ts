@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
-import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import {
   createSession,
@@ -11,9 +10,9 @@ import {
   addFile,
   getDecryptedFile,
   listOutputs,
-  getSessionKey,
   updateStatus,
 } from '../services/session-manager.js';
+import { createEmitter, subscribe } from '../services/event-bus.js';
 
 export const sessionRoutes = new Hono();
 
@@ -21,9 +20,7 @@ export const sessionRoutes = new Hono();
 sessionRoutes.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = z.object({ password: z.string().min(1) }).safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: 'Password is required' }, 400);
-  }
+  if (!parsed.success) return c.json({ error: 'Password is required' }, 400);
   const meta = await createSession(parsed.data.password);
   return c.json({ sessionId: meta.id, expiresAt: meta.expiresAt }, 201);
 });
@@ -36,12 +33,10 @@ sessionRoutes.post('/:id/upload', async (c) => {
 
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
-
   const key = authenticateSession(id, password, meta.salt);
 
   const formData = await c.req.formData();
   const files = formData.getAll('files');
-
   if (!files.length) return c.json({ error: 'No files provided' }, 400);
 
   const entries = [];
@@ -51,11 +46,10 @@ sessionRoutes.post('/:id/upload', async (c) => {
     const entry = await addFile(id, file.name, buffer, key);
     entries.push(entry);
   }
-
   return c.json({ uploaded: entries.length, files: entries.map(e => e.originalName) });
 });
 
-// POST /api/sessions/:id/ready — mark session as ready with prompt
+// POST /api/sessions/:id/ready
 sessionRoutes.post('/:id/ready', async (c) => {
   const { id } = c.req.param();
   const password = c.req.header('X-Session-Password');
@@ -63,16 +57,13 @@ sessionRoutes.post('/:id/ready', async (c) => {
 
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
-
   authenticateSession(id, password, meta.salt);
 
   const body = await c.req.json().catch(() => ({}));
   const parsed = z.object({ prompt: z.string().default('') }).safeParse(body);
-
   meta.prompt = parsed.success ? parsed.data.prompt : '';
   meta.status = 'ready';
   await writeMeta(meta);
-
   return c.json({ status: 'ready', fileCount: meta.files.length });
 });
 
@@ -85,13 +76,12 @@ sessionRoutes.post('/:id/run', async (c) => {
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
   if (meta.status !== 'ready') return c.json({ error: `Session status is ${meta.status}, expected ready` }, 400);
-
   authenticateSession(id, password, meta.salt);
 
-  // Import orchestrator dynamically to avoid circular deps
   const { runOrchestrator } = await import('../services/orchestrator.js');
-  // Fire and forget — progress tracked via SSE
-  runOrchestrator(id).catch(err => {
+  const emitSse = createEmitter(id);
+
+  runOrchestrator(id, emitSse).catch(err => {
     logger.error(err, 'Orchestrator error');
     updateStatus(id, 'error').catch(() => {});
   });
@@ -100,7 +90,7 @@ sessionRoutes.post('/:id/run', async (c) => {
   return c.json({ status: 'processing' });
 });
 
-// GET /api/sessions/:id/status — SSE progress stream
+// GET /api/sessions/:id/status — SSE with enriched streaming events
 sessionRoutes.get('/:id/status', async (c) => {
   const { id } = c.req.param();
   const meta = await getMeta(id);
@@ -111,37 +101,50 @@ sessionRoutes.get('/:id/status', async (c) => {
     c.header('Cache-Control', 'no-cache');
     c.header('Connection', 'keep-alive');
 
-    let lastStatus = '';
-    let lastFileStatuses = '';
+    // Subscribe to live SSE events from orchestrator
+    const unsubscribe = subscribe(id, (fileIndex, event) => {
+      try {
+        s.write(`data: ${JSON.stringify({ type: 'stream', fileIndex, ...event })}\n\n`);
+      } catch { /* client disconnected */ }
+    });
 
-    for (let i = 0; i < 600; i++) { // 10 min max
-      const current = await getMeta(id);
-      if (!current) break;
+    // Also poll meta for status changes (file statuses, session status)
+    let lastKey = '';
+    try {
+      for (let i = 0; i < 600; i++) {
+        const current = await getMeta(id);
+        if (!current) break;
 
-      const fileStatuses = JSON.stringify(current.files.map(f => ({ name: f.originalName, status: f.status, error: f.error, output: f.outputName })));
-      const statusKey = `${current.status}:${fileStatuses}`;
-
-      if (statusKey !== lastStatus) {
-        await s.write(`data: ${JSON.stringify({
+        const key = JSON.stringify({
           status: current.status,
-          files: current.files.map(f => ({
-            name: f.originalName,
-            status: f.status,
-            error: f.error,
-            output: f.outputName,
-          })),
-          expiresAt: current.expiresAt,
-        })}\n\n`);
-        lastStatus = statusKey;
-      }
+          files: current.files.map(f => ({ s: f.status, o: f.outputName, e: f.error })),
+        });
 
-      if (current.status === 'done' || current.status === 'error') break;
-      await new Promise(r => setTimeout(r, 1000));
+        if (key !== lastKey) {
+          await s.write(`data: ${JSON.stringify({
+            type: 'status',
+            status: current.status,
+            files: current.files.map(f => ({
+              name: f.originalName,
+              status: f.status,
+              output: f.outputName,
+              error: f.error,
+            })),
+            expiresAt: current.expiresAt,
+          })}\n\n`);
+          lastKey = key;
+        }
+
+        if (current.status === 'done' || current.status === 'error') break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } finally {
+      unsubscribe();
     }
   });
 });
 
-// GET /api/sessions/:id/results — list results
+// GET /api/sessions/:id/results
 sessionRoutes.get('/:id/results', async (c) => {
   const { id } = c.req.param();
   const meta = await getMeta(id);
@@ -161,7 +164,7 @@ sessionRoutes.get('/:id/results', async (c) => {
   });
 });
 
-// GET /api/sessions/:id/download/:file — download decrypted file
+// GET /api/sessions/:id/download/:file
 sessionRoutes.get('/:id/download/:file', async (c) => {
   const { id, file } = c.req.param();
   const password = c.req.header('X-Session-Password');
