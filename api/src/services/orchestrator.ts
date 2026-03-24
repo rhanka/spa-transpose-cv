@@ -276,8 +276,8 @@ Return ONLY a concise markdown analysis (3-5 bullet points max) covering:
 - Sections that seem too thin or too dense vs source
 - Overall format completeness and translation quality
 
-If everything looks good, return "— Aucun point d'attention majeur".
-Be CONCISE — only major issues. Markdown bullet points.`,
+If everything looks good, return "— RAS".
+Be CONCISE — a few bullet points max, 1 short sentence each. Only significant issues. No filler.`,
       messages: [{
         role: 'user',
         content: `SOURCE FILE: ${originalName}\n\nSOURCE TEXT (first 3000 chars):\n${sourceText.substring(0, 3000)}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText.substring(0, 3000)}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
@@ -419,5 +419,7 @@ async function generateBatchSummary(
 
   const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
   const encryptedZip = encrypt(zipBuffer, sessionKey);
-  await writeFile(join(sessionDir, 'outputs', 'batch_all_profiles.zip.enc'), encryptedZip);
+  const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12); // YYYYMMDD_HHmm
+  const zipName = `${ts.slice(0, 8)}_${ts.slice(8)}_all_profiles.zip`;
+  await writeFile(join(sessionDir, 'outputs', `${zipName}.enc`), encryptedZip);
 }

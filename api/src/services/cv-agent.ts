@@ -42,7 +42,7 @@ Given the raw text of a CV, extract and return a JSON object with exactly this s
   "education": [
     { "year": "string — graduation year", "description": "string — degree and institution (use en-dash)" }
   ],
-  "attention_cv": "string — CONCISE markdown (3-5 bullet points max). Only MAJOR points: missing info, inconsistencies, profile type (anonymized/nominative), consolidation choices. Be synthetic."
+  "attention_cv": "string — Concise markdown, a few bullet points. Each bullet: 1 short sentence. Focus only on what a recruiter must know — missing data, inconsistencies, profile type. No filler, no explanations."
 }
 
 CONSTRAINTS:
