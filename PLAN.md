@@ -83,15 +83,58 @@
 - [x] Repo GitHub créé : `rhanka/spa-transpose-cv`
 - [x] Commits atomiques tout le long
 
-### Phase 8 — Polish & hardening
-- [ ] Rate limiting affiné
-- [ ] Validation taille fichiers (50 MB max)
-- [ ] Messages d'erreur utilisateur clairs
-- [ ] Téléchargement ZIP du lot complet
-- [ ] DNS CNAME `scalian-cv-api.sent-tech.ca` → SCW container
-- [ ] DNS CNAME `scalian-cv.sent-tech.ca` → GitHub Pages
-- [ ] GitHub Pages settings (custom domain, HTTPS)
-- [ ] Secrets GitHub : SCW_ACCESS_KEY, SCW_SECRET_KEY, SCW_PROJECT_ID, SCW_ORGANIZATION_ID, REGISTRY, ANTHROPIC_API_KEY
+### Phase 8 — Infra & DNS ✅
+- [x] DNS CNAME configurés (Cloudflare)
+- [x] GitHub Pages + custom domain
+- [x] Secrets GitHub (6/6)
+- [x] SCW custom domain registered
+- [x] min-scale=1 (session persistence)
+
+### Phase 9 — SPEC v2 : fidélité, streaming, validation (en cours)
+
+#### 9a — Lecture DOCX en TS (supprimer pandoc)
+- [ ] `api/src/services/docx-reader.ts` : jszip + xmldom → extraire `<w:t>` text nodes
+- [ ] Remplacer `text-extractor.ts` pour DOCX (garder pdftotext pour PDF)
+- [ ] Tests : round-trip read sur un DOCX Scalian généré
+
+#### 9b — Prompt Claude : fidélité + contraintes header
+- [ ] Intégrer règle fidélité dans le prompt système (ne jamais inventer)
+- [ ] Contraindre `title_line1` max 25 chars, `title_line2` max 25 chars
+- [ ] Nommage conforme : `Scalian_Profile_{Nom}_EN.docx` / `Candidate_XXXXX`
+- [ ] Champs JSON alignés sur CLAUDE.md : `name`, `title_line1`, `title_line2`, `years`
+
+#### 9c — Validation agent (auto-relecture)
+- [ ] Après génération DOCX : relire via docx-reader
+- [ ] Vérifier : 5 sections, pas de XML brut, page 1 <= 28 paragraphes, headers <= 25 chars
+- [ ] Si échec → retry 1x avec erreur renvoyée à Claude
+- [ ] Agent retourne tableau 4 colonnes (Entrée / Sortie / Attention CV / Attention trad)
+
+#### 9d — Validation conductor
+- [ ] Relecture DOCX via docx-reader après chaque agent
+- [ ] Vérifier sections, cohérence postes, XML propre
+- [ ] Remplir "Attention traduction" (interprétation du conductor)
+- [ ] Si problème critique → relance agent 1x
+- [ ] `batch_summary.docx` généré (pas pandoc — via XML builders ou lib docx)
+
+#### 9e — Streaming Claude (extended thinking + SSE)
+- [ ] `thinking: { type: "enabled", budget_tokens: 4096 }` + `stream: true`
+- [ ] SSE par fichier : phase, thinking_delta, content_delta, parsed_keys, elapsed_ms
+- [ ] Parsing optimiste JSON : name, title_line1, titres de postes au fil du stream
+- [ ] API : refactor routes/sessions GET /status pour SSE enrichi
+
+#### 9f — Frontend grid face-à-face
+- [ ] Grid streaming (2 cols) : fichier source | streaming Claude live
+- [ ] Grid résultat (4 cols) : source | DOCX | Attention CV | Attention trad
+- [ ] Responsive : 1fr en mobile
+- [ ] Timer par fichier + stall detection (120s)
+- [ ] ZIP complet + batch_summary.docx en bas
+- [ ] Parsing optimiste affiché (nom, postes en cours)
+
+#### 9g — Commit, test local, deploy, test remote
+- [ ] Test local 3 CVs : make exec-api
+- [ ] Commit atomique
+- [ ] Deploy SCW + GH Pages
+- [ ] Test remote 3 CVs
 
 ## Décisions techniques
 
