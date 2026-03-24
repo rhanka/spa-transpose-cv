@@ -1,48 +1,48 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import {
     subscribeStatus,
     getResults,
     downloadFile,
     type FileStatus,
-    type SessionStatus,
+    type SseData,
+    type StreamEvent,
   } from '$lib/api';
-  import {
-    sessionPassword,
-    sessionStatus,
-    sessionFiles,
-    sessionExpiresAt,
-    sessionOutputs,
-  } from '$lib/stores/session';
+  import { sessionPassword } from '$lib/stores/session';
 
   const id = $derived($page.params.id ?? '');
 
   let password = $state('');
   let authenticated = $state(false);
-  let status = $state('');
+  let sessionStatus = $state('');
   let files = $state<FileStatus[]>([]);
   let expiresAt = $state('');
   let outputs = $state<string[]>([]);
   let eventSource: EventSource | null = null;
   let error = $state('');
 
-  // If password was set from upload flow, use it
+  // Per-file streaming state
+  let fileStreams = $state<Record<number, {
+    phase: string;
+    thinking: string;
+    elapsed_ms: number;
+    parsed_keys: Record<string, unknown>;
+    attention_cv: string;
+    attention_trad: string;
+    lastUpdate: number;
+  }>>({});
+
   $effect(() => {
     const storedPwd = $sessionPassword;
     if (storedPwd) {
       password = storedPwd;
       authenticated = true;
+      startListening();
     }
   });
 
-  onMount(() => {
-    if (authenticated) startListening();
-  });
-
-  onDestroy(() => {
-    eventSource?.close();
-  });
+  onDestroy(() => { eventSource?.close(); });
 
   function authenticate() {
     if (!password) return;
@@ -52,17 +52,31 @@
   }
 
   function startListening() {
-    eventSource = subscribeStatus(id, (data: SessionStatus) => {
-      status = data.status;
-      files = data.files;
-      expiresAt = data.expiresAt;
-      sessionStatus.set(data.status);
-      sessionFiles.set(data.files);
-      sessionExpiresAt.set(data.expiresAt);
-
-      if (data.status === 'done' || data.status === 'error') {
-        eventSource?.close();
-        loadResults();
+    eventSource = subscribeStatus(id, (data: SseData) => {
+      if (data.type === 'status') {
+        sessionStatus = data.status;
+        files = data.files;
+        expiresAt = data.expiresAt;
+        if (data.status === 'done' || data.status === 'error') {
+          eventSource?.close();
+          loadResults();
+        }
+      } else if (data.type === 'stream') {
+        const ev = data as StreamEvent;
+        const prev = fileStreams[ev.fileIndex] || { phase: '', thinking: '', elapsed_ms: 0, parsed_keys: {}, attention_cv: '', attention_trad: '', lastUpdate: Date.now() };
+        fileStreams[ev.fileIndex] = {
+          phase: ev.phase || prev.phase,
+          thinking: prev.thinking + (ev.thinking_delta || ''),
+          elapsed_ms: ev.elapsed_ms ?? prev.elapsed_ms,
+          parsed_keys: ev.parsed_keys ? { ...prev.parsed_keys, ...ev.parsed_keys } : prev.parsed_keys,
+          attention_cv: ev.attention_cv || prev.attention_cv,
+          attention_trad: ev.attention_trad || prev.attention_trad,
+          lastUpdate: Date.now(),
+        };
+        // Keep thinking buffer manageable
+        if (fileStreams[ev.fileIndex].thinking.length > 2000) {
+          fileStreams[ev.fileIndex].thinking = '...' + fileStreams[ev.fileIndex].thinking.slice(-1500);
+        }
       }
     });
   }
@@ -71,10 +85,7 @@
     try {
       const res = await getResults(id);
       outputs = res.outputs;
-      sessionOutputs.set(res.outputs);
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }
 
   async function handleDownload(fileName: string) {
@@ -82,80 +93,56 @@
       const blob = await downloadFile(id, password, fileName);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
+      a.href = url; a.download = fileName; a.click();
       URL.revokeObjectURL(url);
-    } catch (err) {
-      error = `Erreur de téléchargement : ${(err as Error).message}`;
+    } catch (err) { error = (err as Error).message; }
+  }
+
+  function phaseLabel(phase: string): string {
+    switch (phase) {
+      case 'extracting_text': return 'Extraction texte';
+      case 'calling_claude': return 'Analyse IA';
+      case 'building_docx': return 'Génération DOCX';
+      case 'validating': return 'Validation';
+      case 'done': return 'Terminé';
+      case 'error': return 'Erreur';
+      default: return 'En attente';
     }
   }
 
-  function statusIcon(s: string): string {
-    switch (s) {
-      case 'done': return '✓';
-      case 'error': return '✗';
-      case 'processing': return '⟳';
-      default: return '○';
-    }
-  }
-
-  function statusColor(s: string): string {
-    switch (s) {
-      case 'done': return 'var(--color-green)';
-      case 'error': return '#ef4444';
-      case 'processing': return 'var(--color-purple)';
-      default: return 'var(--color-purple-light)';
-    }
+  function formatMs(ms: number): string {
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(0)}s`;
   }
 
   function formatExpiry(iso: string): string {
     if (!iso) return '';
-    const d = new Date(iso);
-    return d.toLocaleDateString('fr-FR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
+    return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  $effect(() => {
-    const doneCount = files.filter(f => f.status === 'done' || f.status === 'error').length;
-    const total = files.length;
-    const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
-    // Update derived values
-    void pct;
-  });
+  function isStalled(fileIndex: number): boolean {
+    const s = fileStreams[fileIndex];
+    if (!s || s.phase === 'done' || s.phase === 'error') return false;
+    return Date.now() - s.lastUpdate > 120_000;
+  }
+
+  $effect(() => { void files; }); // reactive trigger
 </script>
 
-<div class="max-w-[1248px] mx-auto px-4 py-12">
-  <div class="flex items-center justify-between mb-8">
-    <h2 class="text-2xl" style="font-family: 'Poppins', sans-serif;">Session</h2>
-    <code class="text-xs px-3 py-1 bg-gray-100" style="color: var(--color-purple-light);">{id}</code>
+<div class="max-w-[1216px] mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl">Session</h2>
+    <code class="text-xs px-3 py-1" style="background: var(--color-purple-bg); color: var(--color-purple-light);">{id}</code>
   </div>
 
   {#if !authenticated}
-    <!-- Password gate -->
     <section class="max-w-md mx-auto">
-      <div class="border-2 p-8 bg-white" style="border-color: var(--color-purple-border); box-shadow: 0 20px 40px 0 rgba(29, 17, 72, 0.1);">
-        <label class="block text-sm font-medium mb-2" for="session-password">
-          Mot de passe de la session
-        </label>
-        <input
-          id="session-password"
-          type="password"
-          bind:value={password}
-          placeholder="Entrez le mot de passe"
-          class="w-full px-4 py-3 border-2 focus:outline-none text-sm mb-4"
-          style="border-color: var(--color-purple-border);"
-          onkeydown={(e) => { if (e.key === 'Enter') authenticate(); }}
-        />
-        <button
-          onclick={authenticate}
-          class="w-full py-3 text-sm font-semibold text-white border-2 transition-all"
-          style="border-color: var(--color-green); background: var(--color-green);"
-        >
-          Accéder
-        </button>
+      <div class="card p-8">
+        <label class="block text-sm font-medium mb-1.5" for="sp">Mot de passe</label>
+        <input id="sp" type="password" bind:value={password} placeholder="Mot de passe de la session"
+          class="w-full px-4 py-3 border-2 text-sm mb-4" style="border-color: var(--color-purple-border);"
+          onkeydown={(e) => { if (e.key === 'Enter') authenticate(); }} />
+        <button onclick={authenticate} class="w-full btn-primary">Accéder</button>
       </div>
     </section>
   {:else}
@@ -163,102 +150,125 @@
     {#if files.length > 0}
       {@const doneCount = files.filter(f => f.status === 'done' || f.status === 'error').length}
       {@const pct = Math.round((doneCount / files.length) * 100)}
-      <div class="mb-8">
-        <div class="flex justify-between text-sm mb-2">
+      <div class="mb-6">
+        <div class="flex justify-between text-sm mb-1">
           <span>{doneCount}/{files.length} traité{doneCount > 1 ? 's' : ''}</span>
           <span class="font-semibold">{pct}%</span>
         </div>
-        <div class="w-full h-2 bg-gray-100 overflow-hidden">
-          <div
-            class="h-full transition-all duration-500"
-            style="width: {pct}%; background: {status === 'error' ? '#ef4444' : 'var(--color-green)'};"
-          ></div>
-        </div>
+        <div class="w-full h-1.5 bg-gray-100"><div class="h-full transition-all duration-500" style="width: {pct}%; background: var(--color-green);"></div></div>
       </div>
     {/if}
 
-    <!-- File list -->
-    <div class="space-y-2 mb-8">
-      {#each files as file}
-        <div class="flex items-center gap-3 p-3 border bg-white" style="border-color: var(--color-purple-border);">
-          <span class="text-lg" style="color: {statusColor(file.status)};">{statusIcon(file.status)}</span>
-          <span class="flex-1 text-sm truncate">{file.name}</span>
-          <span class="text-xs px-2 py-1" style="color: {statusColor(file.status)};">
-            {file.status === 'processing' ? 'En cours...' : file.status === 'done' ? 'Terminé' : file.status === 'error' ? 'Erreur' : 'En attente'}
-          </span>
-          {#if file.status === 'done' && file.output}
-            <button
-              onclick={() => handleDownload(file.output!)}
-              class="text-xs px-3 py-1 font-semibold text-white"
-              style="background: var(--color-green);"
-            >
-              Télécharger
-            </button>
-          {/if}
-          {#if file.status === 'error' && file.error}
-            <span class="text-xs text-red-500 max-w-48 truncate" title={file.error}>{file.error}</span>
-          {/if}
-        </div>
+    <!-- Grid: face-à-face per CV -->
+    <div class="space-y-3 mb-8">
+      {#each files as file, idx}
+        {@const stream = fileStreams[idx]}
+        {@const isDone = file.status === 'done'}
+        {@const isError = file.status === 'error'}
+        {@const isProcessing = file.status === 'processing'}
+
+        {#if isDone}
+          <!-- RESULT MODE: 4 columns -->
+          <div class="card p-0" style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0;">
+            <div class="p-4 border-r" style="border-color: var(--color-purple-border);">
+              <div class="text-xs font-semibold mb-1 uppercase" style="color: var(--color-purple-lighter);">Source</div>
+              <div class="text-sm truncate">{file.name}</div>
+            </div>
+            <div class="p-4 border-r" style="border-color: var(--color-purple-border);">
+              <div class="text-xs font-semibold mb-1 uppercase" style="color: var(--color-purple-lighter);">DOCX</div>
+              {#if file.output}
+                <button onclick={() => handleDownload(file.output!)} class="text-sm font-semibold" style="color: var(--color-green);">{file.output}</button>
+              {/if}
+            </div>
+            <div class="p-4 border-r" style="border-color: var(--color-purple-border);">
+              <div class="text-xs font-semibold mb-1 uppercase" style="color: var(--color-purple-lighter);">Attention CV</div>
+              <div class="text-xs" style="color: var(--color-purple-light);">{stream?.attention_cv || '—'}</div>
+            </div>
+            <div class="p-4">
+              <div class="text-xs font-semibold mb-1 uppercase" style="color: var(--color-purple-lighter);">Attention trad</div>
+              <div class="text-xs" style="color: var(--color-purple-light);">{stream?.attention_trad || '—'}</div>
+            </div>
+          </div>
+        {:else}
+          <!-- STREAMING MODE: 2 columns -->
+          <div class="card p-0" style="display: grid; grid-template-columns: 1fr 2fr; gap: 0;">
+            <div class="p-4 border-r" style="border-color: var(--color-purple-border);">
+              <div class="text-sm font-medium truncate mb-2">{file.name}</div>
+              {#if isError}
+                <span class="text-xs px-2 py-0.5" style="background: #fef2f2; color: #b91c1c;">Erreur</span>
+                {#if file.error}<div class="text-xs mt-1" style="color: #b91c1c;">{file.error}</div>{/if}
+              {:else if isProcessing && stream}
+                <div class="flex items-center gap-2 text-xs" style="color: var(--color-purple);">
+                  <span class="animate-pulse">&#9711;</span>
+                  <span>{phaseLabel(stream.phase)}</span>
+                  <span style="color: var(--color-purple-lighter);">({formatMs(stream.elapsed_ms)})</span>
+                </div>
+                {#if isStalled(idx)}
+                  <div class="text-xs mt-1" style="color: #d97706;">Possible blocage (&gt;2min sans activité)</div>
+                {/if}
+                {#if stream.parsed_keys?.name}
+                  <div class="text-xs mt-1" style="color: var(--color-purple-light);">Candidat : {stream.parsed_keys.name}</div>
+                {/if}
+              {:else}
+                <span class="text-xs" style="color: var(--color-purple-lighter);">En attente</span>
+              {/if}
+            </div>
+            <div class="p-4 overflow-hidden" style="max-height: 200px;">
+              {#if stream?.thinking}
+                <div class="text-xs font-mono whitespace-pre-wrap overflow-y-auto" style="max-height: 180px; color: var(--color-purple-light); opacity: 0.7;">{stream.thinking}</div>
+              {:else if !isProcessing}
+                <div class="text-xs" style="color: var(--color-purple-lighter);">En attente de traitement...</div>
+              {/if}
+            </div>
+          </div>
+        {/if}
       {/each}
     </div>
 
     <!-- Results section -->
-    {#if status === 'done' || status === 'error'}
-      <div class="border-2 p-6 bg-white mb-8" style="border-color: var(--color-purple-border);">
-        <h3 class="text-lg font-semibold mb-4" style="font-family: 'Poppins', sans-serif;">Résultats</h3>
-
+    {#if sessionStatus === 'done' || sessionStatus === 'error'}
+      <div class="card p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">Résultats</h3>
         {#if outputs.length > 0}
           <div class="space-y-2 mb-4">
             {#each outputs as output}
-              <div class="flex items-center justify-between p-2 bg-gray-50">
+              <div class="flex items-center justify-between p-2" style="background: var(--color-purple-bg);">
                 <span class="text-sm truncate">{output}</span>
-                <button
-                  onclick={() => handleDownload(output)}
-                  class="text-xs px-3 py-1 font-semibold text-white"
-                  style="background: var(--color-green);"
-                >
-                  Télécharger
-                </button>
+                <button onclick={() => handleDownload(output)} class="btn-primary text-xs py-1 px-3">Télécharger</button>
               </div>
             {/each}
           </div>
         {/if}
-
         {#if expiresAt}
-          <p class="text-xs mt-4" style="color: var(--color-purple-light);">
-            Ces fichiers seront supprimés le {formatExpiry(expiresAt)}
-          </p>
+          <p class="text-xs" style="color: var(--color-purple-lighter);">Ces fichiers seront supprimés le {formatExpiry(expiresAt)}</p>
         {/if}
       </div>
 
-      <!-- Share link -->
-      <div class="border-2 p-4 bg-gray-50" style="border-color: var(--color-purple-border);">
+      <!-- Share -->
+      <div class="card p-4">
         <p class="text-sm font-medium mb-2">Partager cette session</p>
         <div class="flex items-center gap-2">
-          <input
-            readonly
-            value={`${window.location.origin}/session/${id}`}
-            class="flex-1 px-3 py-2 text-xs bg-white border"
-            style="border-color: var(--color-purple-border);"
-          />
-          <button
-            onclick={() => navigator.clipboard.writeText(`${window.location.origin}/session/${id}`)}
-            class="px-3 py-2 text-xs font-semibold border-2"
-            style="border-color: var(--color-purple); color: var(--color-purple);"
-          >
-            Copier
-          </button>
+          <input readonly value={`${window.location.origin}/session/${id}`}
+            class="flex-1 px-3 py-2 text-xs bg-white border" style="border-color: var(--color-purple-border);" />
+          <button onclick={() => navigator.clipboard.writeText(`${window.location.origin}/session/${id}`)} class="btn-secondary text-xs py-2 px-3">Copier</button>
         </div>
-        <p class="text-xs mt-2" style="color: var(--color-purple-light); opacity: 0.6;">
-          Le destinataire aura besoin du mot de passe pour déchiffrer les résultats.
-        </p>
+        <p class="text-xs mt-2" style="color: var(--color-purple-lighter);">Le destinataire aura besoin du mot de passe.</p>
       </div>
     {/if}
 
     {#if error}
-      <div class="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm">
-        {error}
-      </div>
+      <div class="mt-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
     {/if}
   {/if}
 </div>
+
+<style>
+  @media (max-width: 768px) {
+    :global(.card[style*="grid-template-columns: 1fr 1fr 1fr 1fr"]) {
+      grid-template-columns: 1fr !important;
+    }
+    :global(.card[style*="grid-template-columns: 1fr 2fr"]) {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>

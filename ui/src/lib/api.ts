@@ -13,7 +13,6 @@ export async function createSession(password: string): Promise<{ sessionId: stri
 export async function uploadFiles(sessionId: string, password: string, files: File[]): Promise<{ uploaded: number }> {
   const form = new FormData();
   for (const f of files) form.append('files', f);
-
   const res = await fetch(`${API_BASE}/sessions/${sessionId}/upload`, {
     method: 'POST',
     headers: { 'X-Session-Password': password },
@@ -26,10 +25,7 @@ export async function uploadFiles(sessionId: string, password: string, files: Fi
 export async function markReady(sessionId: string, password: string, prompt: string): Promise<void> {
   const res = await fetch(`${API_BASE}/sessions/${sessionId}/ready`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Session-Password': password,
-    },
+    headers: { 'Content-Type': 'application/json', 'X-Session-Password': password },
     body: JSON.stringify({ prompt }),
   });
   if (!res.ok) throw new Error(`Mark ready failed: ${res.status}`);
@@ -50,37 +46,49 @@ export interface FileStatus {
   output?: string;
 }
 
-export interface SessionStatus {
+export interface StreamEvent {
+  type: 'stream';
+  fileIndex: number;
+  phase: string;
+  thinking_delta?: string;
+  content_delta?: string;
+  parsed_keys?: Record<string, unknown>;
+  elapsed_ms?: number;
+  error?: string;
+  attention_cv?: string;
+  attention_trad?: string;
+}
+
+export interface StatusEvent {
+  type: 'status';
   status: string;
   files: FileStatus[];
   expiresAt: string;
 }
 
-export function subscribeStatus(sessionId: string, onMessage: (data: SessionStatus) => void): EventSource {
+export type SseData = StreamEvent | StatusEvent;
+
+export function subscribeStatus(
+  sessionId: string,
+  onMessage: (data: SseData) => void,
+): EventSource {
   const es = new EventSource(`${API_BASE}/sessions/${sessionId}/status`);
   es.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data) as SessionStatus;
-      onMessage(data);
-    } catch {
-      // ignore parse errors
-    }
+      onMessage(JSON.parse(event.data) as SseData);
+    } catch { /* ignore */ }
   };
   return es;
 }
 
-export async function getResults(sessionId: string): Promise<SessionStatus & { outputs: string[] }> {
+export async function getResults(sessionId: string): Promise<StatusEvent & { outputs: string[] }> {
   const res = await fetch(`${API_BASE}/sessions/${sessionId}/results`);
   if (!res.ok) throw new Error(`Get results failed: ${res.status}`);
   return res.json();
 }
 
-export function downloadUrl(sessionId: string, fileName: string): string {
-  return `${API_BASE}/sessions/${sessionId}/download/${encodeURIComponent(fileName)}`;
-}
-
 export async function downloadFile(sessionId: string, password: string, fileName: string): Promise<Blob> {
-  const res = await fetch(downloadUrl(sessionId, fileName), {
+  const res = await fetch(`${API_BASE}/sessions/${sessionId}/download/${encodeURIComponent(fileName)}`, {
     headers: { 'X-Session-Password': password },
   });
   if (!res.ok) throw new Error(`Download failed: ${res.status}`);
