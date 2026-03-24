@@ -42,7 +42,7 @@ Given the raw text of a CV, extract and return a JSON object with exactly this s
   "education": [
     { "year": "string — graduation year", "description": "string — degree and institution (use en-dash)" }
   ],
-  "attention_cv": "string — notable points: missing info, inconsistencies, vague skills, profile type (anonymized/nominative), consolidation choices"
+  "attention_cv": "string — CONCISE markdown (3-5 bullet points max). Only MAJOR points: missing info, inconsistencies, profile type (anonymized/nominative), consolidation choices. Be synthetic."
 }
 
 CONSTRAINTS:
@@ -89,11 +89,16 @@ export interface StreamCallbacks {
 export async function extractCvData(
   cvText: string,
   userPrompt: string,
+  sourceFileName: string,
   callbacks?: StreamCallbacks,
 ): Promise<CvData> {
-  const userMessage = userPrompt
-    ? `${userPrompt}\n\n---\n\nCV TEXT:\n${cvText}`
-    : `CV TEXT:\n${cvText}`;
+  const userMessage = [
+    userPrompt ? userPrompt : '',
+    `SOURCE FILENAME: ${sourceFileName}`,
+    'If the CV is anonymized (no real name), use "Candidate XXXXX" where XXXXX is the numeric ID from the filename (e.g., SCALO_DevOps_138282.pdf → "Candidate 138282").',
+    '---',
+    `CV TEXT:\n${cvText}`,
+  ].filter(Boolean).join('\n\n');
 
   logger.info({ textLength: cvText.length }, 'Calling Claude API for CV extraction');
 
@@ -161,19 +166,19 @@ export async function extractCvData(
 export async function extractCvDataWithRetry(
   cvText: string,
   userPrompt: string,
+  sourceFileName: string,
   callbacks?: StreamCallbacks,
 ): Promise<CvData> {
   try {
-    return await extractCvData(cvText, userPrompt, callbacks);
+    return await extractCvData(cvText, userPrompt, sourceFileName, callbacks);
   } catch (firstError) {
     logger.info({ error: (firstError as Error).message }, 'First extraction failed, retrying with error feedback');
     callbacks?.onThinking?.(`\n[RETRY] First attempt failed: ${(firstError as Error).message}\n`);
 
-    // Retry with the error message appended
     const retryPrompt = userPrompt
       ? `${userPrompt}\n\nPREVIOUS ATTEMPT FAILED WITH ERROR: ${(firstError as Error).message}\nPlease fix and return valid JSON.`
       : `PREVIOUS ATTEMPT FAILED WITH ERROR: ${(firstError as Error).message}\nPlease fix and return valid JSON.`;
 
-    return await extractCvData(cvText, retryPrompt, callbacks);
+    return await extractCvData(cvText, retryPrompt, sourceFileName, callbacks);
   }
 }
