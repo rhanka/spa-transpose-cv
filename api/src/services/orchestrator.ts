@@ -72,7 +72,7 @@ async function processOneCV(
   originalName: string,
   encryptedName: string,
   emitSse?: SseEmitter,
-): Promise<{ cvData: CvData; outputName: string } | null> {
+): Promise<{ cvData: CvData; outputName: string; sourceText: string } | null> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const startTime = Date.now();
 
@@ -104,7 +104,7 @@ async function processOneCV(
       },
     };
 
-    const cvData = await extractCvDataWithRetry(text, userPrompt, streamCallbacks);
+    const cvData = await extractCvDataWithRetry(text, userPrompt, originalName, streamCallbacks);
     logger.info({ sessionId, file: originalName, name: cvData.name }, 'CV data extracted');
 
     // 3. Build DOCX
@@ -125,6 +125,7 @@ async function processOneCV(
       const retryData = await extractCvDataWithRetry(
         text,
         `${userPrompt}\n\nVALIDATION ERRORS FROM PREVIOUS ATTEMPT: ${validation.errors.join('; ')}. Fix these issues.`,
+        originalName,
         streamCallbacks,
       );
       await buildScalianDocx(retryData, sessionDir, fileIndex);
@@ -144,7 +145,7 @@ async function processOneCV(
     });
 
     logger.info({ sessionId, file: originalName, output: outputName, ms: Date.now() - startTime }, 'CV processed');
-    return { cvData, outputName };
+    return { cvData, outputName, sourceText: text };
 
   } catch (err) {
     logger.error({ sessionId, file: originalName, err }, 'CV processing failed');
@@ -232,7 +233,7 @@ async function buildScalianDocx(
 }
 
 /**
- * Conductor: validate a generated DOCX and produce attention_trad
+ * Conductor: validate a generated DOCX and produce attention_trad via Claude QA call
  */
 async function conductorValidate(
   sessionId: string,
@@ -240,6 +241,7 @@ async function conductorValidate(
   sessionKey: Buffer,
   originalName: string,
   outputName: string,
+  sourceText: string,
   emitSse?: SseEmitter,
 ): Promise<string> {
   const sessionDir = join(env.DATA_DIR, sessionId);
@@ -248,16 +250,49 @@ async function conductorValidate(
   try {
     const encData = await readFile(encOutputPath);
     const docxData = decrypt(encData, sessionKey);
-    const validation = await validateDocxBuffer(docxData);
+    const { extractTextFromDocxBuffer } = await import('./docx-reader.js');
+    const outputText = await extractTextFromDocxBuffer(docxData);
 
-    const notes: string[] = [];
-    if (!validation.valid) {
-      notes.push(`Validation issues: ${validation.errors.join('; ')}`);
-    }
-    // The conductor's own observations (simplified — could be enhanced with a Claude call)
-    return notes.length > 0 ? notes.join('. ') : '—';
+    // Structural validation
+    const validation = await validateDocxBuffer(docxData);
+    const structErrors = validation.valid ? [] : validation.errors;
+
+    // Claude QA analyst call for translation quality
+    emitSse?.(fileIndex, { phase: 'validating', thinking_delta: 'Conductor: analyse qualité traduction...', elapsed_ms: 0 });
+
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+
+    const qaResponse = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: `You are a QA analyst reviewing a CV conversion from source to Scalian format.
+Compare the source CV text with the generated output text.
+Return ONLY a concise markdown analysis (3-5 bullet points max) covering:
+- Job titles that may have been misinterpreted
+- Ambiguous technical terms in the mapping
+- Company names or certifications that may have been altered
+- Questionable consolidation choices (long careers)
+- Sections that seem too thin or too dense vs source
+- Overall format completeness and translation quality
+
+If everything looks good, return "— Aucun point d'attention majeur".
+Be CONCISE — only major issues. Markdown bullet points.`,
+      messages: [{
+        role: 'user',
+        content: `SOURCE FILE: ${originalName}\n\nSOURCE TEXT (first 3000 chars):\n${sourceText.substring(0, 3000)}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText.substring(0, 3000)}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
+      }],
+    });
+
+    const text = qaResponse.content
+      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    return text.trim() || '—';
   } catch (err) {
-    return `Conductor validation error: ${(err as Error).message}`;
+    logger.error({ sessionId, file: originalName, err }, 'Conductor validation error');
+    return `Erreur validation: ${(err as Error).message}`;
   }
 }
 
@@ -297,7 +332,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
 
       if (result) {
         // Conductor validation
-        const attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, emitSse);
+        const attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse);
         emitSse?.(idx, { phase: 'done', attention_trad });
         results.push({
           originalName: f.originalName,
@@ -344,31 +379,45 @@ async function generateBatchSummary(
 ): Promise<void> {
   const sessionDir = join(env.DATA_DIR, meta.id);
 
-  // Pad columns for readable markdown
-  const pad = (s: string, len: number) => s.padEnd(len);
-  const c1 = Math.max(8, ...results.map(r => r.originalName.length)) + 2;
-  const c2 = Math.max(8, ...results.map(r => r.outputName.length)) + 2;
-  const c3 = Math.max(14, ...results.map(r => r.attention_cv.length)) + 2;
-  const c4 = Math.max(18, ...results.map(r => r.attention_trad.length)) + 2;
-
-  const lines = [
-    '# Scalian CV Batch Summary\n',
-    `| ${pad('Entrée', c1)}| ${pad('Sortie', c2)}| ${pad('Attention CV', c3)}| ${pad('Attention traduction', c4)}|`,
-    `|${'-'.repeat(c1 + 1)}|${'-'.repeat(c2 + 1)}|${'-'.repeat(c3 + 1)}|${'-'.repeat(c4 + 1)}|`,
-  ];
-
-  for (const r of results) {
-    lines.push(`| ${pad(r.originalName, c1)}| ${pad(r.outputName, c2)}| ${pad(r.attention_cv, c3)}| ${pad(r.attention_trad, c4)}|`);
-  }
-
+  // Generate summary as markdown
   const doneCount = meta.files.filter(f => f.status === 'done').length;
   const errorCount = meta.files.filter(f => f.status === 'error').length;
-  lines.push('');
-  lines.push('## Notes du conductor');
-  lines.push(`- Fichiers traités : ${doneCount}/${meta.files.length}`);
-  if (errorCount > 0) lines.push(`- Échecs : ${errorCount}`);
 
-  const md = lines.join('\n');
+  const md = [
+    '# Scalian CV Batch Summary\n',
+    '| Entrée | Sortie | Attention CV | Attention traduction |',
+    '|--------|--------|--------------|---------------------|',
+    ...results.map(r => `| ${r.originalName} | ${r.outputName} | ${r.attention_cv.replace(/\n/g, ' ')} | ${r.attention_trad.replace(/\n/g, ' ')} |`),
+    '',
+    '## Notes du conductor',
+    `- Fichiers traités : ${doneCount}/${meta.files.length}`,
+    errorCount > 0 ? `- Échecs : ${errorCount}` : '',
+  ].filter(Boolean).join('\n');
+
+  // Save as .md.enc (for the batch_summary.docx we'd need docx generation — keeping md for now)
   const encrypted = encrypt(Buffer.from(md), sessionKey);
   await writeFile(join(sessionDir, 'outputs', 'batch_summary.md.enc'), encrypted);
+
+  // Generate ZIP of all profile DOCXs + summary
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+
+  // Add all profile DOCXs
+  for (const f of meta.files) {
+    if (f.status === 'done' && f.outputName) {
+      try {
+        const encPath = join(sessionDir, 'outputs', `${f.outputName}.enc`);
+        const encData = await readFile(encPath);
+        const docxData = decrypt(encData, sessionKey);
+        zip.file(f.outputName, docxData);
+      } catch { /* skip failed files */ }
+    }
+  }
+
+  // Add summary markdown
+  zip.file('batch_summary.md', md);
+
+  const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+  const encryptedZip = encrypt(zipBuffer, sessionKey);
+  await writeFile(join(sessionDir, 'outputs', 'batch_all_profiles.zip.enc'), encryptedZip);
 }
