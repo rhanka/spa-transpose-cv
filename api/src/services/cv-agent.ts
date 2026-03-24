@@ -83,6 +83,11 @@ export interface CvData {
   attention_cv: string;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
+
 export interface StreamCallbacks {
   onThinking?: (delta: string) => void;
   onContent?: (delta: string) => void;
@@ -93,7 +98,7 @@ export async function extractCvData(
   userPrompt: string,
   sourceFileName: string,
   callbacks?: StreamCallbacks,
-): Promise<CvData> {
+): Promise<{ data: CvData; usage: TokenUsage }> {
   const userMessage = [
     userPrompt ? userPrompt : '',
     `SOURCE FILENAME: ${sourceFileName}`,
@@ -105,9 +110,9 @@ export async function extractCvData(
   logger.info({ textLength: cvText.length }, 'Calling Claude API for CV extraction');
 
   let fullText = '';
+  let usage: TokenUsage = { input_tokens: 0, output_tokens: 0 };
 
   if (callbacks) {
-    // Streaming mode: use stream API for live updates
     const stream = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 16000,
@@ -126,10 +131,15 @@ export async function extractCvData(
           fullText += delta.text;
           callbacks.onContent?.(delta.text);
         }
+      } else if (event.type === 'message_delta') {
+        const u = (event as unknown as Record<string, unknown>).usage as Record<string, number> | undefined;
+        if (u) usage.output_tokens = u.output_tokens || 0;
+      } else if (event.type === 'message_start') {
+        const msg = (event as unknown as Record<string, { usage?: Record<string, number> }>).message;
+        if (msg?.usage) usage.input_tokens = msg.usage.input_tokens || 0;
       }
     }
   } else {
-    // Non-streaming mode
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 16000,
@@ -141,6 +151,7 @@ export async function extractCvData(
     for (const block of response.content) {
       if (block.type === 'text') fullText += block.text;
     }
+    usage = { input_tokens: response.usage?.input_tokens || 0, output_tokens: response.usage?.output_tokens || 0 };
   }
 
   // Parse JSON — handle potential code fences
@@ -155,7 +166,7 @@ export async function extractCvData(
     if (data.title_line2.length > 25) {
       throw new Error(`title_line2 too long (${data.title_line2.length} chars, max 25): "${data.title_line2}"`);
     }
-    return data;
+    return { data, usage };
   } catch (err) {
     logger.error({ text: fullText.substring(0, 500) }, 'Failed to parse Claude response');
     throw new Error(`Claude extraction error: ${(err as Error).message}`);
@@ -170,7 +181,7 @@ export async function extractCvDataWithRetry(
   userPrompt: string,
   sourceFileName: string,
   callbacks?: StreamCallbacks,
-): Promise<CvData> {
+): Promise<{ data: CvData; usage: TokenUsage }> {
   try {
     return await extractCvData(cvText, userPrompt, sourceFileName, callbacks);
   } catch (firstError) {

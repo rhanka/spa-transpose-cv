@@ -5,7 +5,7 @@ import { logger } from '../config/logger.js';
 import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
-import { extractCvDataWithRetry, type CvData, type StreamCallbacks } from './cv-agent.js';
+import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
 import { validateDocxBuffer } from './docx-reader.js';
 import {
   sectionHeader, workSectionHeader, skillBullet, sectorCategory, sectorItem,
@@ -28,6 +28,7 @@ export interface SseEvent {
   error?: string;
   attention_cv?: string;
   attention_trad?: string;
+  tokenInfo?: string;
 }
 
 /**
@@ -110,7 +111,7 @@ async function processOneCV(
   originalName: string,
   encryptedName: string,
   emitSse?: SseEmitter,
-): Promise<{ cvData: CvData; outputName: string; sourceText: string } | null> {
+): Promise<{ cvData: CvData; outputName: string; sourceText: string; usage: TokenUsage } | null> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const startTime = Date.now();
 
@@ -142,8 +143,8 @@ async function processOneCV(
       },
     };
 
-    const cvData = await extractCvDataWithRetry(text, userPrompt, originalName, streamCallbacks);
-    logger.info({ sessionId, file: originalName, name: cvData.name }, 'CV data extracted');
+    const { data: cvData, usage: agentUsage } = await extractCvDataWithRetry(text, userPrompt, originalName, streamCallbacks);
+    logger.info({ sessionId, file: originalName, name: cvData.name, tokens: agentUsage }, 'CV data extracted');
 
     // 3. Build DOCX
     emitSse?.(fileIndex, { phase: 'building_docx', elapsed_ms: Date.now() - startTime });
@@ -163,12 +164,14 @@ async function processOneCV(
     if (allErrors.length > 0) {
       logger.warn({ sessionId, file: originalName, errors: allErrors }, 'DOCX validation failed');
       emitSse?.(fileIndex, { phase: 'validating', thinking_delta: `Validation errors: ${allErrors.join(', ')}. Retrying with shorter descriptions...`, elapsed_ms: Date.now() - startTime });
-      const retryData = await extractCvDataWithRetry(
+      const { data: retryData, usage: retryUsage } = await extractCvDataWithRetry(
         text,
         `${userPrompt}\n\nVALIDATION ERRORS: ${allErrors.join('; ')}. IMPORTANT: shorten all skill descriptions to max 100 characters. Reduce sectors to max 4, domains to max 4.`,
         originalName,
         streamCallbacks,
       );
+      agentUsage.input_tokens += retryUsage.input_tokens;
+      agentUsage.output_tokens += retryUsage.output_tokens;
       await buildScalianDocx(retryData, sessionDir, fileIndex);
     }
 
@@ -185,8 +188,8 @@ async function processOneCV(
       attention_cv: cvData.attention_cv,
     });
 
-    logger.info({ sessionId, file: originalName, output: outputName, ms: Date.now() - startTime }, 'CV processed');
-    return { cvData, outputName, sourceText: text };
+    logger.info({ sessionId, file: originalName, output: outputName, ms: Date.now() - startTime, tokens: agentUsage }, 'CV processed');
+    return { cvData, outputName, sourceText: text, usage: agentUsage };
 
   } catch (err) {
     logger.error({ sessionId, file: originalName, err }, 'CV processing failed');
@@ -284,7 +287,8 @@ async function conductorValidate(
   outputName: string,
   sourceText: string,
   emitSse?: SseEmitter,
-): Promise<string> {
+  extraInstruction?: string,
+): Promise<{ text: string; usage: TokenUsage }> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const encOutputPath = join(sessionDir, 'outputs', `${outputName}.enc`);
 
@@ -309,30 +313,31 @@ async function conductorValidate(
       max_tokens: 1024,
       system: `You are a QA analyst checking the transposition quality of a CV into Scalian format.
 
-Do NOT comment on the CV content itself (career, skills, relevance).
-ONLY check the fidelity and conformity of the transposition.
+Do NOT comment on the CV content (career, skills, relevance).
+ONLY check fidelity and conformity of the transposition.
 
-Start directly with bullet points. NO title, NO introduction, NO "QA Analysis" header.
+Start directly with bullet points. NO title, NO introduction.
 
 Check:
-- Company names, certifications: reproduced exactly, not translated or altered
-- Dates: taken as-is, no added estimates
-- Number of positions: consistent with source (no missing or invented roles)
-- Achievements: all from source (no fabrication)
-- Skill descriptions: descriptive format (not just tool lists)
-- Experience durations (>Ny): consistent with career dates
+- Company names, certifications: reproduced exactly, not altered
+- Dates: taken as-is, no estimates added
+- Number of positions: consistent with source
+- Achievements: from source only, no fabrication
+- Skill descriptions: descriptive format, not tool lists
+- Experience durations (>Ny): plausible vs career dates
 
-If you find a factual error (invented tech, wrong date, missing role), mark it **error to fix**.
+IMPORTANT: Skill bullet descriptions are THEMATIC SYNTHESES of the entire career. They intentionally combine and rephrase tech from multiple roles. A specific tool appearing in a skill synthesis but not verbatim in a single role is NOT an error — it may come from another role or be a reasonable grouping. Only flag a technology as fabricated if it appears NOWHERE in the entire source CV.
 
-If the transposition required an ACCEPTABLE restructuring choice, do NOT mention it.
-Only mention a restructuring choice if it is questionable and needs human review.
+If you find a clear factual error (tech truly absent from entire source, wrong date, missing role), mark it **error to fix**.
 
-If no significant issue, return exactly: — RAS
+Acceptable restructuring (combining roles, inferring achievements from task descriptions, synthesizing skills) → do NOT mention.
 
-Each bullet: 1 short sentence, max 10 words. No explanation. Markdown.`,
+If no significant issue: — RAS
+
+Each bullet: 1 short sentence, max 10 words. Markdown.`,
       messages: [{
         role: 'user',
-        content: `SOURCE FILE: ${originalName}\n\nSOURCE TEXT (first 3000 chars):\n${sourceText.substring(0, 3000)}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText.substring(0, 3000)}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
+        content: `${extraInstruction ? extraInstruction + '\n\n' : ''}SOURCE FILE: ${originalName}\n\nSOURCE TEXT:\n${sourceText}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
       }],
     });
 
@@ -340,11 +345,15 @@ Each bullet: 1 short sentence, max 10 words. No explanation. Markdown.`,
     for (const block of qaResponse.content) {
       if (block.type === 'text') text += block.text;
     }
+    const qaUsage: TokenUsage = {
+      input_tokens: qaResponse.usage?.input_tokens || 0,
+      output_tokens: qaResponse.usage?.output_tokens || 0,
+    };
 
-    return text.trim() || '—';
+    return { text: text.trim() || '—', usage: qaUsage };
   } catch (err) {
     logger.error({ sessionId, file: originalName, err }, 'Conductor validation error');
-    return `Erreur validation: ${(err as Error).message}`;
+    return { text: `Validation error: ${(err as Error).message}`, usage: { input_tokens: 0, output_tokens: 0 } };
   }
 }
 
@@ -373,42 +382,59 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
   logger.info({ sessionId, fileCount: meta.files.length, concurrency }, 'Launching parallel CV processing');
 
   // Results for batch summary
-  const results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string }[] = [];
+  const results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string; tokenInfo?: string }[] = [];
 
   const tasks = meta.files.map(async (_, idx) => {
     await acquire();
     try {
       const f = meta.files[idx];
       logger.info({ sessionId, fileIndex: idx, file: f.originalName }, 'Processing CV');
-      const result = await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName, emitSse);
+      let result = await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName, emitSse);
 
       if (result) {
         // Conductor validation
-        let attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse);
+        let totalUsage = { ...result.usage };
+        let qaResult = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse);
+        totalUsage.input_tokens += qaResult.usage.input_tokens;
+        totalUsage.output_tokens += qaResult.usage.output_tokens;
+        let attention_trad = qaResult.text;
 
-        // If conductor found errors to fix, relay once (no second retry)
+        // If conductor found errors to fix, rerun agent once
         if (attention_trad.toLowerCase().includes('error to fix')) {
-          logger.info({ sessionId, file: f.originalName }, 'Conductor found errors, relaunching agent');
+          logger.info({ sessionId, file: f.originalName, feedback: attention_trad }, 'Conductor found errors, relaunching agent');
           emitSse?.(idx, { phase: 'validating', thinking_delta: `Conductor: errors detected, retrying...` });
           const retryResult = await processOneCV(sessionId, idx, sessionKey,
-            `${meta.prompt}\n\nCONDUCTOR QA FEEDBACK: ${attention_trad}. Fix the flagged errors.`,
+            `${meta.prompt}\n\nCONDUCTOR QA FEEDBACK — fix these errors:\n${attention_trad}`,
             f.originalName, f.encryptedName, emitSse);
           if (retryResult) {
-            attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, retryResult.outputName, retryResult.sourceText, emitSse);
+            totalUsage.input_tokens += retryResult.usage.input_tokens;
+            totalUsage.output_tokens += retryResult.usage.output_tokens;
+            const qa2 = await conductorValidate(
+              sessionId, idx, sessionKey, f.originalName, retryResult.outputName, retryResult.sourceText, emitSse,
+              `This is a SECOND review after a fix attempt. Your previous review may have had false positives (e.g., a tech appearing in skill syntheses sourced from another role). Be MORE LENIENT: only flag issues you are CERTAIN about. If fixed, return "— RAS".`,
+            );
+            totalUsage.input_tokens += qa2.usage.input_tokens;
+            totalUsage.output_tokens += qa2.usage.output_tokens;
+            attention_trad = qa2.text;
+            result = retryResult;
           }
         }
 
-        // Normalize markdown: ensure line breaks between bullets
+        // FinOps: compute cost (Sonnet 4.6: $3/1M input, $15/1M output)
+        const costUsd = (totalUsage.input_tokens * 3 + totalUsage.output_tokens * 15) / 1_000_000;
+        const tokenInfo = `${(totalUsage.input_tokens / 1000).toFixed(1)}k/${(totalUsage.output_tokens / 1000).toFixed(1)}k tokens — $${costUsd.toFixed(3)}`;
+
         const normalizeMd = (s: string) => s.replace(/ - \*\*/g, '\n- **').replace(/ - /g, '\n- ');
         const normalizedCv = normalizeMd(result.cvData.attention_cv || '—');
         attention_trad = normalizeMd(attention_trad);
 
-        emitSse?.(idx, { phase: 'done', attention_trad, attention_cv: normalizedCv });
+        emitSse?.(idx, { phase: 'done', attention_trad, attention_cv: normalizedCv, tokenInfo });
         results.push({
           originalName: f.originalName,
           outputName: result.outputName,
           attention_cv: normalizedCv,
           attention_trad,
+          tokenInfo,
         });
       } else {
         results.push({
@@ -445,7 +471,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
 async function generateBatchSummary(
   meta: SessionMeta,
   sessionKey: Buffer,
-  results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string }[],
+  results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string; tokenInfo?: string }[],
 ): Promise<void> {
   const sessionDir = join(env.DATA_DIR, meta.id);
 
@@ -459,9 +485,10 @@ async function generateBatchSummary(
     '|--------|--------|--------------|---------------------|',
     ...results.map(r => `| ${r.originalName} | ${r.outputName} | ${r.attention_cv.replace(/\n/g, ' ')} | ${r.attention_trad.replace(/\n/g, ' ')} |`),
     '',
-    '## Notes du conductor',
-    `- Fichiers traités : ${doneCount}/${meta.files.length}`,
-    errorCount > 0 ? `- Échecs : ${errorCount}` : '',
+    '## Notes',
+    `- Files processed: ${doneCount}/${meta.files.length}`,
+    errorCount > 0 ? `- Errors: ${errorCount}` : '',
+    `- Tokens: ${results.filter(r => r.tokenInfo).map(r => r.tokenInfo).join(', ')}`,
   ].filter(Boolean).join('\n');
 
   // Save as .md.enc (for the batch_summary.docx we'd need docx generation — keeping md for now)
