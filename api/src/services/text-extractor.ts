@@ -35,10 +35,9 @@ async function extractPdf(filePath: string): Promise<string> {
 }
 
 async function extractDocx(filePath: string): Promise<string> {
-  const { stdout } = await execFileAsync('pandoc', [filePath, '-t', 'plain'], {
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return stdout;
+  // Pure TS extraction via jszip + xmldom — no pandoc needed
+  const { extractTextFromDocx } = await import('./docx-reader.js');
+  return extractTextFromDocx(filePath);
 }
 
 async function extractDoc(filePath: string): Promise<string> {

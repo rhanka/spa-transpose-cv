@@ -1,11 +1,12 @@
 import { join } from 'node:path';
-import { cp, writeFile, readFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey } from './session-manager.js';
+import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
-import { extractCvData, type CvData } from './cv-agent.js';
+import { extractCvDataWithRetry, type CvData, type StreamCallbacks } from './cv-agent.js';
+import { validateDocxBuffer } from './docx-reader.js';
 import {
   sectionHeader, workSectionHeader, skillBullet, sectorCategory, sectorItem,
   emptyPara, jobEntry, educationLine, assembleDocument, getXmlHeader, updateHeader,
@@ -14,6 +15,20 @@ import { unpackDocx, packDocx } from './docx-tools.js';
 
 const TEMPLATE_DIR = join(process.cwd(), 'templates');
 const TEMPLATE_DOCX = join(TEMPLATE_DIR, 'Scalian_Template.docx');
+
+// SSE emitter type — set by the route handler
+export type SseEmitter = (fileIndex: number, event: SseEvent) => void;
+
+export interface SseEvent {
+  phase: 'extracting_text' | 'calling_claude' | 'building_docx' | 'validating' | 'done' | 'error';
+  thinking_delta?: string;
+  content_delta?: string;
+  parsed_keys?: Record<string, unknown>;
+  elapsed_ms?: number;
+  error?: string;
+  attention_cv?: string;
+  attention_trad?: string;
+}
 
 function escapeXml(text: string): string {
   return text
@@ -33,6 +48,22 @@ function escapeXml(text: string): string {
     .replace(/œ/g, '&#x0153;');
 }
 
+/**
+ * Derive output filename per CLAUDE.md conventions:
+ * - Anonymized (source has _XXXXX pattern): Scalian_Profile_Candidate_XXXXX_EN.docx
+ * - Nominative: Scalian_Profile_{FirstName}_EN.docx
+ */
+function deriveOutputName(originalName: string, cvName: string): string {
+  // Check if source is anonymized (SCALO pattern with numeric ID)
+  const idMatch = originalName.match(/_(\d{4,})[\s.]/);
+  if (idMatch) {
+    return `Scalian_Profile_Candidate_${idMatch[1]}_EN.docx`;
+  }
+  // Nominative: use first name (first word of the name)
+  const firstName = cvName.split(/\s+/)[0].replace(/[^a-zA-Z]/g, '');
+  return `Scalian_Profile_${firstName}_EN.docx`;
+}
+
 async function processOneCV(
   sessionId: string,
   fileIndex: number,
@@ -40,41 +71,86 @@ async function processOneCV(
   userPrompt: string,
   originalName: string,
   encryptedName: string,
-): Promise<void> {
+  emitSse?: SseEmitter,
+): Promise<{ cvData: CvData; outputName: string } | null> {
   const sessionDir = join(env.DATA_DIR, sessionId);
+  const startTime = Date.now();
 
-  // Mark as processing
   await updateFileStatus(sessionId, fileIndex, 'processing');
 
   try {
-    // 1. Decrypt input
+    // 1. Extract text
+    emitSse?.(fileIndex, { phase: 'extracting_text', elapsed_ms: Date.now() - startTime });
     const encryptedData = await readFile(join(sessionDir, 'inputs', encryptedName));
     const rawData = decrypt(encryptedData, sessionKey);
-
-    // 2. Extract text
     const text = await extractTextFromBuffer(rawData, originalName);
     logger.info({ sessionId, file: originalName, textLength: text.length }, 'Text extracted');
 
-    // 3. Call Claude to extract structured data
-    const cvData = await extractCvData(text, userPrompt);
-    logger.info({ sessionId, file: originalName, name: cvData.fullName }, 'CV data extracted');
+    // 2. Call Claude with streaming
+    emitSse?.(fileIndex, { phase: 'calling_claude', elapsed_ms: Date.now() - startTime });
 
-    // 4. Build DOCX
-    const outputName = `Scalian_Profile_${cvData.fullName.replace(/[^a-zA-Z0-9]/g, '_')}_EN.docx`;
-    await buildScalianDocx(cvData, sessionDir, fileIndex, outputName);
+    const streamCallbacks: StreamCallbacks = {
+      onThinking: (delta) => emitSse?.(fileIndex, { phase: 'calling_claude', thinking_delta: delta, elapsed_ms: Date.now() - startTime }),
+      onContent: (delta) => {
+        // Optimistic parsing of keys as they stream in
+        const parsed: Record<string, unknown> = {};
+        const nameMatch = delta.match(/"name"\s*:\s*"([^"]+)"/);
+        if (nameMatch) parsed.name = nameMatch[1];
+        const titleMatch = delta.match(/"title"\s*:\s*"([^"]+)"/);
+        if (titleMatch) parsed.current_position = titleMatch[1];
+        if (Object.keys(parsed).length > 0) {
+          emitSse?.(fileIndex, { phase: 'calling_claude', content_delta: delta, parsed_keys: parsed, elapsed_ms: Date.now() - startTime });
+        }
+      },
+    };
+
+    const cvData = await extractCvDataWithRetry(text, userPrompt, streamCallbacks);
+    logger.info({ sessionId, file: originalName, name: cvData.name }, 'CV data extracted');
+
+    // 3. Build DOCX
+    emitSse?.(fileIndex, { phase: 'building_docx', elapsed_ms: Date.now() - startTime });
+    const outputName = deriveOutputName(originalName, cvData.name);
+    await buildScalianDocx(cvData, sessionDir, fileIndex);
+
+    // 4. Validate DOCX (agent auto-relecture)
+    emitSse?.(fileIndex, { phase: 'validating', elapsed_ms: Date.now() - startTime });
+    const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
+    const outputData = await readFile(outputPath);
+    const validation = await validateDocxBuffer(outputData);
+
+    if (!validation.valid) {
+      logger.warn({ sessionId, file: originalName, errors: validation.errors }, 'DOCX validation failed');
+      emitSse?.(fileIndex, { phase: 'validating', thinking_delta: `Validation errors: ${validation.errors.join(', ')}. Retrying...`, elapsed_ms: Date.now() - startTime });
+      // Retry: re-extract with error feedback
+      const retryData = await extractCvDataWithRetry(
+        text,
+        `${userPrompt}\n\nVALIDATION ERRORS FROM PREVIOUS ATTEMPT: ${validation.errors.join('; ')}. Fix these issues.`,
+        streamCallbacks,
+      );
+      await buildScalianDocx(retryData, sessionDir, fileIndex);
+    }
 
     // 5. Encrypt output
-    const outputDocx = await readFile(join(sessionDir, 'tmp', `output_${fileIndex}.docx`));
-    const encryptedOutput = encrypt(outputDocx, sessionKey);
+    const finalDocx = await readFile(outputPath);
+    const encryptedOutput = encrypt(finalDocx, sessionKey);
     await writeFile(join(sessionDir, 'outputs', `${outputName}.enc`), encryptedOutput);
 
-    // 6. Update meta (mutex-protected)
+    // 6. Update meta
     await updateFileStatus(sessionId, fileIndex, 'done', { outputName });
+    emitSse?.(fileIndex, {
+      phase: 'done',
+      elapsed_ms: Date.now() - startTime,
+      attention_cv: cvData.attention_cv,
+    });
 
-    logger.info({ sessionId, file: originalName, output: outputName }, 'CV processed');
+    logger.info({ sessionId, file: originalName, output: outputName, ms: Date.now() - startTime }, 'CV processed');
+    return { cvData, outputName };
+
   } catch (err) {
     logger.error({ sessionId, file: originalName, err }, 'CV processing failed');
     await updateFileStatus(sessionId, fileIndex, 'error', { error: (err as Error).message });
+    emitSse?.(fileIndex, { phase: 'error', error: (err as Error).message, elapsed_ms: Date.now() - startTime });
+    return null;
   }
 }
 
@@ -82,14 +158,10 @@ async function buildScalianDocx(
   data: CvData,
   sessionDir: string,
   fileIndex: number,
-  outputName: string,
 ): Promise<void> {
   const workDir = join(sessionDir, 'tmp', `work_${fileIndex}`);
-
-  // Unpack template
   await unpackDocx(TEMPLATE_DOCX, workDir);
 
-  // Build paragraphs
   const P: string[] = [];
 
   // Technical Skills
@@ -112,7 +184,6 @@ async function buildScalianDocx(
       P.push(sectorItem(escapeXml(d), i === data.domains.length - 1));
     });
   }
-  // page_break on last sector_item (handled by the boolean above)
 
   // Work Experience
   P.push(workSectionHeader('WORK EXPERIENCE'));
@@ -146,13 +217,13 @@ async function buildScalianDocx(
   const doc = assembleDocument(P, xmlHeader);
   await writeFile(join(workDir, 'word', 'document.xml'), doc);
 
-  // Update header
+  // Update header — field names per CLAUDE.md
   await updateHeader(
     join(workDir, 'word', 'header2.xml'),
-    escapeXml(data.fullName),
-    escapeXml(data.titleLine1),
-    escapeXml(data.titleLine2),
-    data.yearsExperience,
+    escapeXml(data.name),
+    escapeXml(data.title_line1),
+    escapeXml(data.title_line2),
+    data.years,
   );
 
   // Pack
@@ -160,7 +231,37 @@ async function buildScalianDocx(
   await packDocx(workDir, outputPath, TEMPLATE_DOCX);
 }
 
-export async function runOrchestrator(sessionId: string): Promise<void> {
+/**
+ * Conductor: validate a generated DOCX and produce attention_trad
+ */
+async function conductorValidate(
+  sessionId: string,
+  fileIndex: number,
+  sessionKey: Buffer,
+  originalName: string,
+  outputName: string,
+  emitSse?: SseEmitter,
+): Promise<string> {
+  const sessionDir = join(env.DATA_DIR, sessionId);
+  const encOutputPath = join(sessionDir, 'outputs', `${outputName}.enc`);
+
+  try {
+    const encData = await readFile(encOutputPath);
+    const docxData = decrypt(encData, sessionKey);
+    const validation = await validateDocxBuffer(docxData);
+
+    const notes: string[] = [];
+    if (!validation.valid) {
+      notes.push(`Validation issues: ${validation.errors.join('; ')}`);
+    }
+    // The conductor's own observations (simplified — could be enhanced with a Claude call)
+    return notes.length > 0 ? notes.join('. ') : '—';
+  } catch (err) {
+    return `Conductor validation error: ${(err as Error).message}`;
+  }
+}
+
+export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): Promise<void> {
   logger.info({ sessionId }, 'Orchestrator started');
 
   const meta = await getMeta(sessionId);
@@ -169,11 +270,9 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
   const sessionKey = getSessionKey(sessionId);
   if (!sessionKey) throw new Error(`No key in cache for session ${sessionId}`);
 
-  // Launch ALL CVs in parallel, capped at MAX_CONCURRENT_AGENTS via semaphore
   const concurrency = env.MAX_CONCURRENT_AGENTS;
   let running = 0;
   const queue: (() => void)[] = [];
-
   function acquire(): Promise<void> {
     if (running < concurrency) { running++; return Promise.resolve(); }
     return new Promise<void>(resolve => queue.push(resolve));
@@ -186,13 +285,34 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
 
   logger.info({ sessionId, fileCount: meta.files.length, concurrency }, 'Launching parallel CV processing');
 
+  // Results for batch summary
+  const results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string }[] = [];
+
   const tasks = meta.files.map(async (_, idx) => {
     await acquire();
     try {
       const f = meta.files[idx];
       logger.info({ sessionId, fileIndex: idx, file: f.originalName }, 'Processing CV');
-      await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName);
-      logger.info({ sessionId, fileIndex: idx }, 'CV done');
+      const result = await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName, emitSse);
+
+      if (result) {
+        // Conductor validation
+        const attention_trad = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, emitSse);
+        emitSse?.(idx, { phase: 'done', attention_trad });
+        results.push({
+          originalName: f.originalName,
+          outputName: result.outputName,
+          attention_cv: result.cvData.attention_cv || '—',
+          attention_trad,
+        });
+      } else {
+        results.push({
+          originalName: f.originalName,
+          outputName: '—',
+          attention_cv: 'Processing failed',
+          attention_trad: '—',
+        });
+      }
     } catch (err) {
       logger.error({ sessionId, fileIndex: idx, err: (err as Error).message }, 'CV task failed');
       await updateFileStatus(sessionId, idx, 'error', { error: (err as Error).message });
@@ -203,40 +323,50 @@ export async function runOrchestrator(sessionId: string): Promise<void> {
 
   await Promise.allSettled(tasks);
 
-  // Final status
+  // Final status + batch summary
   const finalMeta = await getMeta(sessionId);
   if (finalMeta) {
     const allDone = finalMeta.files.every(f => f.status === 'done' || f.status === 'error');
     const hasErrors = finalMeta.files.some(f => f.status === 'error');
     finalMeta.status = allDone ? (hasErrors ? 'error' : 'done') : 'error';
 
-    // Generate batch summary
-    await generateBatchSummary(finalMeta, sessionKey);
+    await generateBatchSummary(finalMeta, sessionKey, results);
     await writeMeta(finalMeta);
   }
 
   logger.info({ sessionId, fileCount: meta.files.length }, 'Orchestrator completed');
 }
 
-async function generateBatchSummary(meta: Awaited<ReturnType<typeof getMeta>>, sessionKey: Buffer): Promise<void> {
-  if (!meta) return;
+async function generateBatchSummary(
+  meta: SessionMeta,
+  sessionKey: Buffer,
+  results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string }[],
+): Promise<void> {
   const sessionDir = join(env.DATA_DIR, meta.id);
+
+  // Pad columns for readable markdown
+  const pad = (s: string, len: number) => s.padEnd(len);
+  const c1 = Math.max(8, ...results.map(r => r.originalName.length)) + 2;
+  const c2 = Math.max(8, ...results.map(r => r.outputName.length)) + 2;
+  const c3 = Math.max(14, ...results.map(r => r.attention_cv.length)) + 2;
+  const c4 = Math.max(18, ...results.map(r => r.attention_trad.length)) + 2;
 
   const lines = [
     '# Scalian CV Batch Summary\n',
-    '| Input | Output | Status |',
-    '|-------|--------|--------|',
+    `| ${pad('Entrée', c1)}| ${pad('Sortie', c2)}| ${pad('Attention CV', c3)}| ${pad('Attention traduction', c4)}|`,
+    `|${'-'.repeat(c1 + 1)}|${'-'.repeat(c2 + 1)}|${'-'.repeat(c3 + 1)}|${'-'.repeat(c4 + 1)}|`,
   ];
 
-  for (const f of meta.files) {
-    const status = f.status === 'done' ? 'OK' : `ERROR: ${f.error || 'unknown'}`;
-    lines.push(`| ${f.originalName} | ${f.outputName || '—'} | ${status} |`);
+  for (const r of results) {
+    lines.push(`| ${pad(r.originalName, c1)}| ${pad(r.outputName, c2)}| ${pad(r.attention_cv, c3)}| ${pad(r.attention_trad, c4)}|`);
   }
 
+  const doneCount = meta.files.filter(f => f.status === 'done').length;
+  const errorCount = meta.files.filter(f => f.status === 'error').length;
   lines.push('');
-  lines.push(`## Notes`);
-  lines.push(`- Files processed: ${meta.files.filter(f => f.status === 'done').length}/${meta.files.length}`);
-  lines.push(`- Errors: ${meta.files.filter(f => f.status === 'error').length}`);
+  lines.push('## Notes du conductor');
+  lines.push(`- Fichiers traités : ${doneCount}/${meta.files.length}`);
+  if (errorCount > 0) lines.push(`- Échecs : ${errorCount}`);
 
   const md = lines.join('\n');
   const encrypted = encrypt(Buffer.from(md), sessionKey);
