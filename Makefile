@@ -150,7 +150,7 @@ deploy-api-init: check-scw ## Create API container in Scaleway namespace (first 
 		echo "Container created."; \
 	fi
 
-SCW_API_CONTAINER_ID ?= 1d2a0965-05a3-48a6-9e4c-57e3c585f48d
+SCW_API_CONTAINER_ID ?= 10379fdb-ef44-4ceb-8630-5a22cc30827b
 
 .PHONY: deploy-api
 deploy-api: check-scw ## Update API container with new image (rollout)
