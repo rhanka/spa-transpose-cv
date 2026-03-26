@@ -263,6 +263,10 @@
         {/if}
       </div>
 
+      <div class="p-4 mb-6 text-sm" style="background: var(--color-purple-bg); border-left: 3px solid var(--color-purple);">
+        Certaines erreurs de transposition peuvent subsister. Nous recommandons une relecture attentive d'environ 15 minutes pour un CV de 10 ans d'exp&eacute;rience.
+      </div>
+
       <div class="card p-4">
         <p class="text-sm font-medium mb-2">Partager cette session</p>
         <div class="flex items-center gap-2">
