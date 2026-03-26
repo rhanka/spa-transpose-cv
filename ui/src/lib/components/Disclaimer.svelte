@@ -26,7 +26,16 @@
         <ul class="list-disc pl-5 space-y-1.5">
           <li>Data is stored on <strong>Scaleway</strong>, Paris region (France)</li>
           <li>All files are encrypted at rest with <strong>AES-256-GCM</strong>, key derived from your password</li>
-          <li>CV analysis is performed by <strong>Claude Sonnet 4.6</strong> (Anthropic)</li>
+          <li>CV analysis is performed by the <strong>AI model you select</strong>. Data processing locations vary by provider:
+            <ul class="list-disc pl-5 mt-1 space-y-0.5">
+              <li><strong>Mistral Small 4</strong> (Mistral AI) &mdash; EU (France)</li>
+              <li><strong>GPT-5.4 Nano</strong> (OpenAI) &mdash; US</li>
+              <li><strong>Claude Sonnet 4.6</strong> (Anthropic) &mdash; US</li>
+              <li><strong>Command A Reasoning</strong> (Cohere, Canada) &mdash; US</li>
+              <li><strong>Gemini 3.1 Pro</strong> (Google) &mdash; US</li>
+            </ul>
+          </li>
+          <li>Regardless of provider, all files are <strong>encrypted before transmission</strong> and <strong>no training is performed</strong> on your data (API usage)</li>
           <li>All data is <strong>automatically deleted after 48 hours</strong></li>
         </ul>
         <p class="text-xs mt-4" style="color: var(--color-purple-lighter);">
