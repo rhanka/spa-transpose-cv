@@ -6,6 +6,7 @@ import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
 import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
+import { getActiveProvider, getProviderConfig } from './llm/index.js';
 import { validateDocxBuffer } from './docx-reader.js';
 import {
   sectionHeader, workSectionHeader, skillBullet, sectorCategory, sectorItem,
@@ -111,6 +112,7 @@ async function processOneCV(
   originalName: string,
   encryptedName: string,
   emitSse?: SseEmitter,
+  providerId?: string,
 ): Promise<{ cvData: CvData; outputName: string; sourceText: string; usage: TokenUsage } | null> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const startTime = Date.now();
@@ -143,7 +145,7 @@ async function processOneCV(
       },
     };
 
-    const { data: cvData, usage: agentUsage } = await extractCvDataWithRetry(text, userPrompt, originalName, streamCallbacks);
+    const { data: cvData, usage: agentUsage } = await extractCvDataWithRetry(text, userPrompt, originalName, streamCallbacks, providerId);
     logger.info({ sessionId, file: originalName, name: cvData.name, tokens: agentUsage }, 'CV data extracted');
 
     // 3. Build DOCX
@@ -169,6 +171,7 @@ async function processOneCV(
         `${userPrompt}\n\nVALIDATION ERRORS: ${allErrors.join('; ')}. IMPORTANT: shorten all skill descriptions to max 100 characters. Reduce sectors to max 4, domains to max 4.`,
         originalName,
         streamCallbacks,
+        providerId,
       );
       agentUsage.input_tokens += retryUsage.input_tokens;
       agentUsage.output_tokens += retryUsage.output_tokens;
@@ -288,6 +291,7 @@ async function conductorValidate(
   sourceText: string,
   emitSse?: SseEmitter,
   extraInstruction?: string,
+  providerId?: string,
 ): Promise<{ text: string; usage: TokenUsage }> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const encOutputPath = join(sessionDir, 'outputs', `${outputName}.enc`);
@@ -302,15 +306,11 @@ async function conductorValidate(
     const validation = await validateDocxBuffer(docxData);
     const structErrors = validation.valid ? [] : validation.errors;
 
-    // Claude QA analyst call for translation quality
+    // QA analyst call for translation quality (uses active LLM provider)
     emitSse?.(fileIndex, { phase: 'validating', thinking_delta: 'Conductor: analyse qualité traduction...', elapsed_ms: 0 });
 
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-
-    const qaResponse = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+    const provider = await getActiveProvider(providerId);
+    const qaResult = await provider.generate({
       system: `You are a QA analyst checking the transposition quality of a CV into Scalian format.
 
 Do NOT comment on the CV content (career, skills, relevance).
@@ -335,22 +335,12 @@ Acceptable restructuring (combining roles, inferring achievements from task desc
 If no significant issue: — RAS
 
 Each bullet: 1 short sentence, max 10 words. Markdown.`,
-      messages: [{
-        role: 'user',
-        content: `${extraInstruction ? extraInstruction + '\n\n' : ''}SOURCE FILE: ${originalName}\n\nSOURCE TEXT:\n${sourceText}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
-      }],
+      userMessage: `${extraInstruction ? extraInstruction + '\n\n' : ''}SOURCE FILE: ${originalName}\n\nSOURCE TEXT:\n${sourceText}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
+      maxTokens: 1024,
+      enableReasoning: false,
     });
 
-    let text = '';
-    for (const block of qaResponse.content) {
-      if (block.type === 'text') text += block.text;
-    }
-    const qaUsage: TokenUsage = {
-      input_tokens: qaResponse.usage?.input_tokens || 0,
-      output_tokens: qaResponse.usage?.output_tokens || 0,
-    };
-
-    return { text: text.trim() || '—', usage: qaUsage };
+    return { text: qaResult.text.trim() || '—', usage: qaResult.usage };
   } catch (err) {
     logger.error({ sessionId, file: originalName, err }, 'Conductor validation error');
     return { text: `Validation error: ${(err as Error).message}`, usage: { input_tokens: 0, output_tokens: 0 } };
@@ -379,7 +369,8 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
     if (next) { running++; next(); }
   }
 
-  logger.info({ sessionId, fileCount: meta.files.length, concurrency }, 'Launching parallel CV processing');
+  const sessionProvider = meta.provider;
+  logger.info({ sessionId, fileCount: meta.files.length, concurrency, provider: sessionProvider || env.LLM_PROVIDER }, 'Launching parallel CV processing');
 
   // Results for batch summary
   const results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string; tokenInfo?: string }[] = [];
@@ -389,12 +380,12 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
     try {
       const f = meta.files[idx];
       logger.info({ sessionId, fileIndex: idx, file: f.originalName }, 'Processing CV');
-      let result = await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName, emitSse);
+      let result = await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName, emitSse, sessionProvider);
 
       if (result) {
         // Conductor validation
         let totalUsage = { ...result.usage };
-        let qaResult = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse);
+        let qaResult = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse, undefined, sessionProvider);
         totalUsage.input_tokens += qaResult.usage.input_tokens;
         totalUsage.output_tokens += qaResult.usage.output_tokens;
         let attention_trad = qaResult.text;
@@ -405,13 +396,14 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
           emitSse?.(idx, { phase: 'validating', thinking_delta: `Conductor: errors detected, retrying...` });
           const retryResult = await processOneCV(sessionId, idx, sessionKey,
             `${meta.prompt}\n\nCONDUCTOR QA FEEDBACK — fix these errors:\n${attention_trad}`,
-            f.originalName, f.encryptedName, emitSse);
+            f.originalName, f.encryptedName, emitSse, sessionProvider);
           if (retryResult) {
             totalUsage.input_tokens += retryResult.usage.input_tokens;
             totalUsage.output_tokens += retryResult.usage.output_tokens;
             const qa2 = await conductorValidate(
               sessionId, idx, sessionKey, f.originalName, retryResult.outputName, retryResult.sourceText, emitSse,
               `This is a SECOND review after a fix attempt. Your previous review may have had false positives (e.g., a tech appearing in skill syntheses sourced from another role). Be MORE LENIENT: only flag issues you are CERTAIN about. If fixed, return "— RAS".`,
+              sessionProvider,
             );
             totalUsage.input_tokens += qa2.usage.input_tokens;
             totalUsage.output_tokens += qa2.usage.output_tokens;
@@ -420,9 +412,10 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
           }
         }
 
-        // FinOps: compute cost (Sonnet 4.6: $3/1M input, $15/1M output)
-        const costUsd = (totalUsage.input_tokens * 3 + totalUsage.output_tokens * 15) / 1_000_000;
-        const tokenInfo = `${(totalUsage.input_tokens / 1000).toFixed(1)}k/${(totalUsage.output_tokens / 1000).toFixed(1)}k tokens — $${costUsd.toFixed(3)}`;
+        // FinOps: compute cost (dynamic per provider)
+        const providerCfg = await getProviderConfig(sessionProvider);
+        const costUsd = (totalUsage.input_tokens * providerCfg.costPer1MInput + totalUsage.output_tokens * providerCfg.costPer1MOutput) / 1_000_000;
+        const tokenInfo = `${providerCfg.label} — ${(totalUsage.input_tokens / 1000).toFixed(1)}k/${(totalUsage.output_tokens / 1000).toFixed(1)}k tokens — $${costUsd.toFixed(3)}`;
 
         const normalizeMd = (s: string) => s.replace(/ - \*\*/g, '\n- **').replace(/ - /g, '\n- ');
         const normalizedCv = normalizeMd(result.cvData.attention_cv || '—');

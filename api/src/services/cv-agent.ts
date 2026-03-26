@@ -1,8 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-
-const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+import { getActiveProvider, type TokenUsage, type LlmStreamCallbacks } from './llm/index.js';
 
 const SYSTEM_PROMPT = `You are an expert CV analyst for Scalian, a tech consultancy. You extract structured data from CVs and return it as JSON.
 
@@ -17,8 +14,8 @@ Given the raw text of a CV, extract and return a JSON object with exactly this s
 
 {
   "name": "string — full name (or 'Candidate XXXXX' if anonymized)",
-  "title_line1": "string — primary role, MAX 25 CHARACTERS (e.g., 'IT Leader', 'DevOps Engineer')",
-  "title_line2": "string — secondary qualifier, MAX 25 CHARACTERS (e.g., 'Cloud Architect', 'SRE') or empty string",
+  "title_line1": "string — primary role, MAX 40 CHARACTERS (e.g., 'IT Leader', 'DevOps Engineer')",
+  "title_line2": "string — secondary qualifier, MAX 40 CHARACTERS (e.g., 'Cloud Architect', 'SRE') or empty string",
   "years": "string — number only (e.g., '15')",
   "technicalSkills": [
     { "label": "string — category label ending with colon", "description": "string — DESCRIPTIVE text about what the person DOES, NOT just a comma-separated tool list. Include (>Ny) if experience duration is known." }
@@ -46,8 +43,8 @@ Given the raw text of a CV, extract and return a JSON object with exactly this s
 }
 
 CONSTRAINTS:
-- title_line1: MAXIMUM 25 characters. If your title is longer, shorten it.
-- title_line2: MAXIMUM 25 characters. Can be empty string "".
+- title_line1: MAXIMUM 40 characters. If your title is longer, shorten it.
+- title_line2: MAXIMUM 40 characters. Can be empty string "".
 - technicalSkills: 5-7 items. Each description must be DESCRIPTIVE, NOT just tool lists. MAX 130 CHARACTERS per description (keep it to ~1.5 printed lines). Be concise.
   BAD: "AWS, Azure, GCP, Terraform, Ansible (>5y)"
   GOOD: "Defining cloud infrastructure and migration strategies for enterprise workloads (>5y)"
@@ -83,10 +80,7 @@ export interface CvData {
   attention_cv: string;
 }
 
-export interface TokenUsage {
-  input_tokens: number;
-  output_tokens: number;
-}
+export type { TokenUsage };
 
 export interface StreamCallbacks {
   onThinking?: (delta: string) => void;
@@ -98,6 +92,7 @@ export async function extractCvData(
   userPrompt: string,
   sourceFileName: string,
   callbacks?: StreamCallbacks,
+  providerId?: string,
 ): Promise<{ data: CvData; usage: TokenUsage }> {
   const userMessage = [
     userPrompt ? userPrompt : '',
@@ -107,51 +102,31 @@ export async function extractCvData(
     `CV TEXT:\n${cvText}`,
   ].filter(Boolean).join('\n\n');
 
-  logger.info({ textLength: cvText.length }, 'Calling Claude API for CV extraction');
+  const provider = await getActiveProvider(providerId);
+  logger.info({ textLength: cvText.length, provider: provider.config.id, model: provider.config.modelId }, 'Calling LLM for CV extraction');
 
-  let fullText = '';
-  let usage: TokenUsage = { input_tokens: 0, output_tokens: 0 };
+  let fullText: string;
+  let usage: TokenUsage;
+
+  const req = {
+    system: SYSTEM_PROMPT,
+    userMessage,
+    maxTokens: 16000,
+    enableReasoning: true,
+    reasoningBudget: 4096,
+  };
 
   if (callbacks) {
-    const stream = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: 4096 },
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-      stream: true,
+    const result = await provider.generateStream(req, {
+      onThinking: callbacks.onThinking,
+      onContent: callbacks.onContent,
     });
-
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta') {
-        const delta = event.delta as unknown as Record<string, unknown>;
-        if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
-          callbacks.onThinking?.(delta.thinking);
-        } else if (delta.type === 'text_delta' && typeof delta.text === 'string') {
-          fullText += delta.text;
-          callbacks.onContent?.(delta.text);
-        }
-      } else if (event.type === 'message_delta') {
-        const u = (event as unknown as Record<string, unknown>).usage as Record<string, number> | undefined;
-        if (u) usage.output_tokens = u.output_tokens || 0;
-      } else if (event.type === 'message_start') {
-        const msg = (event as unknown as Record<string, { usage?: Record<string, number> }>).message;
-        if (msg?.usage) usage.input_tokens = msg.usage.input_tokens || 0;
-      }
-    }
+    fullText = result.text;
+    usage = result.usage;
   } else {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
-      thinking: { type: 'enabled', budget_tokens: 4096 },
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-
-    for (const block of response.content) {
-      if (block.type === 'text') fullText += block.text;
-    }
-    usage = { input_tokens: response.usage?.input_tokens || 0, output_tokens: response.usage?.output_tokens || 0 };
+    const result = await provider.generate(req);
+    fullText = result.text;
+    usage = result.usage;
   }
 
   // Parse JSON — handle potential code fences
@@ -159,17 +134,17 @@ export async function extractCvData(
 
   try {
     const data = JSON.parse(jsonStr) as CvData;
-    // Validate header constraints
-    if (data.title_line1.length > 25) {
-      throw new Error(`title_line1 too long (${data.title_line1.length} chars, max 25): "${data.title_line1}"`);
+    // Validate header constraints (ask 40 in prompt, accept up to 45)
+    if (data.title_line1.length > 45) {
+      throw new Error(`title_line1 too long (${data.title_line1.length} chars, max 45): "${data.title_line1}"`);
     }
-    if (data.title_line2.length > 25) {
-      throw new Error(`title_line2 too long (${data.title_line2.length} chars, max 25): "${data.title_line2}"`);
+    if (data.title_line2.length > 45) {
+      throw new Error(`title_line2 too long (${data.title_line2.length} chars, max 45): "${data.title_line2}"`);
     }
     return { data, usage };
   } catch (err) {
-    logger.error({ text: fullText.substring(0, 500) }, 'Failed to parse Claude response');
-    throw new Error(`Claude extraction error: ${(err as Error).message}`);
+    logger.error({ text: fullText.substring(0, 500) }, 'Failed to parse LLM response');
+    throw new Error(`LLM extraction error: ${(err as Error).message}`);
   }
 }
 
@@ -181,9 +156,10 @@ export async function extractCvDataWithRetry(
   userPrompt: string,
   sourceFileName: string,
   callbacks?: StreamCallbacks,
+  providerId?: string,
 ): Promise<{ data: CvData; usage: TokenUsage }> {
   try {
-    return await extractCvData(cvText, userPrompt, sourceFileName, callbacks);
+    return await extractCvData(cvText, userPrompt, sourceFileName, callbacks, providerId);
   } catch (firstError) {
     logger.info({ error: (firstError as Error).message }, 'First extraction failed, retrying with error feedback');
     callbacks?.onThinking?.(`\n[RETRY] First attempt failed: ${(firstError as Error).message}\n`);
@@ -192,6 +168,6 @@ export async function extractCvDataWithRetry(
       ? `${userPrompt}\n\nPREVIOUS ATTEMPT FAILED WITH ERROR: ${(firstError as Error).message}\nPlease fix and return valid JSON.`
       : `PREVIOUS ATTEMPT FAILED WITH ERROR: ${(firstError as Error).message}\nPlease fix and return valid JSON.`;
 
-    return await extractCvData(cvText, retryPrompt, sourceFileName, callbacks);
+    return await extractCvData(cvText, retryPrompt, sourceFileName, callbacks, providerId);
   }
 }
