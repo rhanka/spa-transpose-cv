@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { healthRoutes } from './routes/health.js';
+import { modelRoutes } from './routes/models.js';
 
 export const app = new Hono();
 
@@ -38,6 +39,7 @@ app.use(async (c, next) => {
 
 // Routes
 app.route('/api/health', healthRoutes);
+app.route('/api/models', modelRoutes);
 app.route('/api/sessions', sessionRoutes);
 
 // Root

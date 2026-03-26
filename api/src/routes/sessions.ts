@@ -60,8 +60,14 @@ sessionRoutes.post('/:id/ready', async (c) => {
   authenticateSession(id, password, meta.salt);
 
   const body = await c.req.json().catch(() => ({}));
-  const parsed = z.object({ prompt: z.string().default('') }).safeParse(body);
+  const parsed = z.object({
+    prompt: z.string().default(''),
+    provider: z.string().optional(),
+  }).safeParse(body);
   meta.prompt = parsed.success ? parsed.data.prompt : '';
+  if (parsed.success && parsed.data.provider) {
+    meta.provider = parsed.data.provider;
+  }
   meta.status = 'ready';
   await writeMeta(meta);
   return c.json({ status: 'ready', fileCount: meta.files.length });
