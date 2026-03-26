@@ -62,8 +62,8 @@
       Convertissez vos CVs<br/>au format Scalian
     </h1>
     <p class="text-lg max-w-2xl mx-auto" style="color: rgba(255,255,255,0.65); font-weight: 300;">
-      Uploadez un lot de CVs, ajoutez un prompt d'orientation, et laissez l'IA
-      transformer chaque profil en parall&egrave;le.
+      De 1h30 &agrave; 15 min par CV. Uploadez un lot, ajoutez un prompt d'orientation,
+      et laissez l'IA transformer chaque profil en parall&egrave;le.
     </p>
   </div>
 </section>
