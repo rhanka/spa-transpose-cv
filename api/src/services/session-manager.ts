@@ -19,6 +19,7 @@ export interface SessionMeta {
   createdAt: string;
   salt: string;
   prompt: string;
+  provider?: string;
   status: SessionStatus;
   files: FileEntry[];
   expiresAt: string;
