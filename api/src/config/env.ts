@@ -3,7 +3,7 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   API_PORT: z.coerce.number().default(8686),
-  LLM_PROVIDER: z.enum(['anthropic', 'openai', 'mistral', 'gemini', 'cohere']).default('anthropic'),
+  LLM_PROVIDER: z.enum(['anthropic', 'openai', 'mistral', 'gemini', 'cohere']).default('mistral'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
