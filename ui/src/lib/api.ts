@@ -6,6 +6,7 @@ export interface ProviderInfo {
   label: string;
   costPer1MInput: number;
   costPer1MOutput: number;
+  co2ePer1kOutput: number;
 }
 
 export interface ModelsResponse {
