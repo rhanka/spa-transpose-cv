@@ -2,10 +2,12 @@
   import { goto } from '$app/navigation';
   import { createSession, uploadFiles, markReady, startProcessing } from '$lib/api';
   import { sessionId, sessionPassword } from '$lib/stores/session';
+  import ModelSelector from '$lib/components/ModelSelector.svelte';
 
   let files = $state<File[]>([]);
   let password = $state('');
   let prompt = $state('');
+  let selectedProvider = $state('');
   let loading = $state(false);
   let error = $state('');
   let dragOver = $state(false);
@@ -40,7 +42,7 @@
     try {
       const { sessionId: sid } = await createSession(password);
       await uploadFiles(sid, password, files);
-      await markReady(sid, password, prompt);
+      await markReady(sid, password, prompt, selectedProvider || undefined);
       await startProcessing(sid, password);
       sessionId.set(sid);
       sessionPassword.set(password);
@@ -137,6 +139,9 @@
           style="border-color: var(--color-purple-border);"
         ></textarea>
       </div>
+
+      <!-- Model selector -->
+      <ModelSelector bind:selected={selectedProvider} />
 
       {#if error}
         <div class="mb-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
