@@ -68,7 +68,7 @@
     <p class="text-xs mt-1.5" style="color: var(--color-purple-lighter);">
       {#each providers as p}
         {#if p.id === selected}
-          {p.modelId} &mdash; ${p.costPer1MInput}/${p.costPer1MOutput} par 1M tokens (in/out)
+          {p.modelId} &mdash; ${p.costPer1MInput}/${p.costPer1MOutput} par 1M tokens &mdash; ~{p.co2ePer1kOutput < 1 ? `${(p.co2ePer1kOutput * 1000).toFixed(0)}mg` : `${p.co2ePer1kOutput.toFixed(1)}g`}CO2/1k tokens
         {/if}
       {/each}
     </p>
