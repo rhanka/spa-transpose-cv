@@ -9,6 +9,7 @@ export class AnthropicProvider implements LlmProvider {
     label: 'Claude Sonnet 4.6',
     costPer1MInput: 3,
     costPer1MOutput: 15,
+    co2ePer1kOutput: 8.75,
   };
 
   private client: Anthropic;

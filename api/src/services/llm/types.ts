@@ -33,6 +33,8 @@ export interface LlmProviderConfig {
   costPer1MInput: number;
   /** USD per 1M output tokens */
   costPer1MOutput: number;
+  /** Estimated gCO2e per 1k output tokens (see CO2_METHODOLOGY.md) */
+  co2ePer1kOutput: number;
 }
 
 export interface LlmProvider {

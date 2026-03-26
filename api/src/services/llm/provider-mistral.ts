@@ -11,6 +11,7 @@ export class MistralProvider implements LlmProvider {
     label: 'Mistral Small 4',
     costPer1MInput: 0.1,
     costPer1MOutput: 0.3,
+    co2ePer1kOutput: 0.51,
   };
 
   private apiKey: string;
