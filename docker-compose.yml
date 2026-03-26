@@ -7,7 +7,12 @@ services:
       target: ${TARGET:-development}
     environment:
       - NODE_ENV=${TARGET:-development}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - COHERE_API_KEY=${COHERE_API_KEY}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:${UI_PORT:-5173},http://127.0.0.1:${UI_PORT:-5173},http://ui:5173}
       - SESSION_MAX_AGE_HOURS=${SESSION_MAX_AGE_HOURS:-48}
       - MAX_CONCURRENT_AGENTS=${MAX_CONCURRENT_AGENTS:-5}
