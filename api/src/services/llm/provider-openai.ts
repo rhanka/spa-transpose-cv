@@ -9,6 +9,7 @@ export class OpenAIProvider implements LlmProvider {
     label: 'GPT-5.4 Nano',
     costPer1MInput: 0.5,
     costPer1MOutput: 2,
+    co2ePer1kOutput: 1.44,
   };
 
   private client: OpenAI;

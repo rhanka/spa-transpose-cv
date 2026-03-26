@@ -10,6 +10,7 @@ export class CohereProvider implements LlmProvider {
     label: 'Command A Reasoning',
     costPer1MInput: 2.5,
     costPer1MOutput: 10,
+    co2ePer1kOutput: 20.0,
   };
 
   private static MAX_TOKENS = 8192;

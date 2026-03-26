@@ -412,10 +412,14 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
           }
         }
 
-        // FinOps: compute cost (dynamic per provider)
+        // FinOps: compute cost + CO2 (dynamic per provider)
         const providerCfg = await getProviderConfig(sessionProvider);
         const costUsd = (totalUsage.input_tokens * providerCfg.costPer1MInput + totalUsage.output_tokens * providerCfg.costPer1MOutput) / 1_000_000;
-        const tokenInfo = `${providerCfg.label} — ${(totalUsage.input_tokens / 1000).toFixed(1)}k/${(totalUsage.output_tokens / 1000).toFixed(1)}k tokens — $${costUsd.toFixed(3)}`;
+        const co2Grams = totalUsage.output_tokens * providerCfg.co2ePer1kOutput / 1000;
+        const ledMinutes = (co2Grams / 0.5) * 60; // 0.5 gCO2/h for a 10W LED on FR grid
+        const co2Str = co2Grams < 1 ? `${(co2Grams * 1000).toFixed(0)}mgCO2` : `${co2Grams.toFixed(1)}gCO2`;
+        const ledStr = ledMinutes < 60 ? `${Math.round(ledMinutes)}min` : `${(ledMinutes / 60).toFixed(1)}h`;
+        const tokenInfo = `${providerCfg.label} — ${(totalUsage.input_tokens / 1000).toFixed(1)}k/${(totalUsage.output_tokens / 1000).toFixed(1)}k tokens — $${costUsd.toFixed(3)} — ${co2Str} (~${ledStr} LED)`;
 
         const normalizeMd = (s: string) => s.replace(/ - \*\*/g, '\n- **').replace(/ - /g, '\n- ');
         const normalizedCv = normalizeMd(result.cvData.attention_cv || '—');

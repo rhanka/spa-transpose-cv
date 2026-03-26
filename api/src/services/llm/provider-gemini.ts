@@ -11,6 +11,7 @@ export class GeminiProvider implements LlmProvider {
     label: 'Gemini 3.1 Pro',
     costPer1MInput: 1.25,
     costPer1MOutput: 10,
+    co2ePer1kOutput: 8.10,
   };
 
   private apiKey: string;
