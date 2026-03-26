@@ -1,5 +1,24 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+export interface ProviderInfo {
+  id: string;
+  modelId: string;
+  label: string;
+  costPer1MInput: number;
+  costPer1MOutput: number;
+}
+
+export interface ModelsResponse {
+  active: string;
+  providers: ProviderInfo[];
+}
+
+export async function getModels(): Promise<ModelsResponse> {
+  const res = await fetch(`${API_BASE}/models`);
+  if (!res.ok) throw new Error(`Get models failed: ${res.status}`);
+  return res.json();
+}
+
 export async function createSession(password: string): Promise<{ sessionId: string; expiresAt: string }> {
   const res = await fetch(`${API_BASE}/sessions`, {
     method: 'POST',
@@ -22,11 +41,13 @@ export async function uploadFiles(sessionId: string, password: string, files: Fi
   return res.json();
 }
 
-export async function markReady(sessionId: string, password: string, prompt: string): Promise<void> {
+export async function markReady(sessionId: string, password: string, prompt: string, provider?: string): Promise<void> {
+  const body: Record<string, string> = { prompt };
+  if (provider) body.provider = provider;
   const res = await fetch(`${API_BASE}/sessions/${sessionId}/ready`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Session-Password': password },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Mark ready failed: ${res.status}`);
 }
