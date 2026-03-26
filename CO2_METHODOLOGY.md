@@ -50,12 +50,21 @@ Scaling rule (confirmed by Mistral report): "impacts are roughly proportional to
 
 A standard LED bulb (10W) consumes 10 Wh per hour = 0.01 kWh/h.
 At French grid (50 gCO2/kWh): **0.5 gCO2 per hour of LED**.
-At US grid (390 gCO2/kWh): **3.9 gCO2 per hour of LED**.
 
 We use **0.5 gCO2 per LED-hour** (French grid) as the comparison unit,
 since Scalian is a French company.
 
 Formula: `LED_minutes = gCO2_total / 0.5 * 60`
+
+### Example per CV (~8k output tokens)
+
+| Model | gCO2e est. | LED equivalent |
+|-------|-----------|----------------|
+| Mistral Small 4 | ~4g | ~8h LED |
+| GPT-5.4 Nano | ~12g | ~24h LED |
+| Gemini 3.1 Pro | ~65g | ~5.4j LED |
+| Claude Sonnet 4.6 | ~70g | ~5.8j LED |
+| Command A Reasoning | ~160g | ~13.3j LED |
 
 ## Caveats
 
