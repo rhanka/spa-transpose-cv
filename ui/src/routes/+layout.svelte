@@ -29,7 +29,7 @@
     <div class="max-w-[1216px] mx-auto px-4 flex items-center justify-between">
       <img src="/logo-scalian.svg" alt="Scalian" class="h-5 opacity-40" style="filter: brightness(0) invert(1);" />
       <p class="text-white/40 text-xs" style="font-family: 'Inter', sans-serif;">
-        Outil interne &mdash; Donn&eacute;es chiffr&eacute;es AES-256, purg&eacute;es sous 48h
+        Donn&eacute;es chiffr&eacute;es AES-256, purg&eacute;es sous 48h
       </p>
     </div>
   </footer>
