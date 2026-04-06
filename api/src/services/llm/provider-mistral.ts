@@ -7,10 +7,10 @@ const BASE_URL = 'https://api.mistral.ai/v1';
 export class MistralProvider implements LlmProvider {
   readonly config: LlmProviderConfig = {
     id: 'mistral',
-    modelId: 'mistral-small-2501',
+    modelId: 'mistral-small-2603',
     label: 'Mistral Small 4',
-    costPer1MInput: 0.1,
-    costPer1MOutput: 0.3,
+    costPer1MInput: 0.15,
+    costPer1MOutput: 0.6,
     co2ePer1kOutput: 0.51,
   };
 
