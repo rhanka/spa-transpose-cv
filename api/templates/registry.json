@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "tenants": [
+    {
+      "slug": "_default",
+      "displayName": "Sent Tech",
+      "active": true,
+      "configKey": "tenants/_default/config.json"
+    },
+    {
+      "slug": "scalian",
+      "displayName": "Scalian",
+      "active": true,
+      "configKey": "tenants/scalian/config.json"
+    }
+  ]
+}

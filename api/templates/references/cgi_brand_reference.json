@@ -1,0 +1,68 @@
+{
+  "sourceUrl": "https://www.cgi.com/en",
+  "finalUrl": "https://www.cgi.com/en",
+  "fetchedAt": "2026-04-11T17:48:58.621Z",
+  "siteName": "CGI Inc.",
+  "logoUrl": "https://www.cgi.com/sites/default/files/logo.png",
+  "stylesheetUrls": [
+    "https://www.cgi.com/sites/default/files/css/css_Ygf7Y8TX_S_hpb70hoQ8Bx9sMJ6cnaNuzHTKrYyOl4c.css",
+    "https://www.cgi.com/sites/default/files/css/css_AG08SD8GzcaLlLcysI24v92AMW4jo-un2cXZHbOoYXY.css"
+  ],
+  "detected": {
+    "metaThemeColor": "#5236AB",
+    "maskIconColor": "#5236AB",
+    "logoColors": [
+      "#E11937"
+    ],
+    "colors": [
+      "#E11937",
+      "#CCCCCC",
+      "#232323",
+      "#FFFFFF",
+      "#000000",
+      "#555555",
+      "#999999",
+      "#EEEEEE",
+      "#777777",
+      "#337AB7",
+      "#E5E5E5",
+      "#DDDDDD",
+      "#FDF8ED",
+      "#F4DAA6",
+      "#734C00",
+      "#E09600",
+      "#FCF4F2",
+      "#A51B00",
+      "#F9C9BF",
+      "#E62600",
+      "#C5C5C5",
+      "#333333",
+      "#E9E9E9",
+      "#F6F6F6"
+    ],
+    "fonts": [
+      "Source Sans Pro",
+      "Nunito Sans",
+      "Poppins",
+      "Poppins Bold",
+      "Poppins Light",
+      "Poppins Medium",
+      "Poppins SemiBold"
+    ]
+  },
+  "mappedTheme": {
+    "primaryColor": "#5236AB",
+    "primaryDark": "#432C8C",
+    "accentColor": "#E11937",
+    "accentHover": "#C61630",
+    "surfaceBorder": "#EEEEEE",
+    "surfaceSubtle": "#FFFFFF",
+    "fontHeading": "Poppins",
+    "fontBody": "Source Sans Pro",
+    "borderRadius": "0px"
+  },
+  "notes": [
+    "Limited mapping to tenant-rendered theme tokens only.",
+    "Palette derived from HTML, inline SVG and linked stylesheets; layout components are intentionally ignored."
+  ]
+}

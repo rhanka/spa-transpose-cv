@@ -1,0 +1,128 @@
+{
+  "slug": "_default",
+  "displayName": "Sent Tech",
+  "routeBase": "/",
+  "brandUrl": "https://www.sent-tech.ca/",
+  "themeKey": "tenants/_default/theme.css",
+  "templateKey": "tenants/_default/template.docx",
+  "templateContractVersion": "v1",
+  "variant": "executive-modern",
+  "active": true,
+  "theme": {
+    "primaryColor": "#1B4F98",
+    "primaryDark": "#13386C",
+    "accentColor": "#11C4D4",
+    "accentHover": "#2BBDEE",
+    "surfaceBorder": "#D8E8F6",
+    "surfaceSubtle": "#F2F8FD",
+    "fontHeading": "Poppins",
+    "fontBody": "Inter",
+    "borderRadius": "16px"
+  },
+  "branding": {
+    "logoPath": "/SENT-logo.png",
+    "faviconPath": "/SENT-logo-squared.svg",
+    "subtitle": "Mise en forme de CV",
+    "heroBackground": "linear-gradient(135deg, hsl(215 70% 25% / 0.9) 0%, hsl(215 60% 30% / 0.9) 50%, hsl(185 70% 40% / 0.9) 100%), url('/hero-tech.jpg') center/cover no-repeat",
+    "shellBackground": "hsl(215 70% 25% / 0.95)"
+  },
+  "templateLibrary": {
+    "enabled": true,
+    "defaultVariant": "ats-core",
+    "options": [
+      {
+        "id": "ats-core",
+        "label": "ATS",
+        "description": "Monocolonne très sobre, contraste net et compatibilité maximale avec les ATS.",
+        "recommendedFor": "soumissions RH et parsing automatique"
+      },
+      {
+        "id": "professional-compact",
+        "label": "Simple",
+        "description": "Version dense, stable et lisible pour des conversions en volume.",
+        "recommendedFor": "lots importants et usage interne"
+      },
+      {
+        "id": "executive-modern",
+        "label": "Modern",
+        "description": "Respiration plus premium, accent discret et hiérarchie visuelle plus marquée.",
+        "recommendedFor": "profils seniors et avant-vente"
+      },
+      {
+        "id": "consulting-classic",
+        "label": "Professional",
+        "description": "Structure consulting classique, équilibrée et directement exploitable en mission.",
+        "recommendedFor": "propositions commerciales standard"
+      },
+      {
+        "id": "brand-accent",
+        "label": "One column",
+        "description": "Une colonne stricte avec accent maîtrisé pour garder un rendu public plus identifié.",
+        "recommendedFor": "déclinaisons marque sobres"
+      }
+    ]
+  },
+  "template": {
+    "headerFields": {
+      "namePlaceholder": "Candidate Name",
+      "titleLine1Placeholder": "Senior Consultant",
+      "titleLine2Placeholder": "Data, AI & Delivery",
+      "yearsPlaceholder": "XX"
+    },
+    "sections": [
+      "coreSkills",
+      "sectorExperience",
+      "experience",
+      "languages",
+      "education"
+    ],
+    "outputNaming": "SentTech_Profile_{name}.docx"
+  },
+  "templateContract": {
+    "version": "v1",
+    "layout": {
+      "family": "single-column",
+      "variant": "executive-modern"
+    },
+    "header": {
+      "fields": [
+        { "key": "name", "placeholder": "Candidate Name" },
+        { "key": "headline", "placeholder": "Senior Consultant" },
+        { "key": "subheadline", "placeholder": "Data, AI & Delivery" },
+        { "key": "years_of_experience", "placeholder": "XX" }
+      ],
+      "limits": {
+        "headlineMaxChars": 48,
+        "subheadlineMaxChars": 48
+      }
+    },
+    "sections": [
+      { "key": "coreSkills", "label": "CORE SKILLS", "required": true, "repeatable": false },
+      { "key": "sectorExperience", "label": "DOMAIN EXPERIENCE", "required": true, "repeatable": false },
+      { "key": "experience", "label": "PROFESSIONAL EXPERIENCE", "required": true, "repeatable": true },
+      { "key": "languages", "label": "LANGUAGES", "required": true, "repeatable": false },
+      { "key": "education", "label": "EDUCATION & CERTIFICATIONS", "required": true, "repeatable": false }
+    ],
+    "styleTokens": {
+      "colors": {
+        "accent": "#11C4D4",
+        "sectionBannerFill": "#EAF6FF",
+        "sectionBannerText": "#13386C",
+        "headingText": "#13386C",
+        "bodyText": "#102132"
+      },
+      "fonts": {
+        "heading": "Segoe UI",
+        "body": "Segoe UI"
+      },
+      "spacing": {
+        "sectionBeforeTwip": 260,
+        "sectionAfterTwip": 200,
+        "lineTwip": 300
+      }
+    },
+    "output": {
+      "filenamePattern": "SentTech_Profile_{name}.docx"
+    }
+  }
+}

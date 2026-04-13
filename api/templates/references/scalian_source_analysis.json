@@ -1,0 +1,120 @@
+{
+  "profile": "scalian",
+  "sourceDocxPath": "templates/references/scalian_source_reference.docx",
+  "analyzedAt": "2026-04-12T15:34:43.328Z",
+  "detectedHeader": {
+    "name": "[redacted]",
+    "title_line1": "CxO Advisor",
+    "title_line2": "",
+    "years": "23 years of experience"
+  },
+  "detectedSectionHeadings": [
+    "TECHNICAL SKILLS",
+    "SECTOR-SPECIFIC SKILLS",
+    "WORK EXPERIENCE",
+    "LANGUAGES SKILLS",
+    "EDUCATION & CERTIFICATIONS"
+  ],
+  "detectedFonts": [
+    "Cambria",
+    "Arial"
+  ],
+  "detectedColors": {
+    "text": [
+      "7030A0",
+      "595959",
+      "333333",
+      "808080"
+    ],
+    "fills": [
+      "E6E6E6"
+    ]
+  },
+  "notes": [
+    "Header placeholders normalized for committed reference artifacts."
+  ],
+  "templateContract": {
+    "version": "v1",
+    "layout": {
+      "family": "single-column",
+      "variant": "brand-accent"
+    },
+    "header": {
+      "fields": [
+        {
+          "key": "name",
+          "placeholder": "Candidate Name"
+        },
+        {
+          "key": "headline",
+          "placeholder": "Executive Advisor"
+        },
+        {
+          "key": "subheadline",
+          "placeholder": "Transformation & Delivery Lead"
+        },
+        {
+          "key": "years_of_experience",
+          "placeholder": "XX years of experience"
+        }
+      ],
+      "limits": {
+        "headlineMaxChars": 40,
+        "subheadlineMaxChars": 40
+      }
+    },
+    "sections": [
+      {
+        "key": "technicalSkills",
+        "label": "TECHNICAL SKILLS",
+        "required": true,
+        "repeatable": false
+      },
+      {
+        "key": "sectorSkills",
+        "label": "SECTOR-SPECIFIC SKILLS",
+        "required": true,
+        "repeatable": false
+      },
+      {
+        "key": "experience",
+        "label": "WORK EXPERIENCE",
+        "required": true,
+        "repeatable": true
+      },
+      {
+        "key": "languages",
+        "label": "LANGUAGES SKILLS",
+        "required": true,
+        "repeatable": false
+      },
+      {
+        "key": "education",
+        "label": "EDUCATION/CERTIFICATION",
+        "required": true,
+        "repeatable": false
+      }
+    ],
+    "styleTokens": {
+      "colors": {
+        "accent": "7030A0",
+        "sectionBannerFill": "E6E6E6",
+        "sectionBannerText": "7030A0",
+        "headingText": "7030A0",
+        "bodyText": "000000"
+      },
+      "fonts": {
+        "heading": "Cambria",
+        "body": "Cambria"
+      },
+      "spacing": {
+        "sectionBeforeTwip": 240,
+        "sectionAfterTwip": 240,
+        "lineTwip": 300
+      }
+    },
+    "output": {
+      "filenamePattern": "Scalian_Profile_{name}.docx"
+    }
+  }
+}
