@@ -1,0 +1,64 @@
+services:
+  api:
+    image: ${REGISTRY:-local}/${API_IMAGE_NAME:-transpose-cv-api}:${API_VERSION:-latest}
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      target: ${TARGET:-development}
+    environment:
+      - NODE_ENV=${TARGET:-development}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mistral}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:${UI_PORT:-5173},http://127.0.0.1:${UI_PORT:-5173},http://ui:5173}
+      - SESSION_MAX_AGE_HOURS=${SESSION_MAX_AGE_HOURS:-48}
+      - MAX_CONCURRENT_AGENTS=${MAX_CONCURRENT_AGENTS:-5}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-50}
+      - DATA_DIR=/data
+      - TENANT_STORAGE_BACKEND=${TENANT_STORAGE_BACKEND:-local}
+      - TENANT_S3_BUCKET=${TENANT_S3_BUCKET}
+      - TENANT_S3_REGION=${TENANT_S3_REGION:-fr-par}
+      - TENANT_S3_ENDPOINT=${TENANT_S3_ENDPOINT:-https://s3.fr-par.scw.cloud}
+      - TENANT_S3_ACCESS_KEY=${TENANT_S3_ACCESS_KEY}
+      - TENANT_S3_SECRET_KEY=${TENANT_S3_SECRET_KEY}
+      - TENANT_S3_PREFIX=${TENANT_S3_PREFIX:-}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH}
+      - ADMIN_PASSWORD_SALT=${ADMIN_PASSWORD_SALT}
+      - ADMIN_SEED_SECRET=${ADMIN_SEED_SECRET}
+      - ADMIN_TOKEN_TTL_MINUTES=${ADMIN_TOKEN_TTL_MINUTES:-720}
+      - ADMIN_OTP_TTL_MINUTES=${ADMIN_OTP_TTL_MINUTES:-15}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+    ports:
+      - "${API_PORT:-8686}:8686"
+    volumes:
+      - api_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8686/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tty: true
+
+  ui:
+    image: ${REGISTRY:-local}/${UI_IMAGE_NAME:-transpose-cv-ui}:${UI_VERSION:-latest}
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      target: ${TARGET:-development}
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:${API_PORT:-8686}/api}
+    ports:
+      - "${UI_PORT:-5173}:5173"
+    tty: true
+
+volumes:
+  api_data:

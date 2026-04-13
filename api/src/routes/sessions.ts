@@ -1,0 +1,275 @@
+import { Hono, type Context } from 'hono';
+import { stream } from 'hono/streaming';
+import { z } from 'zod';
+import { logger } from '../config/logger.js';
+import {
+  createSession,
+  getMeta,
+  writeMeta,
+  authenticateSession,
+  addFile,
+  getDecryptedFile,
+  listOutputs,
+  updateStatus,
+} from '../services/session-manager.js';
+import { createEmitter, subscribe } from '../services/event-bus.js';
+import {
+  getTenantConfig,
+  resolveTenantSlug,
+  TenantConfigError,
+  type TenantConfig,
+} from '../services/tenant-config.js';
+import { templateVariantSchema } from '../services/template-contract.js';
+
+export const sessionRoutes = new Hono();
+
+function handleTenantError(c: Context, error: unknown) {
+  if (error instanceof TenantConfigError) {
+    const status = error.statusCode === 404 ? 404 : error.statusCode === 400 ? 400 : 500;
+    return c.json({
+      error: error.message,
+      code: error.code,
+    }, status);
+  }
+
+  logger.error({ err: error }, 'Failed to resolve tenant for session route');
+  return c.json({
+    error: 'Failed to resolve tenant',
+    code: 'tenant_resolve_failed',
+  }, 500);
+}
+
+function resolveRequestedTenant(c: Context): string {
+  return resolveTenantSlug({
+    explicitSlug: c.req.param('slug'),
+    headerTenant: c.req.header('X-Tenant'),
+  });
+}
+
+async function resolveExistingTenant(c: Context): Promise<TenantConfig> {
+  return getTenantConfig({
+    explicitSlug: c.req.param('slug'),
+    headerTenant: c.req.header('X-Tenant'),
+  });
+}
+
+function ensureSessionTenantAccess(
+  c: Context,
+  sessionTenant: string,
+) {
+  try {
+    const requestedTenant = resolveRequestedTenant(c);
+    if (requestedTenant !== sessionTenant) {
+      return c.json({ error: 'Session not found' }, 404);
+    }
+    return null;
+  } catch (error) {
+    return handleTenantError(c, error);
+  }
+}
+
+// POST /api/sessions — create session
+sessionRoutes.post('/', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({ password: z.string().min(1) }).safeParse(body);
+  if (!parsed.success) return c.json({ error: 'Password is required' }, 400);
+
+  try {
+    const tenant = await resolveExistingTenant(c);
+    const meta = await createSession(parsed.data.password, tenant.slug);
+    return c.json({ sessionId: meta.id, expiresAt: meta.expiresAt, tenant: meta.tenant }, 201);
+  } catch (error) {
+    return handleTenantError(c, error);
+  }
+});
+
+// POST /api/sessions/:id/upload — upload files (multipart)
+sessionRoutes.post('/:id/upload', async (c) => {
+  const { id } = c.req.param();
+  const password = c.req.header('X-Session-Password');
+  if (!password) return c.json({ error: 'X-Session-Password header required' }, 401);
+
+  const meta = await getMeta(id);
+  if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
+  const key = authenticateSession(id, password, meta.salt);
+
+  const formData = await c.req.formData();
+  const files = formData.getAll('files');
+  if (!files.length) return c.json({ error: 'No files provided' }, 400);
+
+  const entries = [];
+  for (const file of files) {
+    if (!(file instanceof File)) continue;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const entry = await addFile(id, file.name, buffer, key);
+    entries.push(entry);
+  }
+  return c.json({ uploaded: entries.length, files: entries.map(e => e.originalName) });
+});
+
+// POST /api/sessions/:id/ready
+sessionRoutes.post('/:id/ready', async (c) => {
+  const { id } = c.req.param();
+  const password = c.req.header('X-Session-Password');
+  if (!password) return c.json({ error: 'X-Session-Password header required' }, 401);
+
+  const meta = await getMeta(id);
+  if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
+  authenticateSession(id, password, meta.salt);
+
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    prompt: z.string().default(''),
+    provider: z.string().optional(),
+    templateVariant: templateVariantSchema.optional(),
+    targetCompany: z.string().trim().max(120).optional(),
+  }).safeParse(body);
+  meta.prompt = parsed.success ? parsed.data.prompt : '';
+  if (parsed.success && parsed.data.provider) {
+    meta.provider = parsed.data.provider;
+  }
+  if (parsed.success) {
+    meta.templateVariant = parsed.data.templateVariant;
+    meta.targetCompany = parsed.data.targetCompany || undefined;
+  }
+  meta.status = 'ready';
+  await writeMeta(meta);
+  return c.json({ status: 'ready', fileCount: meta.files.length });
+});
+
+// POST /api/sessions/:id/run — start processing
+sessionRoutes.post('/:id/run', async (c) => {
+  const { id } = c.req.param();
+  const password = c.req.header('X-Session-Password');
+  if (!password) return c.json({ error: 'X-Session-Password header required' }, 401);
+
+  const meta = await getMeta(id);
+  if (!meta) return c.json({ error: 'Session not found' }, 404);
+  if (meta.status !== 'ready') return c.json({ error: `Session status is ${meta.status}, expected ready` }, 400);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
+  authenticateSession(id, password, meta.salt);
+
+  const { runOrchestrator } = await import('../services/orchestrator.js');
+  const emitSse = createEmitter(id);
+
+  runOrchestrator(id, emitSse).catch(err => {
+    logger.error(err, 'Orchestrator error');
+    updateStatus(id, 'error').catch(() => {});
+  });
+
+  await updateStatus(id, 'processing');
+  return c.json({ status: 'processing' });
+});
+
+// GET /api/sessions/:id/status — SSE with enriched streaming events
+sessionRoutes.get('/:id/status', async (c) => {
+  const { id } = c.req.param();
+  const meta = await getMeta(id);
+  if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
+
+  return stream(c, async (s) => {
+    c.header('Content-Type', 'text/event-stream');
+    c.header('Cache-Control', 'no-cache');
+    c.header('Connection', 'keep-alive');
+
+    // Subscribe to live SSE events from orchestrator
+    const unsubscribe = subscribe(id, (fileIndex, event) => {
+      try {
+        s.write(`data: ${JSON.stringify({ type: 'stream', fileIndex, ...event })}\n\n`);
+      } catch { /* client disconnected */ }
+    });
+
+    // Also poll meta for status changes (file statuses, session status)
+    let lastKey = '';
+    try {
+      for (let i = 0; i < 600; i++) {
+        const current = await getMeta(id);
+        if (!current) break;
+
+        const key = JSON.stringify({
+          status: current.status,
+          files: current.files.map(f => ({ s: f.status, o: f.outputName, e: f.error })),
+        });
+
+        if (key !== lastKey) {
+          await s.write(`data: ${JSON.stringify({
+            type: 'status',
+            status: current.status,
+            files: current.files.map(f => ({
+              name: f.originalName,
+              status: f.status,
+              output: f.outputName,
+              error: f.error,
+            })),
+            expiresAt: current.expiresAt,
+          })}\n\n`);
+          lastKey = key;
+        }
+
+        if (current.status === 'done' || current.status === 'error') break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } finally {
+      unsubscribe();
+    }
+  });
+});
+
+// GET /api/sessions/:id/results
+sessionRoutes.get('/:id/results', async (c) => {
+  const { id } = c.req.param();
+  const meta = await getMeta(id);
+  if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
+
+  const outputs = await listOutputs(id);
+  return c.json({
+    tenant: meta.tenant,
+    status: meta.status,
+    expiresAt: meta.expiresAt,
+    files: meta.files.map(f => ({
+      name: f.originalName,
+      status: f.status,
+      output: f.outputName,
+      error: f.error,
+    })),
+    outputs: outputs.map(f => f.replace('.enc', '')),
+  });
+});
+
+// GET /api/sessions/:id/download/:file
+sessionRoutes.get('/:id/download/:file', async (c) => {
+  const { id, file } = c.req.param();
+  const password = c.req.header('X-Session-Password');
+  if (!password) return c.json({ error: 'X-Session-Password header required' }, 401);
+
+  const meta = await getMeta(id);
+  if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
+
+  try {
+    const key = authenticateSession(id, password, meta.salt);
+    const data = await getDecryptedFile(id, file, key, 'outputs');
+
+    const ext = file.split('.').pop()?.toLowerCase();
+    const contentType = ext === 'docx'
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : ext === 'md' ? 'text/markdown' : 'application/octet-stream';
+
+    c.header('Content-Type', contentType);
+    c.header('Content-Disposition', `attachment; filename="${file}"`);
+    return c.body(new Uint8Array(data));
+  } catch (err) {
+    logger.error(err, 'Download error');
+    return c.json({ error: 'Decryption failed — wrong password?' }, 403);
+  }
+});

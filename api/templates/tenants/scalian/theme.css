@@ -1,0 +1,11 @@
+:root {
+  --tenant-primary: #4B2882;
+  --tenant-primary-dark: #1D1148;
+  --tenant-accent: #60BB9B;
+  --tenant-accent-hover: #54A588;
+  --tenant-surface-border: #E9E4F8;
+  --tenant-surface-subtle: #FFFFFF;
+  --tenant-font-heading: "Poppins";
+  --tenant-font-body: "Inter";
+  --tenant-radius: 0px;
+}

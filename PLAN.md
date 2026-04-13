@@ -1,0 +1,157 @@
+# PLAN.md — Multi-tenant CV Platform
+
+- [x] Reconstituer le contexte de la session Claude `fd867de2-819c-4ff1-9993-4e422d86c826`
+- [x] Consolider la vision produit dans `spec/SPEC_INTENT.md`
+- [x] Stocker la session Q/R dans `spec/SPEC_INTENT_QA_SESSION.md`
+- [x] Qualifier l'architecture multi-tenant dans `spec/SPEC_EVOL_MULTI_TENANT.md`
+- [x] Qualifier le système de template/agents dans `spec/SPEC_EVOL_TEMPLATE_AGENT.md`
+- [x] Commit de sédimentation des specs et du plan
+- [x] Créer le tenant `_default` à partir d'un template Scalian neutralisé
+  - [x] neutraliser le template DOCX de base
+  - [x] produire le `config.json` `_default`
+  - [x] produire le `theme.css` `_default`
+  - [x] brancher le runtime implicite sur `_default`
+- [x] Analyser le CV CGI comme référence de second modèle consulting
+  - [x] extraire la structure OOXML utile
+  - [x] produire un template CGI neutralisé sans PII ni marque
+  - [x] décider que `cgi` sert de premier exemple fournisseur de test
+- [x] Conserver un template CGI de test hors git
+  - [x] régénérer le template de test depuis le CV brut
+  - [x] ignorer explicitement les artefacts de test
+- [x] Définir et implémenter le `TemplateContract`
+  - [x] header
+  - [x] sections
+  - [x] style tokens
+  - [x] règles de nommage de sortie
+- [x] Refactorer le moteur OOXML vers un rendu paramétrique
+  - [x] sortir de `scalian-xml.ts`
+  - [x] brancher le contrat de template
+  - [x] supporter plusieurs variantes sûres pour ATS
+- [x] Mettre en place la résolution de tenant dans l'UI
+  - [x] `/` -> `_default`
+  - [x] `/{slug}` -> tenant
+  - [x] réserver `admin`, `api`, `session`
+  - [x] rendre les pages session tenant-aware
+- [x] Mettre en place la résolution de tenant dans l'API
+  - [x] lecture seed locale transitoire
+  - [x] retirer le seed publié `cgi` et garder le test en brouillon
+  - [x] lecture S3 SCW
+  - [x] cache mémoire court
+  - [x] `GET /api/tenants/:slug/config`
+  - [x] faire porter le slug tenant par la session
+  - [x] isoler `status/results/download` par tenant
+- [x] Créer le storage S3 SCW du projet
+  - [x] bucket `cv-transpose-config`
+  - [x] config locale du backend S3
+- [x] Mettre en place l'auth admin DB-less
+  - [x] `ADMIN_PASSWORD_HASH`
+  - [x] `ADMIN_PASSWORD_SALT` ou `ADMIN_SEED_SECRET`
+  - [x] OTP email corporate
+  - [x] verrou first-come-first-served en S3
+- [x] Créer l'agent d'analyse de template DOCX
+  - [x] Scalian
+  - [x] CGI
+  - [x] sortie `TemplateContract`
+- [x] Créer l'agent de scraping de marque
+  - [x] fetch HTML/CSS
+  - [x] extraction palette/fonts/logo
+  - [x] mapping limité aux composants rendus
+- [x] Conserver le runtime provider existant pour les agents
+  - [x] garder l'orchestrateur actuel
+  - [x] préserver le streaming de réflexion provider
+  - [x] éviter toute couche runtime supplémentaire non demandée
+- [x] Migrer les premiers tenants vers S3
+  - [x] `_default`
+  - [x] `scalian`
+  - [x] `registry.json`
+- [x] Mettre en place la stratégie domaine et redirections
+  - [x] `cv.sent-tech.ca`
+  - [x] redirection `scalian-cv.sent-tech.ca` -> `/scalian/`
+  - [x] aucun DNS dynamique au runtime applicatif
+- [x] Ajouter les tests et UAT
+  - [x] unit `TemplateContract`
+  - [x] unit tenant resolver
+  - [x] e2e upload -> rendu -> download par tenant
+  - [x] UAT `_default`
+  - [x] UAT `scalian`
+- [x] Ajouter MinIO pour l'env de dev
+  - [x] service local + console
+  - [x] init bucket + seed tenant local
+  - [x] UAT localhost sur backend S3 compatible
+- [x] Valider le produit en localhost avant tout déploiement réel
+  - [x] stack locale complète
+  - [x] backend S3 compatible en dev
+  - [x] smoke `_default`
+  - [x] smoke `scalian`
+- [x] Corriger les bogues découverts en UAT locale
+  - [x] rebrander `_default` en Sent Tech
+  - [x] supprimer le vocabulaire interne "tenant" de l'UI publique
+  - [x] ajouter des favicons tenant-aware
+  - [x] retirer `cgi` du seed publié local
+  - [x] ouvrir la bibliothèque de templates sur la page d'origine
+  - [x] porter le choix de template dans la session
+  - [x] enrichir la checklist UAT localhost
+- [x] Réaligner l'écran `_default` sur le flux de création d'espace société
+  - [x] retirer le faux champ "entreprise cible"
+  - [x] remettre une galerie cohérente avec l'inspiration BetterCV
+  - [x] implémenter le formulaire `URL société + email corporate + OTP + template DOCX`
+  - [x] brancher la création de tenant draft via l'API admin
+  - [x] corriger le hero/header tenant-aware Sent Tech et Scalian
+- [x] Corriger les bogues découverts dans la seconde vague d'UAT locale
+  - [x] reprendre le fond Sent Tech d'origine et rendre le logo lisible
+  - [x] supprimer les badges de titre redondants dans le hero
+  - [x] renommer la promesse Sent Tech en `Remettez votre CV en forme`
+  - [x] éradiquer les formulations franglaises de l'UI publique
+  - [x] supprimer le champ `Slug attendu` de l'écran public
+  - [x] neutraliser l'exemple du site de référence
+  - [x] masquer l'accès opérateur Sent Tech derrière une entrée discrète
+  - [x] remplacer le champ fichier natif du builder par une vraie zone de dépôt
+  - [x] confirmer et documenter Maildev pour les tests email locaux
+- [x] Réaligner le header Sent Tech de l'app sur le site source
+  - [x] supprimer le cartouche gris séparé sur la landing `_default`
+  - [x] remettre le header en surimpression du hero avec le vrai wordmark
+  - [x] retirer le label `CV Transpose` du header public Sent Tech
+  - [x] recaler la teinte du fond sur les stops HSL exacts du site source
+- [x] Ajuster la promesse publique du builder Sent Tech
+  - [x] remplacer la copie descriptive interne par une promesse marketing courte
+  - [x] aligner le hero et la carte builder sur le même message
+  - [x] supprimer la césure parasite sur `1h30`
+- [x] Corriger le scaffolding template et réaligner la référence CGI
+  - [x] distinguer clairement `references/` et `tenants/`
+  - [x] déplacer la source Scalian analysée sous `api/templates/references/`
+  - [x] retirer `tenants/cgi` des seeds runtime commités
+  - [x] produire un exemple CGI fictif mais fidèle au document fournisseur
+  - [x] faire analyser cet exemple par `template-analysis-agent`
+  - [x] exposer l'analyse via `make analyze-template-docx`
+- [x] Industrialiser l'audit de style DOCX source vs exemple fictif
+  - [x] identifier automatiquement les differences OOXML hors texte
+  - [x] ajouter une validation visuelle rendue page par page
+  - [x] definir la mitigation par patch textuel OOXML
+  - [x] appliquer la mitigation au cas CGI jusqu'a `styleEqual=true`
+- [x] Mutualiser l'outillage DOCX en TypeScript dans l'API
+  - [x] sortir toute logique commitee en Python
+  - [x] centraliser les methodes dans `api/src/services/docx-tooling.ts`
+  - [x] reduire `api/scripts/*` a des wrappers temporaires pour `make`
+  - [x] valider le lot via `make`
+- [x] Restaurer les preuves image explicites de l'audit DOCX TypeScript
+  - [x] générer `page-XX-side-by-side.png` depuis le flux TS
+  - [x] exposer ces artefacts dans le rapport produit
+  - [x] revalider la recette CGI avec ces preuves
+- [x] Renforcer l'anonymisation du faux profil CGI avant purge historique
+  - [x] remplacer le contenu par un parcours PM inventé de 10 ans
+  - [x] verifier l'absence des marqueurs sensibles du CV source
+  - [x] regenerer l'analyse et les preuves de style
+- [x] Neutraliser le gras parasite dans les paragraphes du faux CV CGI
+  - [x] conserver le gras des titres
+  - [x] rerouter le texte narratif vers les runs non gras
+  - [x] regenerer le DOCX et controler visuellement
+- [x] Purger l'historique local des commits contenant la version trop proche
+  - [x] reecrire le commit local `f0c60ee`
+  - [x] expirer les reflogs locaux et elaguer les objets non references
+- [x] Eradiquer toute trace de CV non anonymise dans l'historique git local
+  - [x] nettoyer le code, les specs et les references DOCX committees
+  - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
+  - [x] reconstruire un historique local propre a partir d'un arbre nettoye
+- [ ] Déployer et valider en environnement réel
+- [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
+- [ ] Démarrer l'implémentation feature complète

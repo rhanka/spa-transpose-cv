@@ -1,0 +1,132 @@
+{
+  "profile": "cgi",
+  "sourceDocxPath": "templates/references/cgi_source_example_fictional.docx",
+  "analyzedAt": "2026-04-12T20:03:12.609Z",
+  "detectedHeader": {
+    "name": "Candidate Name",
+    "title_line1": "Executive Consulting Headline",
+    "title_line2": "Consulting Lead",
+    "years": "XX years of experience"
+  },
+  "detectedSectionHeadings": [
+    "PROFILE",
+    "SELECTED EXPERIENCE",
+    "ADDITIONAL EXPERIENCE",
+    "EDUCATION & CERTIFICATIONS",
+    "INDUSTRY EXPERIENCE",
+    "LANGUAGES SKILLS",
+    "SKILLS SUMMARY"
+  ],
+  "detectedFonts": [
+    "Segoe UI",
+    "Arial",
+    "Avenir Next Lt Pro"
+  ],
+  "detectedColors": {
+    "text": [
+      "E31937",
+      "991F3D",
+      "404040",
+      "5236AB"
+    ],
+    "fills": [
+      "927DD6",
+      "E31937",
+      "F2F2F2",
+      "5236AB"
+    ]
+  },
+  "notes": [
+    "Header placeholders normalized for committed reference artifacts."
+  ],
+  "templateContract": {
+    "version": "v1",
+    "layout": {
+      "family": "single-column",
+      "variant": "consulting-classic"
+    },
+    "header": {
+      "fields": [
+        {
+          "key": "name",
+          "placeholder": "Candidate Name"
+        },
+        {
+          "key": "headline",
+          "placeholder": "Executive Consulting Headline"
+        },
+        {
+          "key": "subheadline",
+          "placeholder": "Consulting Lead"
+        },
+        {
+          "key": "years_of_experience",
+          "placeholder": "XX years of experience"
+        }
+      ],
+      "limits": {
+        "headlineMaxChars": 52,
+        "subheadlineMaxChars": 52
+      }
+    },
+    "sections": [
+      {
+        "key": "executiveSummary",
+        "label": "PROFILE",
+        "required": false,
+        "repeatable": false
+      },
+      {
+        "key": "technicalSkills",
+        "label": "SKILLS SUMMARY",
+        "required": true,
+        "repeatable": false
+      },
+      {
+        "key": "sectorExperience",
+        "label": "INDUSTRY EXPERIENCE",
+        "required": true,
+        "repeatable": false
+      },
+      {
+        "key": "selectedExperience",
+        "label": "SELECTED EXPERIENCE",
+        "required": true,
+        "repeatable": true
+      },
+      {
+        "key": "additionalExperience",
+        "label": "ADDITIONAL EXPERIENCE",
+        "required": false,
+        "repeatable": true
+      },
+      {
+        "key": "education",
+        "label": "EDUCATION & CERTIFICATIONS",
+        "required": true,
+        "repeatable": false
+      }
+    ],
+    "styleTokens": {
+      "colors": {
+        "accent": "E31937",
+        "sectionBannerFill": "F2F2F2",
+        "sectionBannerText": "E31937",
+        "headingText": "E31937",
+        "bodyText": "000000"
+      },
+      "fonts": {
+        "heading": "Segoe UI",
+        "body": "Segoe UI"
+      },
+      "spacing": {
+        "sectionBeforeTwip": 220,
+        "sectionAfterTwip": 220,
+        "lineTwip": 300
+      }
+    },
+    "output": {
+      "filenamePattern": "CGI_Profile_{name}.docx"
+    }
+  }
+}
