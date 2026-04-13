@@ -12,6 +12,7 @@ import {
   templateVariantSchema,
   type TemplateContract,
 } from './template-contract.js';
+import { getTemplateVariantDefinition } from './template-variant-catalog.js';
 
 export const DEFAULT_TENANT_SLUG = '_default';
 export const RESERVED_TENANT_SLUGS = ['admin', 'api', 'session'] as const;
@@ -32,6 +33,9 @@ const tenantTemplateLibraryOptionSchema = z.object({
   label: z.string().trim().min(1),
   description: z.string().trim().min(1),
   recommendedFor: z.string().trim().min(1).optional(),
+  previewImagePath: z.string().trim().min(1).optional(),
+  referenceLabel: z.string().trim().min(1).optional(),
+  referenceSummary: z.string().trim().min(1).optional(),
 });
 const tenantTemplateLibrarySchema = z.object({
   enabled: z.boolean(),
@@ -114,8 +118,24 @@ export function resolveTenantSlug(options: {
 }
 
 function hydrateTenantConfig(config: RawTenantConfig): TenantConfig {
+  const templateLibrary = config.templateLibrary
+    ? {
+      ...config.templateLibrary,
+      options: config.templateLibrary.options.map((option) => {
+        const definition = getTemplateVariantDefinition(option.id);
+        return {
+          ...option,
+          previewImagePath: definition.previewImagePath,
+          referenceLabel: definition.referenceLabel,
+          referenceSummary: definition.referenceSummary,
+        };
+      }),
+    }
+    : undefined;
+
   return {
     ...config,
+    templateLibrary,
     templateContract: ensureTemplateContract({
       templateContractVersion: config.templateContractVersion,
       variant: config.variant,

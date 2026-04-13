@@ -2,7 +2,15 @@
 FROM node:24-alpine3.22 AS base
 RUN npm install -g npm@latest
 # System deps for CV text extraction
-RUN apk add --no-cache poppler-utils pandoc libreoffice-writer
+RUN apk add --no-cache \
+    fontconfig \
+    font-noto \
+    font-noto-cjk \
+    poppler-utils \
+    libreoffice-writer \
+    pandoc \
+    ttf-dejavu \
+    ttf-liberation
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; \
@@ -18,7 +26,15 @@ RUN npm run build
 
 FROM node:24-alpine3.22 AS production
 RUN npm install -g npm@latest
-RUN apk add --no-cache poppler-utils pandoc libreoffice-writer
+RUN apk add --no-cache \
+    fontconfig \
+    font-noto \
+    font-noto-cjk \
+    poppler-utils \
+    libreoffice-writer \
+    pandoc \
+    ttf-dejavu \
+    ttf-liberation
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=base /app/package.json ./

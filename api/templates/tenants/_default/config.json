@@ -32,33 +32,33 @@
     "options": [
       {
         "id": "ats-core",
-        "label": "ATS",
-        "description": "Monocolonne très sobre, contraste net et compatibilité maximale avec les ATS.",
-        "recommendedFor": "soumissions RH et parsing automatique"
+        "label": "Aether",
+        "description": "Version ATS nette et structurée, conçue pour une lecture directe et sans surcharge.",
+        "recommendedFor": "soumissions RH et filtrage automatique"
       },
       {
         "id": "professional-compact",
-        "label": "Simple",
-        "description": "Version dense, stable et lisible pour des conversions en volume.",
-        "recommendedFor": "lots importants et usage interne"
+        "label": "Celestial",
+        "description": "Sidebar douce et dense, sans photo, pour des profils expérimentés qui doivent rester compacts.",
+        "recommendedFor": "profils seniors et conversions récurrentes"
       },
       {
         "id": "executive-modern",
-        "label": "Modern",
-        "description": "Respiration plus premium, accent discret et hiérarchie visuelle plus marquée.",
-        "recommendedFor": "profils seniors et avant-vente"
+        "label": "Horizon",
+        "description": "Cadre plus éditorial et formel, avec une présence visuelle plus premium.",
+        "recommendedFor": "avant-vente et profils de direction"
       },
       {
         "id": "consulting-classic",
-        "label": "Professional",
-        "description": "Structure consulting classique, équilibrée et directement exploitable en mission.",
-        "recommendedFor": "propositions commerciales standard"
+        "label": "Solstice",
+        "description": "Gabarit centré et classique, élégant sans être démonstratif, pour des propositions structurées.",
+        "recommendedFor": "missions, conseil et réponses clients"
       },
       {
         "id": "brand-accent",
-        "label": "One column",
-        "description": "Une colonne stricte avec accent maîtrisé pour garder un rendu public plus identifié.",
-        "recommendedFor": "déclinaisons marque sobres"
+        "label": "Keystone",
+        "description": "Bandeau fort et sidebar structurée, adaptés aux déclinaisons société avec accent de marque.",
+        "recommendedFor": "pages société et déclinaisons tenant"
       }
     ]
   },
@@ -111,10 +111,10 @@
         "headingText": "#13386C",
         "bodyText": "#102132"
       },
-      "fonts": {
-        "heading": "Segoe UI",
-        "body": "Segoe UI"
-      },
+    "fonts": {
+      "heading": "Liberation Sans",
+      "body": "Liberation Sans"
+    },
       "spacing": {
         "sectionBeforeTwip": 260,
         "sectionAfterTwip": 200,
