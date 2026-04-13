@@ -134,6 +134,12 @@ create-cgi-source-example: ## Rebuild the fictional CGI supplier example from th
 create-default-tenant-seed: ## Rebuild the default tenant seed from the Scalian source reference
 	node --experimental-strip-types api/scripts/create-default-tenant-seed.ts
 
+.PHONY: generate-template-previews
+generate-template-previews: ## Rebuild variant preview DOCX/PDF/PNG assets from the real DOCX engine
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api npx tsx scripts/generate-template-previews.ts
+	mkdir -p ui/static/template-previews
+	cp api/templates/references/template-previews/assets/*.png ui/static/template-previews/
+
 .PHONY: docx-style-diff
 docx-style-diff: ## Compare two DOCX files for style-only differences (SOURCE_DOCX=..., CANDIDATE_DOCX=...)
 	node --experimental-strip-types api/scripts/docx-style-diff.ts "$(SOURCE_DOCX)" "$(CANDIDATE_DOCX)" "$(if $(strip $(OUTPUT_JSON)),$(OUTPUT_JSON),tmp/docs/docx-style-diff/report.json)" "$(if $(strip $(RENDER_DIR)),$(RENDER_DIR),tmp/docs/docx-style-diff)" "$(if $(strip $(DIFF_LIMIT)),$(DIFF_LIMIT),20)"

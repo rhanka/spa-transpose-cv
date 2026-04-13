@@ -51,6 +51,9 @@ export interface TenantConfig {
       label: string;
       description: string;
       recommendedFor?: string;
+      previewImagePath?: string;
+      referenceLabel?: string;
+      referenceSummary?: string;
     }>;
   };
 }

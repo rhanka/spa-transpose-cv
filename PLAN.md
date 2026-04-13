@@ -97,6 +97,44 @@
   - [x] implémenter le formulaire `URL société + email corporate + OTP + template DOCX`
   - [x] brancher la création de tenant draft via l'API admin
   - [x] corriger le hero/header tenant-aware Sent Tech et Scalian
+- [x] Réaligner la bibliothèque de templates sur de vraies références BetterCV
+  - [x] supprimer la galerie CSS factice au profit d'aperçus rendus par le moteur DOCX
+  - [x] rendre les variantes réellement distinctes par header, intertitres et blocs d'expérience
+  - [x] générer des preuves locales DOCX/PDF/PNG pour chaque variante
+- [x] Renforcer la signature de composition de deux variantes clés
+  - [x] densifier `professional-compact` avec header compact et sections inline
+  - [x] pousser `executive-modern` vers un hero de page plus premium et centré
+  - [x] régénérer les aperçus réels après cette seconde passe
+- [x] Reprendre la bibliothèque de templates sur des cibles BetterCV crédibles
+  - [x] auditer les familles BetterCV réellement visées pour éviter les labels mensongers
+  - [x] remapper les variantes sur des cibles cohérentes (`Aether`, `Celestial`, `Horizon`, `Solstice`, `Keystone`)
+  - [x] ajouter un rendu `Keystone` distinct avec bandeau fusionné et sidebar
+  - [x] ajouter un rendu `Solstice` centré et plus classique
+  - [x] raccourcir les données d'aperçu pour produire des vignettes mono-page lisibles
+- [x] Corriger la cohérence et l'affichage des aperçus de bibliothèque
+  - [x] remapper un même CV PM plus consistant sur toutes les variantes
+  - [x] recharger les variantes aérées pour éviter les pages 1 à moitié vides
+  - [x] générer des miniatures de galerie dédiées au lieu d'exposer le PNG A4 brut
+  - [x] recadrer les previews sur la zone haute utile de la page 1 pour les cartes UI
+  - [x] adapter l'UI pour afficher des cartes de preview lisibles plutot qu'une page complete miniaturisee
+- [x] Corriger le rendu de polices des aperçus générés dans l'env de dev Docker
+  - [x] embarquer un socle de polices fiable dans l'image API
+  - [x] réaligner les variantes DOCX sur des familles présentes dans le conteneur
+  - [x] regénérer les aperçus via `make` et les revalider visuellement
+- [x] Mener une itération de rendu quasi pixel-perfect sur les variantes compactes
+  - [x] réduire la masse typographique de la sidebar gauche
+  - [x] remplacer les puces Word implicites par des puces contrôlées par le renderer
+  - [x] réintroduire un rythme vertical crédible entre titres, listes et blocs d'expérience
+  - [x] revalider visuellement les aperçus finaux avant commit
+- [x] Durcir la lisibilité de la variante compacte dans la bibliothèque
+  - [x] alléger encore la hiérarchie de la sidebar gauche
+  - [x] élargir légèrement la colonne compacte utile sans casser la colonne principale
+  - [x] resserrer le CV de démonstration pour un aperçu compact crédible
+  - [x] revalider sur les PNG finaux consommés par l'UI
+- [x] Corriger les micro-défauts typographiques restants de la variante compacte
+  - [x] supprimer l'effet de chevauchement perçu dans la sidebar
+  - [x] réaligner les retours à la ligne des puces sur le texte et non sur la puce
+  - [x] revalider les zones exactes remontées en revue visuelle
 - [x] Corriger les bogues découverts dans la seconde vague d'UAT locale
   - [x] reprendre le fond Sent Tech d'origine et rendre le logo lisible
   - [x] supprimer les badges de titre redondants dans le hero
@@ -152,6 +190,10 @@
   - [x] nettoyer le code, les specs et les references DOCX committees
   - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
   - [x] reconstruire un historique local propre a partir d'un arbre nettoye
+- [ ] Engager une boucle quasi pixel-perfect sur une variante pilote
+  - [ ] choisir la cible BetterCV pilote a cloner en priorite
+  - [ ] produire une preuve visuelle cote a cote reference vs rendu
+  - [ ] corriger jusqu'a obtenir une composition defensable page par page
 - [ ] Déployer et valider en environnement réel
 - [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
 - [ ] Démarrer l'implémentation feature complète

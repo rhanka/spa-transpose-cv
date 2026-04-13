@@ -214,9 +214,9 @@
       {#if templateLibrary}
         <div class="mb-6 template-library">
           <div class="mb-3">
-            <h3 class="template-library-title">Galerie de styles inspirés de BetterCV</h3>
+            <h3 class="template-library-title">Bibliothèque BetterCV adaptée au DOCX</h3>
             <p class="template-library-copy">
-              Choix visuel disponible uniquement depuis la page d’origine, sans variante photo ni mise en page fragile.
+              Chaque aperçu provient du moteur DOCX réel, généré sur un même profil de démonstration puis converti en image.
             </p>
           </div>
 
@@ -228,17 +228,23 @@
                 class="template-card"
                 onclick={() => { selectedTemplateVariant = option.id; }}
               >
-                <div class={`template-preview variant-${option.id}`} aria-hidden="true">
-                  <div class="template-preview-banner"></div>
-                  <div class="template-preview-name"></div>
-                  <div class="template-preview-line long"></div>
-                  <div class="template-preview-line medium"></div>
-                  <div class="template-preview-section"></div>
-                  <div class="template-preview-line short"></div>
-                  <div class="template-preview-line medium"></div>
-                </div>
+                {#if option.previewImagePath}
+                  <img
+                    class="template-preview-image"
+                    src={option.previewImagePath}
+                    alt={`Aperçu ${option.referenceLabel ?? option.label}`}
+                  />
+                {:else}
+                  <div class="template-preview-fallback" aria-hidden="true"></div>
+                {/if}
                 <span class="template-card-label">{option.label}</span>
+                {#if option.referenceLabel}
+                  <span class="template-card-reference">{option.referenceLabel}</span>
+                {/if}
                 <span class="template-card-description">{option.description}</span>
+                {#if option.referenceSummary}
+                  <span class="template-card-reference-copy">{option.referenceSummary}</span>
+                {/if}
                 {#if option.recommendedFor}
                   <span class="template-card-hint">{option.recommendedFor}</span>
                 {/if}
@@ -315,8 +321,8 @@
 
   .template-library-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+    gap: 1rem;
   }
 
   .template-card {
@@ -351,114 +357,43 @@
     font-weight: 600;
   }
 
-  .template-preview {
+  .template-card-reference {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-green);
+    text-transform: uppercase;
+  }
+
+  .template-preview-image,
+  .template-preview-fallback {
     width: 100%;
-    min-height: 10.25rem;
-    padding: 0.85rem;
-    border: 1px solid rgba(19, 56, 108, 0.1);
+    height: 24rem;
+    border: 1px solid rgba(19, 56, 108, 0.12);
     border-radius: calc(var(--radius-base) * 0.6);
-    background: #fff;
-    display: grid;
-    gap: 0.42rem;
+    background: #f8fbff;
     overflow: hidden;
   }
 
-  .template-preview-banner,
-  .template-preview-name,
-  .template-preview-section,
-  .template-preview-line {
-    border-radius: 999px;
+  .template-preview-image {
+    display: block;
+    object-fit: cover;
+    object-position: center top;
   }
 
-  .template-preview-banner {
-    width: 44%;
-    height: 0.48rem;
-    background: rgba(19, 56, 108, 0.14);
-  }
-
-  .template-preview-name {
-    width: 68%;
-    height: 0.9rem;
-    background: rgba(19, 56, 108, 0.82);
-  }
-
-  .template-preview-section {
-    width: 36%;
-    height: 0.5rem;
-    background: rgba(17, 196, 212, 0.26);
-    margin-top: 0.15rem;
-  }
-
-  .template-preview-line {
-    height: 0.42rem;
-    background: rgba(16, 33, 50, 0.12);
-  }
-
-  .template-preview-line.long {
-    width: 94%;
-  }
-
-  .template-preview-line.medium {
-    width: 78%;
-  }
-
-  .template-preview-line.short {
-    width: 58%;
-  }
-
-  .variant-ats-core {
-    border-radius: 0.85rem;
-  }
-
-  .variant-ats-core .template-preview-banner {
-    width: 30%;
-    background: rgba(16, 33, 50, 0.12);
-  }
-
-  .variant-ats-core .template-preview-name,
-  .variant-ats-core .template-preview-section {
-    background: rgba(16, 33, 50, 0.82);
-  }
-
-  .variant-ats-core .template-preview-line {
-    background: rgba(16, 33, 50, 0.16);
-  }
-
-  .variant-executive-modern {
-    background: linear-gradient(180deg, rgba(17, 196, 212, 0.08) 0%, #ffffff 42%);
-  }
-
-  .variant-executive-modern .template-preview-banner {
-    width: 52%;
-    height: 0.56rem;
-    background: rgba(17, 196, 212, 0.38);
-  }
-
-  .variant-consulting-classic {
-    border-radius: 0;
-  }
-
-  .variant-consulting-classic .template-preview-banner,
-  .variant-consulting-classic .template-preview-section {
-    border-radius: 0;
-    background: rgba(75, 40, 130, 0.18);
-  }
-
-  .variant-professional-compact {
-    gap: 0.28rem;
-  }
-
-  .variant-professional-compact .template-preview-line {
-    height: 0.34rem;
-  }
-
-  .variant-brand-accent .template-preview-banner,
-  .variant-brand-accent .template-preview-section {
-    background: rgba(96, 187, 155, 0.36);
+  .template-preview-fallback {
+    background:
+      linear-gradient(180deg, rgba(17, 196, 212, 0.08) 0%, rgba(255, 255, 255, 0.96) 100%);
   }
 
   .template-card-description {
     font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--color-purple-light);
+  }
+
+  .template-card-reference-copy {
+    font-size: 0.76rem;
     line-height: 1.45;
     color: var(--color-purple-light);
   }
@@ -470,6 +405,12 @@
     color: var(--color-green);
   }
 
+  @media (max-width: 980px) {
+    .template-library-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
   @media (max-width: 768px) {
     .mode-switch {
       display: flex;
@@ -477,8 +418,9 @@
       border-radius: calc(var(--radius-base) * 0.75);
     }
 
-    .template-library-grid {
-      grid-template-columns: 1fr;
+    .template-preview-image,
+    .template-preview-fallback {
+      height: 20rem;
     }
   }
 </style>

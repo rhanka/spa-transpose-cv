@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CvData } from './cv-agent.js';
+import { getTemplateVariantDefinition } from './template-variant-catalog.js';
 
 export const templateVariantSchema = z.enum([
   'ats-core',
@@ -111,6 +112,37 @@ function toTemplateSections(sectionKeys?: TemplateSectionKey[]) {
   }));
 }
 
+function mergeRecordValues<T extends string | number>(
+  base: Record<string, T>,
+  overrides?: Record<string, T>,
+): Record<string, T> {
+  return {
+    ...base,
+    ...(overrides ?? {}),
+  };
+}
+
+function applyVariantDefinition(contract: TemplateContract, variant: TemplateVariant): TemplateContract {
+  const definition = getTemplateVariantDefinition(variant);
+
+  return templateContractSchema.parse({
+    ...contract,
+    layout: {
+      ...contract.layout,
+      variant,
+    },
+    sections: contract.sections.map((section) => ({
+      ...section,
+      label: definition.sectionLabelOverrides?.[section.key] ?? section.label,
+    })),
+    styleTokens: {
+      colors: mergeRecordValues(contract.styleTokens.colors, definition.styleOverrides.colors),
+      fonts: mergeRecordValues(contract.styleTokens.fonts, definition.styleOverrides.fonts),
+      spacing: mergeRecordValues(contract.styleTokens.spacing, definition.styleOverrides.spacing),
+    },
+  });
+}
+
 export function buildLegacyTemplateContract(options: {
   templateContractVersion: string;
   variant: string;
@@ -194,20 +226,14 @@ export function ensureTemplateContract(options: {
     throw new Error(`Template contract variant mismatch: config=${options.variant}, contract=${contract.layout.variant}`);
   }
 
-  return contract;
+  return applyVariantDefinition(contract, templateVariantSchema.parse(options.variant));
 }
 
 export function cloneTemplateContractWithVariant(
   contract: TemplateContract,
   variant: TemplateVariant,
 ): TemplateContract {
-  return templateContractSchema.parse({
-    ...contract,
-    layout: {
-      ...contract.layout,
-      variant,
-    },
-  });
+  return applyVariantDefinition(contract, variant);
 }
 
 export function getRequiredSectionLabels(contract: TemplateContract): string[] {

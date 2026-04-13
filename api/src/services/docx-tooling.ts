@@ -596,7 +596,7 @@ function normalizeXmlForStyle(xml: string): string {
   return canonicalizeNode(XML_PARSER.parseFromString(xml, 'application/xml').documentElement);
 }
 
-async function renderDocxToPng(docxPath: string, outputDir: string): Promise<{ pdfPath: string; pngPaths: string[] }> {
+export async function renderDocxToPng(docxPath: string, outputDir: string): Promise<{ pdfPath: string; pngPaths: string[] }> {
   await mkdir(outputDir, { recursive: true });
   const libreOfficeProfile = await mkdtemp(join(tmpdir(), 'lo-profile-'));
 

@@ -10,5 +10,6 @@ api/node_modules/
 ui/node_modules/
 .DS_Store
 api/templates/claims/
+api/templates/references/template-previews/
 outputs/doc/cgi_neutral_template_draft.docx
 outputs/doc/cgi_neutral_template_draft.pdf

@@ -16,7 +16,7 @@ import {
   getPrimarySectorSectionLabel,
   validateCvDataAgainstTemplateContract,
 } from './template-contract.js';
-import { buildTemplateDocumentXml, getXmlHeader, updateTemplateHeader } from './template-xml.js';
+import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
 import { unpackDocx, packDocx } from './docx-tools.js';
 
 // SSE emitter type — set by the route handler
@@ -272,12 +272,12 @@ async function buildTemplateDocx(
   }, tenantConfig.templateContract, xmlHeader);
   await writeFile(join(workDir, 'word', 'document.xml'), doc);
 
-  await updateTemplateHeader(join(workDir, 'word', 'header2.xml'), {
+  await writeTemplateHeader(join(workDir, 'word', 'header2.xml'), {
     name: escapeXml(data.name),
     title_line1: escapeXml(data.title_line1),
     title_line2: escapeXml(data.title_line2),
     years: data.years,
-  });
+  }, tenantConfig.templateContract);
 
   // Pack
   const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
