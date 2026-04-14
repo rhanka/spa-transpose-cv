@@ -199,9 +199,12 @@
   - [x] industrialiser ce diff visuel pour un rerun autonome
     - [x] target `make template-pilot-proof`
     - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
+    - [x] respecter l aspect ratio de la reference dans la preuve pilote
+    - [x] supprimer l ecrasement de page et recadrer le candidat sans deformation
   - [x] corriger jusqu'a obtenir une composition defensable page par page
     - [x] rapprocher encore la structure de colonne gauche
     - [x] calmer le volume de contenu affiche sur la page 1 pilote
+    - [x] realigner la palette `Celestial` sur la reference pilote
 - [ ] Déployer et valider en environnement réel
 - [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
 - [ ] Démarrer l'implémentation feature complète

@@ -273,6 +273,50 @@ async function copyPng(inputPath: string, outputPath: string): Promise<void> {
   await execFileAsync('convert', [inputPath, `png:${outputPath}`]);
 }
 
+async function createNorthWestCropPreviewFromPng(
+  inputPath: string,
+  outputPath: string,
+  size: { width: number; height: number },
+): Promise<void> {
+  const workDir = await mkdtemp(join(tmpdir(), 'template-proof-crop-'));
+
+  try {
+    const trimmedPath = join(workDir, 'trimmed.png');
+    await execFileAsync('convert', [
+      inputPath,
+      '-fuzz',
+      '2%',
+      '-trim',
+      '+repage',
+      `png:${trimmedPath}`,
+    ]);
+
+    const sourceSize = await getImageSize(trimmedPath);
+    const targetAspect = size.width / size.height;
+    const sourceAspect = sourceSize.width / sourceSize.height;
+    const cropWidth = sourceAspect > targetAspect
+      ? Math.round(sourceSize.height * targetAspect)
+      : sourceSize.width;
+    const cropHeight = sourceAspect > targetAspect
+      ? sourceSize.height
+      : Math.round(sourceSize.width / targetAspect);
+
+    await execFileAsync('convert', [
+      trimmedPath,
+      '-gravity',
+      'northwest',
+      '-crop',
+      `${cropWidth}x${cropHeight}+0+0`,
+      '+repage',
+      '-resize',
+      `${size.width}x${size.height}`,
+      `png:${outputPath}`,
+    ]);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
+}
+
 async function getImageSize(imagePath: string): Promise<{ width: number; height: number }> {
   const { stdout } = await execFileAsync('identify', ['-format', '%w %h', imagePath]);
   const [width, height] = stdout.trim().split(/\s+/).map((value) => Number.parseInt(value, 10));
@@ -444,7 +488,6 @@ export async function generateTemplatePilotProof(params: {
 
   const referenceImagePath = join(outputDir, 'reference.png');
   const candidateDocxPath = join(outputDir, `${params.variant}.docx`);
-  const candidatePreviewPath = join(outputDir, 'candidate-preview.png');
   const candidateImagePath = join(outputDir, 'candidate.png');
   const diffImagePath = join(outputDir, 'diff.png');
   const sideBySideImagePath = join(outputDir, 'side-by-side.png');
@@ -461,16 +504,14 @@ export async function generateTemplatePilotProof(params: {
     outputDocxPath: candidateDocxPath,
   });
   const render = await renderDocxToPng(candidateDocxPath, outputDir);
-  await createGalleryPreviewImage(render.pdfPath, candidatePreviewPath);
+  const sourceCandidateImage = render.pngPaths[0];
+  if (!sourceCandidateImage) {
+    throw new Error(`Candidate page image not found for ${params.variant}`);
+  }
 
   await copyPng(referenceInputPath, referenceImagePath);
   const referenceSize = await getImageSize(referenceImagePath);
-  await execFileAsync('convert', [
-    candidatePreviewPath,
-    '-resize',
-    `${referenceSize.width}x${referenceSize.height}!`,
-    `png:${candidateImagePath}`,
-  ]);
+  await createNorthWestCropPreviewFromPng(sourceCandidateImage, candidateImagePath, referenceSize);
   await execFileAsync('montage', [
     referenceImagePath,
     candidateImagePath,
