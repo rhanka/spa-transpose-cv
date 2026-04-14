@@ -190,7 +190,7 @@
   - [x] nettoyer le code, les specs et les references DOCX committees
   - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
   - [x] reconstruire un historique local propre a partir d'un arbre nettoye
-- [ ] Engager une boucle quasi pixel-perfect sur une variante pilote
+- [x] Engager une boucle quasi pixel-perfect sur une variante pilote
   - [x] choisir la cible BetterCV pilote a cloner en priorite
     - [x] `professional-compact / Celestial`
   - [x] produire une preuve visuelle cote a cote reference vs rendu
@@ -199,7 +199,7 @@
   - [x] industrialiser ce diff visuel pour un rerun autonome
     - [x] target `make template-pilot-proof`
     - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
-  - [ ] corriger jusqu'a obtenir une composition defensable page par page
+  - [x] corriger jusqu'a obtenir une composition defensable page par page
     - [x] rapprocher encore la structure de colonne gauche
     - [x] calmer le volume de contenu affiche sur la page 1 pilote
 - [ ] Déployer et valider en environnement réel
