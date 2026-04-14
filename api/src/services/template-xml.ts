@@ -745,42 +745,126 @@ function buildTableCell(paragraphs: string[], params: {
   );
 }
 
+function buildCelestialSidebarHeading(text: string, style: ResolvedTemplateStyle): string {
+  return buildHeaderParagraph({
+    text,
+    font: style.bodyFont,
+    color: style.sectionBannerText,
+    size: 14,
+    bold: true,
+    smallCaps: true,
+    before: 70,
+    after: 12,
+    borderBottomColor: style.mutedText,
+  });
+}
+
+function buildCelestialSidebarText(text: string, style: ResolvedTemplateStyle, after = 8): string {
+  return buildHeaderParagraph({
+    text,
+    font: style.bodyFont,
+    color: style.bodyText,
+    size: 12,
+    after,
+  });
+}
+
+function buildCelestialSidebarBullet(text: string, style: ResolvedTemplateStyle): string {
+  const bodyFont = fontRun(style.bodyFont);
+  return (
+    `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
+    `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
+    '<w:tabs><w:tab w:val="left" w:pos="340"/></w:tabs>' +
+    '<w:ind w:left="340" w:hanging="340"/>' +
+    '<w:spacing w:after="10" w:line="210" w:lineRule="auto"/>' +
+    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr>` +
+    '</w:pPr>' +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="10"/><w:szCs w:val="10"/></w:rPr><w:t>•</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
+    '</w:p>'
+  );
+}
+
+function buildCelestialSummary(data: CvData): string {
+  const primarySkills = data.technicalSkills.slice(0, 2).map((skill) => skill.description.replace(/\.$/, ''));
+  const sectorText = data.sectors.slice(0, 2).join(' et ');
+  const opening = `${data.title_line1} avec ${data.years} ans d experience en ${sectorText || 'transformation des organisations'}.`;
+  return [opening, ...primarySkills].join(' ');
+}
+
 function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xmlHeader: string, style: ResolvedTemplateStyle): string {
   const selectedJobs = data.experience.slice(0, 3);
   const additionalJobs = data.experience.slice(3);
   const leftParagraphs: string[] = [];
   const rightParagraphs: string[] = [
-    buildHeaderParagraph({ text: data.name, font: style.headingFont, color: style.bodyText, size: 34, bold: true, after: 40 }),
+    sectionHeader('SUMMARY', style),
     buildHeaderParagraph({
-      text: [data.title_line1, data.title_line2].filter(Boolean).join(' | '),
+      text: buildCelestialSummary(data),
       font: style.bodyFont,
       color: style.mutedText,
-      size: 19,
-      after: 24,
-    }),
-    buildHeaderParagraph({
-      text: data.years ? `${data.years} years of experience` : ' ',
-      font: style.bodyFont,
-      color: style.accentColor,
-      size: 18,
-      smallCaps: true,
-      after: 90,
-      borderBottomColor: style.sectionBannerFill,
+      size: 14,
+      after: 34,
     }),
   ];
 
+  const nameParts = data.name.split(/\s+/).filter(Boolean);
+  const displayNameParts = nameParts.length > 1 ? nameParts : [data.name];
+  displayNameParts.forEach((part, index) => {
+    leftParagraphs.push(buildHeaderParagraph({
+      text: part.toUpperCase(),
+      font: style.headingFont,
+      color: style.bodyText,
+      size: 22,
+      bold: true,
+      after: index === displayNameParts.length - 1 ? 6 : 0,
+    }));
+  });
+
+  const roleText = [data.title_line1, data.title_line2].filter(Boolean).join(' | ');
+  if (roleText) {
+    leftParagraphs.push(buildHeaderParagraph({
+      text: roleText,
+      font: style.bodyFont,
+      color: style.mutedText,
+      size: 12,
+      after: 12,
+    }));
+  }
+
+  leftParagraphs.push(buildCelestialSidebarHeading('DETAILS', style));
+  if (data.years) {
+    leftParagraphs.push(buildCelestialSidebarText(`${data.years} ans d experience`, style));
+  }
+  if (data.languages.length > 0) {
+    leftParagraphs.push(buildCelestialSidebarText(
+      `Langues: ${data.languages.map((language) => `${language.label.replace(/:\s*$/, '')} ${language.level}`).join(' · ')}`,
+      style,
+      14,
+    ));
+  }
+
+  leftParagraphs.push(buildCelestialSidebarHeading('SKILLS', style));
+  data.technicalSkills.slice(0, 5).forEach((skill) => {
+    leftParagraphs.push(buildCelestialSidebarBullet(skill.label.replace(/:\s*$/, ''), style));
+  });
+
   contract.sections.forEach((section) => {
+    if (
+      section.key === 'technicalSkills' ||
+      section.key === 'coreSkills' ||
+      section.key === 'sectorSkills' ||
+      section.key === 'sectorExperience' ||
+      section.key === 'languages'
+    ) {
+      return;
+    }
+
     const rendered = renderSectionParagraphs(section, data, style, selectedJobs, additionalJobs, false);
     if (rendered.length === 0) {
       return;
     }
 
-    if (section.key === 'experience' || section.key === 'selectedExperience' || section.key === 'additionalExperience') {
-      rightParagraphs.push(...rendered);
-      return;
-    }
-
-    leftParagraphs.push(...rendered);
+    rightParagraphs.push(...rendered);
   });
 
   const table = (
@@ -790,16 +874,16 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
     '<w:tblLayout w:type="fixed"/>' +
     '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>' +
     '</w:tblPr>' +
-    '<w:tblGrid><w:gridCol w:w="2950"/><w:gridCol w:w="7150"/></w:tblGrid>' +
+    '<w:tblGrid><w:gridCol w:w="3200"/><w:gridCol w:w="6900"/></w:tblGrid>' +
     '<w:tr>' +
     buildTableCell(leftParagraphs, {
-      width: 2950,
+      width: 3200,
       shadingFill: style.sectionBannerFill,
-      margins: buildCellMargins(240, 210, 220, 260),
+      margins: buildCellMargins(220, 220, 220, 240),
     }) +
     buildTableCell(rightParagraphs, {
-      width: 7150,
-      margins: buildCellMargins(140, 240, 180, 300),
+      width: 6900,
+      margins: buildCellMargins(220, 240, 220, 280),
     }) +
     '</w:tr></w:tbl>'
   );

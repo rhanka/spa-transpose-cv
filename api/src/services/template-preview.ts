@@ -23,6 +23,19 @@ interface PreviewManifestItem {
   previewImagePath: string;
 }
 
+export interface PilotProofResult {
+  variant: TemplateVariant;
+  referenceImagePath: string;
+  candidateImagePath: string;
+  diffImagePath: string;
+  sideBySideImagePath: string;
+  referenceSize: {
+    width: number;
+    height: number;
+  };
+  rmse: string;
+}
+
 function escapeXml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -174,6 +187,74 @@ async function createGalleryPreviewImage(pdfPath: string, outputPath: string): P
   await rename(`${prefix}-1.png`, outputPath);
 }
 
+async function copyPng(inputPath: string, outputPath: string): Promise<void> {
+  await execFileAsync('convert', [inputPath, `png:${outputPath}`]);
+}
+
+async function getImageSize(imagePath: string): Promise<{ width: number; height: number }> {
+  const { stdout } = await execFileAsync('identify', ['-format', '%w %h', imagePath]);
+  const [width, height] = stdout.trim().split(/\s+/).map((value) => Number.parseInt(value, 10));
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    throw new Error(`Unable to read image size for ${imagePath}`);
+  }
+  return { width, height };
+}
+
+async function compareImages(referencePath: string, candidatePath: string, diffPath: string): Promise<string> {
+  try {
+    await execFileAsync('compare', ['-metric', 'RMSE', referencePath, candidatePath, diffPath]);
+    return '0 (0)';
+  } catch (error) {
+    const stderr = error instanceof Error && 'stderr' in error ? String((error as { stderr?: string }).stderr ?? '') : '';
+    if (!existsSync(diffPath)) {
+      throw error;
+    }
+    return stderr.trim() || 'unknown';
+  }
+}
+
+function buildPilotProofHtml(result: PilotProofResult, outputDir: string): string {
+  const relativeReference = escapeHtml(relative(outputDir, result.referenceImagePath));
+  const relativeCandidate = escapeHtml(relative(outputDir, result.candidateImagePath));
+  const relativeDiff = escapeHtml(relative(outputDir, result.diffImagePath));
+  const relativeSideBySide = escapeHtml(relative(outputDir, result.sideBySideImagePath));
+
+  return [
+    '<!doctype html>',
+    '<html lang="fr">',
+    '<head>',
+    '  <meta charset="utf-8" />',
+    '  <title>Pilot visual diff</title>',
+    '  <style>',
+    '    body { font-family: system-ui, sans-serif; margin: 24px; color: #122033; background: #f6f8fb; }',
+    '    h1 { margin-bottom: 8px; }',
+    '    .lead { color: #4d6178; margin-bottom: 24px; }',
+    '    .metrics { background: white; border-radius: 14px; padding: 16px 18px; box-shadow: 0 12px 28px rgba(16, 33, 50, 0.08); margin-bottom: 24px; }',
+    '    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }',
+    '    .card { background: white; border-radius: 18px; padding: 18px; box-shadow: 0 12px 28px rgba(16, 33, 50, 0.08); }',
+    '    .card img { width: 100%; border: 1px solid #d7deea; border-radius: 12px; background: white; }',
+    '    .card h2 { margin: 0 0 12px; font-size: 18px; }',
+    '    @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }',
+    '  </style>',
+    '</head>',
+    '<body>',
+    `  <h1>Preuve pilote ${escapeHtml(result.variant)}</h1>`,
+    '  <p class="lead">Reference locale recadree, rendu DOCX redimensionne a la meme taille, diff heatmap et composite cote a cote.</p>',
+    '  <section class="metrics">',
+    `    <p><strong>RMSE</strong> : ${escapeHtml(result.rmse)}</p>`,
+    `    <p><strong>Taille de reference</strong> : ${result.referenceSize.width} × ${result.referenceSize.height}</p>`,
+    '  </section>',
+    '  <section class="grid">',
+    `    <article class="card"><h2>Reference</h2><img src="${relativeReference}" alt="Reference" /></article>`,
+    `    <article class="card"><h2>Rendu redimensionne</h2><img src="${relativeCandidate}" alt="Rendu" /></article>`,
+    `    <article class="card"><h2>Diff heatmap</h2><img src="${relativeDiff}" alt="Diff heatmap" /></article>`,
+    `    <article class="card"><h2>Cote a cote</h2><img src="${relativeSideBySide}" alt="Cote a cote" /></article>`,
+    '  </section>',
+    '</body>',
+    '</html>',
+  ].join('\n');
+}
+
 function buildProofHtml(items: PreviewManifestItem[], proofDir: string): string {
   const cards = items.map((item) => [
     '<article class="card">',
@@ -257,4 +338,80 @@ export async function generateTemplateVariantPreviews(rootDir = process.cwd()): 
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   await writeFile(join(proofDir, 'index.html'), buildProofHtml(manifest, proofDir), 'utf8');
   return manifestPath;
+}
+
+export async function generateTemplatePilotProof(params: {
+  rootDir?: string;
+  variant: TemplateVariant;
+  referenceImagePath: string;
+  outputDir?: string;
+}): Promise<string> {
+  const rootDir = params.rootDir ?? process.cwd();
+  const apiRoot = resolveApiRoot(rootDir);
+
+  const referenceInputPath = resolve(rootDir, params.referenceImagePath);
+  if (!existsSync(referenceInputPath)) {
+    throw new Error(`Reference image not found: ${referenceInputPath}`);
+  }
+
+  const outputDir = params.outputDir
+    ? resolve(rootDir, params.outputDir)
+    : resolve(rootDir, 'tmp', 'template-pilot-proof', params.variant);
+
+  await mkdir(outputDir, { recursive: true });
+
+  const sourceCandidateImage = join(
+    apiRoot,
+    'templates',
+    'references',
+    'template-previews',
+    'proof',
+    params.variant,
+    'page-1.png',
+  );
+  if (!existsSync(sourceCandidateImage)) {
+    throw new Error(`Candidate preview page not found: ${sourceCandidateImage}`);
+  }
+
+  const referenceImagePath = join(outputDir, 'reference.png');
+  const candidateImagePath = join(outputDir, 'candidate.png');
+  const diffImagePath = join(outputDir, 'diff.png');
+  const sideBySideImagePath = join(outputDir, 'side-by-side.png');
+  const reportJsonPath = join(outputDir, 'report.json');
+  const reportHtmlPath = join(outputDir, 'index.html');
+
+  await copyPng(referenceInputPath, referenceImagePath);
+  const referenceSize = await getImageSize(referenceImagePath);
+  await execFileAsync('convert', [
+    sourceCandidateImage,
+    '-resize',
+    `${referenceSize.width}x${referenceSize.height}!`,
+    `png:${candidateImagePath}`,
+  ]);
+  await execFileAsync('montage', [
+    referenceImagePath,
+    candidateImagePath,
+    '-tile',
+    '2x1',
+    '-geometry',
+    '+24+0',
+    '-background',
+    'white',
+    sideBySideImagePath,
+  ]);
+  const rmse = await compareImages(referenceImagePath, candidateImagePath, diffImagePath);
+
+  const result: PilotProofResult = {
+    variant: params.variant,
+    referenceImagePath,
+    candidateImagePath,
+    diffImagePath,
+    sideBySideImagePath,
+    referenceSize,
+    rmse,
+  };
+
+  await writeFile(reportJsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  await writeFile(reportHtmlPath, buildPilotProofHtml(result, outputDir), 'utf8');
+  return reportJsonPath;
 }

@@ -140,6 +140,15 @@ generate-template-previews: ## Rebuild variant preview DOCX/PDF/PNG assets from 
 	mkdir -p ui/static/template-previews
 	cp api/templates/references/template-previews/assets/*.png ui/static/template-previews/
 
+.PHONY: template-pilot-proof
+template-pilot-proof: ## Build pilot visual proof (VARIANT=professional-compact, REFERENCE_IMAGE=tmp/...png, OUTPUT_DIR=tmp/...)
+	@if [ -z "$(REFERENCE_IMAGE)" ]; then \
+		echo "Error: REFERENCE_IMAGE is required (e.g. make template-pilot-proof VARIANT=professional-compact REFERENCE_IMAGE=tmp/pilot-ref/celestial-reference-page.png)"; \
+		exit 1; \
+	fi
+	@$(MAKE) generate-template-previews
+	cd api && node --import tsx scripts/generate-template-pilot-proof.ts "$(if $(strip $(VARIANT)),$(VARIANT),professional-compact)" "$(REFERENCE_IMAGE)" "$(if $(strip $(OUTPUT_DIR)),$(OUTPUT_DIR),tmp/template-pilot-proof/$(if $(strip $(VARIANT)),$(VARIANT),professional-compact))"
+
 .PHONY: docx-style-diff
 docx-style-diff: ## Compare two DOCX files for style-only differences (SOURCE_DOCX=..., CANDIDATE_DOCX=...)
 	node --experimental-strip-types api/scripts/docx-style-diff.ts "$(SOURCE_DOCX)" "$(CANDIDATE_DOCX)" "$(if $(strip $(OUTPUT_JSON)),$(OUTPUT_JSON),tmp/docs/docx-style-diff/report.json)" "$(if $(strip $(RENDER_DIR)),$(RENDER_DIR),tmp/docs/docx-style-diff)" "$(if $(strip $(DIFF_LIMIT)),$(DIFF_LIMIT),20)"

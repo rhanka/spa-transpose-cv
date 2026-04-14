@@ -191,9 +191,17 @@
   - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
   - [x] reconstruire un historique local propre a partir d'un arbre nettoye
 - [ ] Engager une boucle quasi pixel-perfect sur une variante pilote
-  - [ ] choisir la cible BetterCV pilote a cloner en priorite
-  - [ ] produire une preuve visuelle cote a cote reference vs rendu
+  - [x] choisir la cible BetterCV pilote a cloner en priorite
+    - [x] `professional-compact / Celestial`
+  - [x] produire une preuve visuelle cote a cote reference vs rendu
+    - [x] extraire une reference locale croppee depuis la carte BetterCV
+    - [x] generer un premier cote a cote `reference vs rendu`
+  - [x] industrialiser ce diff visuel pour un rerun autonome
+    - [x] target `make template-pilot-proof`
+    - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
   - [ ] corriger jusqu'a obtenir une composition defensable page par page
+    - [ ] rapprocher encore la structure de colonne gauche
+    - [ ] calmer le volume de contenu affiche sur la page 1 pilote
 - [ ] Déployer et valider en environnement réel
 - [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
 - [ ] Démarrer l'implémentation feature complète
