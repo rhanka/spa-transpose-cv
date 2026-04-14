@@ -203,7 +203,7 @@
     - [x] supprimer l ecrasement de page et recadrer le candidat sans deformation
   - [ ] converger reellement vers un rendu quasi pixel-perfect page 1
     - [x] aligner les masses globales de composition
-    - [ ] aligner la largeur et la densite de la sidebar
+    - [x] aligner la largeur et la densite de la sidebar
     - [ ] aligner la typographie des titres, libelles et corps
     - [ ] aligner les retraits, puces et retours a la ligne
     - [ ] aligner le rythme vertical et l occupation de page

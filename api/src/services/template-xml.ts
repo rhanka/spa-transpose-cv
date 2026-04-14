@@ -750,11 +750,11 @@ function buildCelestialSidebarHeading(text: string, style: ResolvedTemplateStyle
     text,
     font: style.bodyFont,
     color: style.sectionBannerText,
-    size: 16,
+    size: 15,
     bold: true,
     smallCaps: true,
     before: 60,
-    after: 14,
+    after: 12,
     borderBottomColor: style.mutedText,
   });
 }
@@ -764,7 +764,7 @@ function buildCelestialSidebarText(text: string, style: ResolvedTemplateStyle, a
     text,
     font: style.bodyFont,
     color: style.bodyText,
-    size: 13,
+    size: 12,
     after,
   });
 }
@@ -776,11 +776,11 @@ function buildCelestialSidebarBullet(text: string, style: ResolvedTemplateStyle)
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
     '<w:tabs><w:tab w:val="left" w:pos="340"/></w:tabs>' +
     '<w:ind w:left="340" w:hanging="340"/>' +
-    '<w:spacing w:after="12" w:line="220" w:lineRule="auto"/>' +
-    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="13"/><w:szCs w:val="13"/></w:rPr>` +
+    '<w:spacing w:after="10" w:line="205" w:lineRule="auto"/>' +
+    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr>` +
     '</w:pPr>' +
     `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="10"/><w:szCs w:val="10"/></w:rPr><w:t>•</w:t></w:r>` +
-    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="13"/><w:szCs w:val="13"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
     '</w:p>'
   );
 }
@@ -906,7 +906,7 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
       text: part.toUpperCase(),
       font: style.headingFont,
       color: style.bodyText,
-      size: 28,
+      size: 24,
       bold: true,
       after: index === displayNameParts.length - 1 ? 6 : 0,
     }));
@@ -918,8 +918,8 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
       text: roleText,
       font: style.bodyFont,
       color: style.mutedText,
-      size: 14,
-      after: 20,
+      size: 12,
+      after: 18,
     }));
   }
 
@@ -972,15 +972,15 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
     '<w:tblLayout w:type="fixed"/>' +
     '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>' +
     '</w:tblPr>' +
-    '<w:tblGrid><w:gridCol w:w="4700"/><w:gridCol w:w="5400"/></w:tblGrid>' +
+    '<w:tblGrid><w:gridCol w:w="3600"/><w:gridCol w:w="6500"/></w:tblGrid>' +
     '<w:tr><w:trPr><w:trHeight w:val="12800" w:hRule="atLeast"/></w:trPr>' +
     buildTableCell(leftParagraphs, {
-      width: 4700,
+      width: 3600,
       shadingFill: style.sectionBannerFill,
-      margins: buildCellMargins(140, 120, 180, 160),
+      margins: buildCellMargins(140, 120, 180, 140),
     }) +
     buildTableCell(rightParagraphs, {
-      width: 5400,
+      width: 6500,
       margins: buildCellMargins(140, 140, 180, 160),
     }) +
     '</w:tr></w:tbl>'
