@@ -190,7 +190,7 @@
   - [x] nettoyer le code, les specs et les references DOCX committees
   - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
   - [x] reconstruire un historique local propre a partir d'un arbre nettoye
-- [x] Engager une boucle quasi pixel-perfect sur une variante pilote
+- [ ] Engager une boucle quasi pixel-perfect sur une variante pilote
   - [x] choisir la cible BetterCV pilote a cloner en priorite
     - [x] `professional-compact / Celestial`
   - [x] produire une preuve visuelle cote a cote reference vs rendu
@@ -201,10 +201,15 @@
     - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
     - [x] respecter l aspect ratio de la reference dans la preuve pilote
     - [x] supprimer l ecrasement de page et recadrer le candidat sans deformation
-  - [x] corriger jusqu'a obtenir une composition defensable page par page
-    - [x] rapprocher encore la structure de colonne gauche
-    - [x] calmer le volume de contenu affiche sur la page 1 pilote
-    - [x] realigner la palette `Celestial` sur la reference pilote
+  - [ ] converger reellement vers un rendu quasi pixel-perfect page 1
+    - [x] aligner les masses globales de composition
+    - [ ] aligner la largeur et la densite de la sidebar
+    - [ ] aligner la typographie des titres, libelles et corps
+    - [ ] aligner les retraits, puces et retours a la ligne
+    - [ ] aligner le rythme vertical et l occupation de page
+    - [ ] aligner finement la palette et les contrastes
+    - [ ] utiliser un jeu de donnees pilote qui mappe proprement la reference
+    - [ ] definir un seuil de sortie visuelle defendable pour fermer l item
 - [ ] Déployer et valider en environnement réel
 - [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
 - [ ] Démarrer l'implémentation feature complète
