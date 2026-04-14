@@ -328,7 +328,7 @@ function jobCompany(text: string, style: ResolvedTemplateStyle): string {
   const color = style.jobStyle === 'ats-plain' ? style.bodyText : style.accentColor;
   const italic = style.jobStyle === 'classic-consulting';
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 28 : 24;
+  const size = compact ? 20 : 24;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -346,7 +346,7 @@ function jobDescription(text: string, style: ResolvedTemplateStyle): string {
   const isItalic = style.jobStyle === 'classic-consulting';
   const isBold = style.jobStyle === 'modern-emphasis';
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 23 : 22;
+  const size = compact ? 14 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -364,7 +364,7 @@ function jobDates(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const color = style.jobStyle === 'ats-plain' ? style.mutedText : style.accentColor;
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 22 : 20;
+  const size = compact ? 14 : 20;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -382,7 +382,7 @@ function jobTitle(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const color = style.jobStyle === 'classic-consulting' ? style.bodyText : style.accentColor;
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 24 : 22;
+  const size = compact ? 16 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -397,7 +397,7 @@ function jobTitle(text: string, style: ResolvedTemplateStyle): string {
 function labelPara(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 20 : 22;
+  const size = compact ? 14 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -413,8 +413,8 @@ function labelPara(text: string, style: ResolvedTemplateStyle): string {
 function bulletItem(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const compact = style.jobStyle === 'compact-dense';
-  const textSize = compact ? 20 : 22;
-  const bulletSize = compact ? 16 : 18;
+  const textSize = compact ? 14 : 22;
+  const bulletSize = compact ? 10 : 18;
   const compactIndent = 430;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
@@ -423,7 +423,7 @@ function bulletItem(text: string, style: ResolvedTemplateStyle): string {
     (compact
       ? `<w:tabs><w:tab w:val="left" w:pos="${compactIndent}"/></w:tabs><w:ind w:left="${compactIndent}" w:hanging="${compactIndent}" w:right="-57"/>`
       : `<w:ind w:left="520" w:hanging="240" w:right="-57"/>`) +
-    `<w:spacing w:after="${compact ? 28 : 32}" w:line="${compact ? Math.max(210, style.lineTwip - 40) : style.lineTwip}" w:lineRule="auto"/>` +
+    `<w:spacing w:after="${compact ? 18 : 32}" w:line="${compact ? 210 : style.lineTwip}" w:lineRule="auto"/>` +
     `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="${textSize}"/><w:szCs w:val="${textSize}"/></w:rPr>` +
     `</w:pPr>` +
     `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="${bulletSize}"/><w:szCs w:val="${bulletSize}"/></w:rPr><w:t>•</w:t></w:r>` +
@@ -437,8 +437,8 @@ function bulletItem(text: string, style: ResolvedTemplateStyle): string {
 function techEnvPara(label: string, text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const compact = style.jobStyle === 'compact-dense';
-  const labelSize = compact ? 20 : 22;
-  const textSize = compact ? 20 : 22;
+  const labelSize = compact ? 14 : 22;
+  const textSize = compact ? 14 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
