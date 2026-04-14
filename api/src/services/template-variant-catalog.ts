@@ -93,12 +93,12 @@ export const TEMPLATE_VARIANT_DEFINITIONS: Record<TemplateVariant, TemplateVaria
     jobStyle: 'compact-dense',
     styleOverrides: {
       colors: {
-        accent: '#243141',
-        sectionBannerFill: '#EFF3F7',
-        sectionBannerText: '#243141',
-        headingText: '#1B2430',
-        bodyText: '#202834',
-        mutedText: '#5E6B7A',
+        accent: '#6F6B74',
+        sectionBannerFill: '#F2F2F2',
+        sectionBannerText: '#6F6B74',
+        headingText: '#4B5563',
+        bodyText: '#5B6571',
+        mutedText: '#8B97A4',
       },
       fonts: {
         heading: 'Liberation Sans',
