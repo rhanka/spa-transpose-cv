@@ -103,6 +103,72 @@ function buildPreviewCvData(data: CvData, variant: TemplateVariant): CvData {
   };
 }
 
+function buildPilotCvData(variant: TemplateVariant): CvData {
+  if (variant !== 'professional-compact') {
+    return buildPreviewCvData(TEMPLATE_PREVIEW_SAMPLE_DATA, variant);
+  }
+
+  return {
+    name: 'BLACKWELL',
+    title_line1: 'Administrative Assistant',
+    title_line2: '',
+    years: '9',
+    technicalSkills: [
+      { label: 'Analytical Thinking', description: 'Organising calendars, meetings and office routines for leadership teams.' },
+      { label: 'Tolerant & Flexible', description: 'Adapting quickly to shifting priorities and multi-team requests.' },
+      { label: 'Team Leadership', description: 'Supporting assistants and enforcing consistent administrative practices.' },
+      { label: 'Organization & Prioritization', description: 'Managing travel, appointments and document flow with tight deadlines.' },
+      { label: 'Strong Communication', description: 'Preparing reports, correspondence and status material for executives.' },
+      { label: 'Web app development', description: 'Basic tooling literacy for office systems and digital collaboration.' },
+      { label: 'Web security', description: 'Applying disciplined handling of sensitive business information.' },
+    ],
+    sectors: ['administrative support'],
+    domains: ['office coordination'],
+    experience: [
+      {
+        company: 'Redford & Sons, Boston, MA',
+        description: 'Redford & Sons, Boston, MA',
+        dates: 'Sep 2017 — Current',
+        title: 'Administrative Assistant',
+        tasks: [
+          'Scheduled and coordinated meetings, appointments and travel arrangements for supervisors, managers and executives.',
+          'Trained administrative assistants during company expansion to ensure attention to detail and adherence to company policies.',
+          'Prepared reports, presentations and travel material to keep leadership teams aligned.',
+        ],
+        achievements: [],
+        techEnvironment: '',
+      },
+      {
+        company: 'Bright Spot Ltd, Boston',
+        description: 'Bright Spot Ltd, Boston',
+        dates: 'May 2016 — Jul 2017',
+        title: 'Secretary',
+        tasks: [
+          'Typed documents such as correspondence, drafts, memos and emails, and prepared three reports weekly for management.',
+          'Opened, sorted and distributed incoming messages and correspondence to the appropriate person.',
+          'Purchased and maintained office supplies while carefully adhering to budgeting practices.',
+        ],
+        achievements: [],
+        techEnvironment: '',
+      },
+    ],
+    languages: [
+      { label: 'Email:', level: 'kelly.blackwell@example.com' },
+      { label: 'Phone:', level: '(210) 286-1624' },
+      { label: 'Address:', level: '1685 N Commerce Island' },
+      { label: 'Location:', level: 'Pky, Weston, FL 33326, United States' },
+    ],
+    education: [
+      {
+        year: '2004 — 2009',
+        description: 'Bachelor of Arts in Finance | Brown University, Providence, RI',
+      },
+    ],
+    attention_cv:
+      'SUMMARY::Administrative assistant with 9 years of experience in corporate administration and office coordination. Organises presentations, meeting logistics, travel plans and document flow for leadership teams.',
+  };
+}
+
 async function loadDefaultContract(rootDir: string): Promise<TemplateContract> {
   const apiRoot = resolveApiRoot(rootDir);
   const configPath = join(apiRoot, 'templates/tenants/_default/config.json');
@@ -376,30 +442,31 @@ export async function generateTemplatePilotProof(params: {
 
   await mkdir(outputDir, { recursive: true });
 
-  const sourceCandidateImage = join(
-    apiRoot,
-    'templates',
-    'references',
-    'template-previews',
-    'proof',
-    params.variant,
-    'page-1.png',
-  );
-  if (!existsSync(sourceCandidateImage)) {
-    throw new Error(`Candidate preview page not found: ${sourceCandidateImage}`);
-  }
-
   const referenceImagePath = join(outputDir, 'reference.png');
+  const candidateDocxPath = join(outputDir, `${params.variant}.docx`);
+  const candidatePreviewPath = join(outputDir, 'candidate-preview.png');
   const candidateImagePath = join(outputDir, 'candidate.png');
   const diffImagePath = join(outputDir, 'diff.png');
   const sideBySideImagePath = join(outputDir, 'side-by-side.png');
   const reportJsonPath = join(outputDir, 'report.json');
   const reportHtmlPath = join(outputDir, 'index.html');
 
+  const baseContract = await loadDefaultContract(apiRoot);
+  const contract = cloneTemplateContractWithVariant(baseContract, params.variant);
+  await buildVariantDocx({
+    apiRoot,
+    variant: params.variant,
+    contract,
+    data: buildPilotCvData(params.variant),
+    outputDocxPath: candidateDocxPath,
+  });
+  const render = await renderDocxToPng(candidateDocxPath, outputDir);
+  await createGalleryPreviewImage(render.pdfPath, candidatePreviewPath);
+
   await copyPng(referenceInputPath, referenceImagePath);
   const referenceSize = await getImageSize(referenceImagePath);
   await execFileAsync('convert', [
-    sourceCandidateImage,
+    candidatePreviewPath,
     '-resize',
     `${referenceSize.width}x${referenceSize.height}!`,
     `png:${candidateImagePath}`,

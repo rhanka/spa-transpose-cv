@@ -328,7 +328,7 @@ function jobCompany(text: string, style: ResolvedTemplateStyle): string {
   const color = style.jobStyle === 'ats-plain' ? style.bodyText : style.accentColor;
   const italic = style.jobStyle === 'classic-consulting';
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 20 : 24;
+  const size = compact ? 18 : 24;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -346,7 +346,7 @@ function jobDescription(text: string, style: ResolvedTemplateStyle): string {
   const isItalic = style.jobStyle === 'classic-consulting';
   const isBold = style.jobStyle === 'modern-emphasis';
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 14 : 22;
+  const size = compact ? 12 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -364,7 +364,7 @@ function jobDates(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const color = style.jobStyle === 'ats-plain' ? style.mutedText : style.accentColor;
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 14 : 20;
+  const size = compact ? 12 : 20;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -382,7 +382,7 @@ function jobTitle(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const color = style.jobStyle === 'classic-consulting' ? style.bodyText : style.accentColor;
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 16 : 22;
+  const size = compact ? 14 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -397,7 +397,7 @@ function jobTitle(text: string, style: ResolvedTemplateStyle): string {
 function labelPara(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const compact = style.jobStyle === 'compact-dense';
-  const size = compact ? 14 : 22;
+  const size = compact ? 12 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -413,7 +413,7 @@ function labelPara(text: string, style: ResolvedTemplateStyle): string {
 function bulletItem(text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const compact = style.jobStyle === 'compact-dense';
-  const textSize = compact ? 14 : 22;
+  const textSize = compact ? 12 : 22;
   const bulletSize = compact ? 10 : 18;
   const compactIndent = 430;
   return (
@@ -423,7 +423,7 @@ function bulletItem(text: string, style: ResolvedTemplateStyle): string {
     (compact
       ? `<w:tabs><w:tab w:val="left" w:pos="${compactIndent}"/></w:tabs><w:ind w:left="${compactIndent}" w:hanging="${compactIndent}" w:right="-57"/>`
       : `<w:ind w:left="520" w:hanging="240" w:right="-57"/>`) +
-    `<w:spacing w:after="${compact ? 18 : 32}" w:line="${compact ? 210 : style.lineTwip}" w:lineRule="auto"/>` +
+    `<w:spacing w:after="${compact ? 14 : 32}" w:line="${compact ? 190 : style.lineTwip}" w:lineRule="auto"/>` +
     `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="${textSize}"/><w:szCs w:val="${textSize}"/></w:rPr>` +
     `</w:pPr>` +
     `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="${bulletSize}"/><w:szCs w:val="${bulletSize}"/></w:rPr><w:t>•</w:t></w:r>` +
@@ -437,8 +437,8 @@ function bulletItem(text: string, style: ResolvedTemplateStyle): string {
 function techEnvPara(label: string, text: string, style: ResolvedTemplateStyle): string {
   const bodyFont = fontRun(style.bodyFont);
   const compact = style.jobStyle === 'compact-dense';
-  const labelSize = compact ? 14 : 22;
-  const textSize = compact ? 14 : 22;
+  const labelSize = compact ? 12 : 22;
+  const textSize = compact ? 12 : 22;
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
@@ -750,7 +750,7 @@ function buildCelestialSidebarHeading(text: string, style: ResolvedTemplateStyle
     text,
     font: style.bodyFont,
     color: style.sectionBannerText,
-    size: 14,
+    size: 15,
     bold: true,
     smallCaps: true,
     before: 70,
@@ -776,7 +776,7 @@ function buildCelestialSidebarBullet(text: string, style: ResolvedTemplateStyle)
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
     '<w:tabs><w:tab w:val="left" w:pos="340"/></w:tabs>' +
     '<w:ind w:left="340" w:hanging="340"/>' +
-    '<w:spacing w:after="10" w:line="210" w:lineRule="auto"/>' +
+    '<w:spacing w:after="10" w:line="205" w:lineRule="auto"/>' +
     `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr>` +
     '</w:pPr>' +
     `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="10"/><w:szCs w:val="10"/></w:rPr><w:t>•</w:t></w:r>` +
@@ -785,27 +785,119 @@ function buildCelestialSidebarBullet(text: string, style: ResolvedTemplateStyle)
   );
 }
 
+function buildCelestialMainHeading(text: string, style: ResolvedTemplateStyle, before = 90): string {
+  return buildHeaderParagraph({
+    text,
+    font: style.bodyFont,
+    color: style.sectionBannerText,
+    size: 16,
+    bold: true,
+    smallCaps: true,
+    before,
+    after: 18,
+    borderBottomColor: style.sectionBannerFill,
+  });
+}
+
+function buildCelestialRightBullet(text: string, style: ResolvedTemplateStyle): string {
+  const bodyFont = fontRun(style.bodyFont);
+  return (
+    `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
+    `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
+    '<w:tabs><w:tab w:val="left" w:pos="360"/></w:tabs>' +
+    '<w:ind w:left="360" w:hanging="360"/>' +
+    '<w:spacing w:after="12" w:line="205" w:lineRule="auto"/>' +
+    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="13"/><w:szCs w:val="13"/></w:rPr>` +
+    '</w:pPr>' +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="10"/><w:szCs w:val="10"/></w:rPr><w:t>•</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="13"/><w:szCs w:val="13"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
+    '</w:p>'
+  );
+}
+
+function buildCelestialJobEntry(job: CvData['experience'][number], style: ResolvedTemplateStyle): string[] {
+  const companyLine = job.description || job.company;
+  const bullets = [...job.tasks, ...job.achievements].slice(0, 3);
+
+  return [
+    buildHeaderParagraph({
+      text: job.dates,
+      font: style.bodyFont,
+      color: style.mutedText,
+      size: 12,
+      bold: true,
+      after: 8,
+    }),
+    buildHeaderParagraph({
+      text: job.title,
+      font: style.bodyFont,
+      color: style.bodyText,
+      size: 15,
+      bold: true,
+      after: 6,
+    }),
+    buildHeaderParagraph({
+      text: companyLine,
+      font: style.bodyFont,
+      color: style.mutedText,
+      size: 12,
+      after: 14,
+    }),
+    ...bullets.map((bullet) => buildCelestialRightBullet(bullet, style)),
+    buildHeaderParagraph({
+      text: ' ',
+      font: style.bodyFont,
+      color: style.bodyText,
+      size: 1,
+      after: 8,
+    }),
+  ];
+}
+
+function buildCelestialEducationEntry(entry: CvData['education'][number], style: ResolvedTemplateStyle): string[] {
+  const [line1, line2] = entry.description.split(/\s+\|\s+|\n+/);
+  return [
+    buildHeaderParagraph({
+      text: entry.year,
+      font: style.bodyFont,
+      color: style.mutedText,
+      size: 12,
+      bold: true,
+      after: 4,
+    }),
+    buildHeaderParagraph({
+      text: line1 ?? entry.description,
+      font: style.bodyFont,
+      color: style.bodyText,
+      size: 13,
+      bold: true,
+      after: line2 ? 2 : 10,
+    }),
+    ...(line2
+      ? [buildHeaderParagraph({
+          text: line2,
+          font: style.bodyFont,
+          color: style.mutedText,
+          size: 12,
+          after: 10,
+        })]
+      : []),
+  ];
+}
+
 function buildCelestialSummary(data: CvData): string {
-  const primarySkills = data.technicalSkills.slice(0, 2).map((skill) => skill.description.replace(/\.$/, ''));
+  if (data.attention_cv.startsWith('SUMMARY::')) {
+    return data.attention_cv.slice('SUMMARY::'.length).trim();
+  }
+  const primarySkills = data.technicalSkills.slice(0, 1).map((skill) => skill.description.replace(/\.$/, ''));
   const sectorText = data.sectors.slice(0, 2).join(' et ');
   const opening = `${data.title_line1} avec ${data.years} ans d experience en ${sectorText || 'transformation des organisations'}.`;
   return [opening, ...primarySkills].join(' ');
 }
 
 function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xmlHeader: string, style: ResolvedTemplateStyle): string {
-  const selectedJobs = data.experience.slice(0, 3);
-  const additionalJobs = data.experience.slice(3);
   const leftParagraphs: string[] = [];
-  const rightParagraphs: string[] = [
-    sectionHeader('SUMMARY', style),
-    buildHeaderParagraph({
-      text: buildCelestialSummary(data),
-      font: style.bodyFont,
-      color: style.mutedText,
-      size: 14,
-      after: 34,
-    }),
-  ];
+  const rightParagraphs: string[] = [];
 
   const nameParts = data.name.split(/\s+/).filter(Boolean);
   const displayNameParts = nameParts.length > 1 ? nameParts : [data.name];
@@ -814,7 +906,7 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
       text: part.toUpperCase(),
       font: style.headingFont,
       color: style.bodyText,
-      size: 22,
+      size: 24,
       bold: true,
       after: index === displayNameParts.length - 1 ? 6 : 0,
     }));
@@ -827,15 +919,22 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
       font: style.bodyFont,
       color: style.mutedText,
       size: 12,
-      after: 12,
+      after: 18,
     }));
   }
 
   leftParagraphs.push(buildCelestialSidebarHeading('DETAILS', style));
-  if (data.years) {
+  const hasContactLikeDetails =
+    data.languages.length > 0 &&
+    data.languages.every((language) => ['email', 'phone', 'address', 'location', 'city'].includes(language.label.replace(/:\s*$/, '').toLowerCase()));
+  if (data.years && !hasContactLikeDetails) {
     leftParagraphs.push(buildCelestialSidebarText(`${data.years} ans d experience`, style));
   }
-  if (data.languages.length > 0) {
+  if (hasContactLikeDetails) {
+    data.languages.forEach((language) => {
+      leftParagraphs.push(buildCelestialSidebarText(`${language.label.replace(/:\s*$/, '')} ${language.level}`, style, 10));
+    });
+  } else if (data.languages.length > 0) {
     leftParagraphs.push(buildCelestialSidebarText(
       `Langues: ${data.languages.map((language) => `${language.label.replace(/:\s*$/, '')} ${language.level}`).join(' · ')}`,
       style,
@@ -844,28 +943,27 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
   }
 
   leftParagraphs.push(buildCelestialSidebarHeading('SKILLS', style));
-  data.technicalSkills.slice(0, 5).forEach((skill) => {
+  data.technicalSkills.slice(0, 7).forEach((skill) => {
     leftParagraphs.push(buildCelestialSidebarBullet(skill.label.replace(/:\s*$/, ''), style));
   });
 
-  contract.sections.forEach((section) => {
-    if (
-      section.key === 'technicalSkills' ||
-      section.key === 'coreSkills' ||
-      section.key === 'sectorSkills' ||
-      section.key === 'sectorExperience' ||
-      section.key === 'languages'
-    ) {
-      return;
-    }
-
-    const rendered = renderSectionParagraphs(section, data, style, selectedJobs, additionalJobs, false);
-    if (rendered.length === 0) {
-      return;
-    }
-
-    rightParagraphs.push(...rendered);
+  rightParagraphs.push(buildHeaderParagraph({
+    text: buildCelestialSummary(data),
+    font: style.bodyFont,
+    color: style.mutedText,
+    size: 13,
+    after: 34,
+  }));
+  rightParagraphs.push(buildCelestialMainHeading('EXPERIENCE', style, 0));
+  data.experience.slice(0, 2).forEach((job) => {
+    rightParagraphs.push(...buildCelestialJobEntry(job, style));
   });
+  if (data.education.length > 0) {
+    rightParagraphs.push(buildCelestialMainHeading('EDUCATION', style, 60));
+    data.education.slice(0, 1).forEach((entry) => {
+      rightParagraphs.push(...buildCelestialEducationEntry(entry, style));
+    });
+  }
 
   const table = (
     '    <w:tbl>' +
@@ -874,16 +972,16 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
     '<w:tblLayout w:type="fixed"/>' +
     '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>' +
     '</w:tblPr>' +
-    '<w:tblGrid><w:gridCol w:w="3200"/><w:gridCol w:w="6900"/></w:tblGrid>' +
-    '<w:tr>' +
+    '<w:tblGrid><w:gridCol w:w="4400"/><w:gridCol w:w="5700"/></w:tblGrid>' +
+    '<w:tr><w:trPr><w:trHeight w:val="12800" w:hRule="atLeast"/></w:trPr>' +
     buildTableCell(leftParagraphs, {
-      width: 3200,
+      width: 4400,
       shadingFill: style.sectionBannerFill,
-      margins: buildCellMargins(220, 220, 220, 240),
+      margins: buildCellMargins(220, 180, 220, 220),
     }) +
     buildTableCell(rightParagraphs, {
-      width: 6900,
-      margins: buildCellMargins(220, 240, 220, 280),
+      width: 5700,
+      margins: buildCellMargins(220, 220, 220, 220),
     }) +
     '</w:tr></w:tbl>'
   );
