@@ -200,8 +200,8 @@
     - [x] target `make template-pilot-proof`
     - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
   - [ ] corriger jusqu'a obtenir une composition defensable page par page
-    - [ ] rapprocher encore la structure de colonne gauche
-    - [ ] calmer le volume de contenu affiche sur la page 1 pilote
+    - [x] rapprocher encore la structure de colonne gauche
+    - [x] calmer le volume de contenu affiche sur la page 1 pilote
 - [ ] Déployer et valider en environnement réel
 - [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
 - [ ] Démarrer l'implémentation feature complète

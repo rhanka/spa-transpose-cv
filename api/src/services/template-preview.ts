@@ -87,6 +87,22 @@ function escapeCvData(data: CvData): CvData {
   };
 }
 
+function buildPreviewCvData(data: CvData, variant: TemplateVariant): CvData {
+  if (variant !== 'professional-compact') {
+    return data;
+  }
+
+  return {
+    ...data,
+    experience: data.experience.slice(0, 2).map((job, index) => ({
+      ...job,
+      tasks: job.tasks.slice(0, index === 0 ? 3 : 2),
+      achievements: job.achievements.slice(0, 1),
+    })),
+    education: data.education.slice(0, 1),
+  };
+}
+
 async function loadDefaultContract(rootDir: string): Promise<TemplateContract> {
   const apiRoot = resolveApiRoot(rootDir);
   const configPath = join(apiRoot, 'templates/tenants/_default/config.json');
@@ -315,7 +331,7 @@ export async function generateTemplateVariantPreviews(rootDir = process.cwd()): 
       apiRoot,
       variant,
       contract,
-      data: TEMPLATE_PREVIEW_SAMPLE_DATA,
+      data: buildPreviewCvData(TEMPLATE_PREVIEW_SAMPLE_DATA, variant),
       outputDocxPath: docxPath,
     });
 
