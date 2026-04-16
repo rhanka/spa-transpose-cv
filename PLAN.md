@@ -190,6 +190,11 @@
   - [x] nettoyer le code, les specs et les references DOCX committees
   - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
   - [x] reconstruire un historique local propre a partir d'un arbre nettoye
+- [x] Poser une infrastructure de model-skills pour le modèle embarqué de l'app
+  - [x] retrouver la source DOCX issue du helper adapte depuis le skill Claude
+  - [x] reécrire cette skill pour les contraintes `spa-transpose-cv`
+  - [x] ajouter une registry TypeScript de model-skills côté API
+  - [x] exposer une composition de prompt réutilisable pour le futur agent DOCX
 - [ ] Engager une boucle quasi pixel-perfect sur une variante pilote
   - [x] choisir la cible BetterCV pilote a cloner en priorite
     - [x] `professional-compact / Celestial`
