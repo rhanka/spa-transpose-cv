@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import type { CvData } from './cv-agent.js';
 import { renderDocxToPng } from './docx-tooling.js';
 import { packDocx, unpackDocx } from './docx-tools.js';
+import { defaultLatoSource, embedLatoFonts } from './font-embedding.js';
 import { ensureTemplateContract, cloneTemplateContractWithVariant, type TemplateContract, type TemplateVariant } from './template-contract.js';
 import { TEMPLATE_PREVIEW_SAMPLE_DATA, TEMPLATE_VARIANT_DEFINITIONS, getTemplateVariantDefinition } from './template-variant-catalog.js';
 import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
@@ -156,7 +157,7 @@ function buildPilotCvData(variant: TemplateVariant): CvData {
       { label: 'Email:', level: 'kelly.blackwell@example.com' },
       { label: 'Phone:', level: '(210) 286-1624' },
       { label: 'Address:', level: '1685 N Commerce Island' },
-      { label: 'Location:', level: 'Pky, Weston, FL 33326, United States' },
+      { label: 'Location:', level: 'Pkwy, Weston, FL 33326, United States' },
     ],
     education: [
       {
@@ -238,6 +239,12 @@ async function buildVariantDocx(params: {
     if (!packed) {
       throw new Error(packedMessage);
     }
+
+    // Embed the Lato font family so downloaded DOCX renders identically in
+    // MS Word even when the user has not installed Lato locally. Runs after
+    // packDocx (which strips stale fonts from the base template) so we start
+    // from a clean font table.
+    await embedLatoFonts(params.outputDocxPath, defaultLatoSource(params.apiRoot));
   } finally {
     await rm(workDir, { recursive: true, force: true });
   }
@@ -277,36 +284,54 @@ async function createNorthWestCropPreviewFromPng(
   inputPath: string,
   outputPath: string,
   size: { width: number; height: number },
+  flattenColors: string[] = ['#F2F2F2', '#E8ECF1', '#E6E6E6'],
 ): Promise<void> {
   const workDir = await mkdtemp(join(tmpdir(), 'template-proof-crop-'));
 
   try {
-    const trimmedPath = join(workDir, 'trimmed.png');
-    await execFileAsync('convert', [
+    const flattenArgs = flattenColors.flatMap((color) => [
+      '-fuzz',
+      '6%',
+      '-fill',
+      'white',
+      '-opaque',
+      color,
+    ]);
+    const { stdout: bboxInfo } = await execFileAsync('convert', [
       inputPath,
+      ...flattenArgs,
       '-fuzz',
       '2%',
+      '-format',
+      '%@',
       '-trim',
-      '+repage',
-      `png:${trimmedPath}`,
+      'info:',
     ]);
 
-    const sourceSize = await getImageSize(trimmedPath);
+    const match = /(\d+)x(\d+)\+(\d+)\+(\d+)/.exec(bboxInfo.trim());
+    if (!match) {
+      throw new Error(`Unable to parse trim bounding box: ${bboxInfo}`);
+    }
+    const [, wStr, , xStr, yStr] = match;
+    const contentWidth = Number.parseInt(wStr, 10);
+    const contentLeft = Number.parseInt(xStr, 10);
+    const contentTop = Number.parseInt(yStr, 10);
+
+    const sourceSize = await getImageSize(inputPath);
     const targetAspect = size.width / size.height;
-    const sourceAspect = sourceSize.width / sourceSize.height;
-    const cropWidth = sourceAspect > targetAspect
-      ? Math.round(sourceSize.height * targetAspect)
-      : sourceSize.width;
-    const cropHeight = sourceAspect > targetAspect
-      ? sourceSize.height
-      : Math.round(sourceSize.width / targetAspect);
+
+    const maxCropWidth = sourceSize.width - contentLeft;
+    const contentRight = contentLeft + contentWidth;
+    const preferredWidth = Math.max(contentWidth, Math.min(maxCropWidth, Math.round(contentRight * 1.02)));
+    const heightFromWidth = Math.round(preferredWidth / targetAspect);
+    const maxHeightFromTop = sourceSize.height - contentTop;
+    const cropHeight = Math.min(heightFromWidth, maxHeightFromTop);
+    const cropWidth = Math.min(preferredWidth, Math.round(cropHeight * targetAspect));
 
     await execFileAsync('convert', [
-      trimmedPath,
-      '-gravity',
-      'northwest',
+      inputPath,
       '-crop',
-      `${cropWidth}x${cropHeight}+0+0`,
+      `${cropWidth}x${cropHeight}+${contentLeft}+${contentTop}`,
       '+repage',
       '-resize',
       `${size.width}x${size.height}`,

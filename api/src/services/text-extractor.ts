@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { writeFile, unlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { logger } from '../config/logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -41,36 +41,36 @@ async function extractDocx(filePath: string): Promise<string> {
 }
 
 async function extractDoc(filePath: string): Promise<string> {
-  // Convert .doc to .docx first using LibreOffice
-  const tmpDir = '/tmp';
-  const tmpName = `doc_${randomBytes(8).toString('hex')}`;
-  const tmpDoc = join(tmpDir, `${tmpName}.doc`);
+  const workDir = await mkdtemp(join(tmpdir(), 'doc-extract-'));
+  const profileDir = join(workDir, 'profile');
+  const tmpDoc = join(workDir, 'input.doc');
 
-  // Copy to tmp with known name
-  const data = await import('node:fs/promises').then(fs => fs.readFile(filePath));
-  await writeFile(tmpDoc, data);
+  try {
+    const data = await readFile(filePath);
+    await writeFile(tmpDoc, data);
 
-  await execFileAsync('libreoffice', [
-    '--headless', '--convert-to', 'docx', '--outdir', tmpDir, tmpDoc,
-  ], { timeout: 60_000 });
+    await execFileAsync('libreoffice', [
+      `-env:UserInstallation=file://${profileDir}`,
+      '--headless',
+      '--convert-to', 'docx',
+      '--outdir', workDir,
+      tmpDoc,
+    ], { timeout: 60_000 });
 
-  const tmpDocx = join(tmpDir, `${tmpName}.docx`);
-  const text = await extractDocx(tmpDocx);
-
-  // Cleanup
-  await unlink(tmpDoc).catch(() => {});
-  await unlink(tmpDocx).catch(() => {});
-
-  return text;
+    const tmpDocx = join(workDir, 'input.docx');
+    return await extractDocx(tmpDocx);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
+  }
 }
 
 export async function extractTextFromBuffer(data: Buffer, originalName: string): Promise<string> {
-  const tmpDir = '/tmp';
-  const tmpFile = join(tmpDir, `extract_${randomBytes(8).toString('hex')}_${originalName}`);
-  await writeFile(tmpFile, data);
+  const workDir = await mkdtemp(join(tmpdir(), 'extract-'));
+  const tmpFile = join(workDir, originalName);
   try {
+    await writeFile(tmpFile, data);
     return await extractText(tmpFile);
   } finally {
-    await unlink(tmpFile).catch(() => {});
+    await rm(workDir, { recursive: true, force: true });
   }
 }

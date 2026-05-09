@@ -61,8 +61,8 @@ export const TEMPLATE_VARIANT_DEFINITIONS: Record<TemplateVariant, TemplateVaria
         bodyText: '#111827',
       },
       fonts: {
-        heading: 'Liberation Sans',
-        body: 'Liberation Sans',
+        heading: 'Liberation Sans Narrow',
+        body: 'Liberation Sans Narrow',
       },
       spacing: {
         sectionBeforeTwip: 180,
@@ -95,14 +95,14 @@ export const TEMPLATE_VARIANT_DEFINITIONS: Record<TemplateVariant, TemplateVaria
       colors: {
         accent: '#6F6B74',
         sectionBannerFill: '#F2F2F2',
-        sectionBannerText: '#6F6B74',
-        headingText: '#4B5563',
-        bodyText: '#5B6571',
-        mutedText: '#8B97A4',
+        sectionBannerText: '#4B4E55',
+        headingText: '#4B4E55',
+        bodyText: '#4B4E55',
+        mutedText: '#6F6B74',
       },
       fonts: {
-        heading: 'Liberation Sans',
-        body: 'Liberation Sans',
+        heading: 'Lato',
+        body: 'Lato',
       },
       spacing: {
         sectionBeforeTwip: 120,

@@ -17,6 +17,7 @@
   let loading = $state(false);
   let error = $state('');
   let dragOver = $state(false);
+  let previewModal = $state<{ src: string; alt: string } | null>(null);
 
   const currentTenantSlug = $derived($page.params.tenant ?? $tenantSlug);
   const currentTenantName = $derived($tenantConfig?.displayName ?? 'Sent Tech');
@@ -141,7 +142,7 @@
 </section>
 
 <section class="bg-white" style="padding: 3rem 0 5rem; margin-top: -2rem;">
-  <div class="max-w-2xl mx-auto px-4">
+  <div class={`mx-auto px-4 ${templateLibrary ? 'max-w-5xl' : 'max-w-2xl'}`}>
     {#if isDefaultTenant && pageMode === 'builder'}
       <TenantBuilderForm />
     {:else}
@@ -222,33 +223,51 @@
 
           <div class="template-library-grid">
             {#each templateLibrary.options as option}
-              <button
-                type="button"
+              <div
                 class:selected={selectedTemplateVariant === option.id}
                 class="template-card"
-                onclick={() => { selectedTemplateVariant = option.id; }}
               >
-                {#if option.previewImagePath}
-                  <img
-                    class="template-preview-image"
-                    src={option.previewImagePath}
-                    alt={`Aperçu ${option.referenceLabel ?? option.label}`}
-                  />
-                {:else}
-                  <div class="template-preview-fallback" aria-hidden="true"></div>
-                {/if}
-                <span class="template-card-label">{option.label}</span>
-                {#if option.referenceLabel}
-                  <span class="template-card-reference">{option.referenceLabel}</span>
-                {/if}
-                <span class="template-card-description">{option.description}</span>
-                {#if option.referenceSummary}
-                  <span class="template-card-reference-copy">{option.referenceSummary}</span>
-                {/if}
-                {#if option.recommendedFor}
-                  <span class="template-card-hint">{option.recommendedFor}</span>
-                {/if}
-              </button>
+                <button
+                  type="button"
+                  class="template-preview-trigger"
+                  aria-label={`Agrandir l aperçu ${option.referenceLabel ?? option.label}`}
+                  onclick={() => {
+                    if (option.previewImagePath) {
+                      previewModal = {
+                        src: option.previewImagePath,
+                        alt: `Aperçu ${option.referenceLabel ?? option.label}`,
+                      };
+                    }
+                  }}
+                >
+                  {#if option.previewImagePath}
+                    <img
+                      class="template-preview-image"
+                      src={option.previewImagePath}
+                      alt={`Aperçu ${option.referenceLabel ?? option.label}`}
+                    />
+                  {:else}
+                    <div class="template-preview-fallback" aria-hidden="true"></div>
+                  {/if}
+                </button>
+                <button
+                  type="button"
+                  class="template-card-select"
+                  onclick={() => { selectedTemplateVariant = option.id; }}
+                >
+                  <span class="template-card-label">{option.label}</span>
+                  {#if option.referenceLabel}
+                    <span class="template-card-reference">{option.referenceLabel}</span>
+                  {/if}
+                  <span class="template-card-description">{option.description}</span>
+                  {#if option.referenceSummary}
+                    <span class="template-card-reference-copy">{option.referenceSummary}</span>
+                  {/if}
+                  {#if option.recommendedFor}
+                    <span class="template-card-hint">{option.recommendedFor}</span>
+                  {/if}
+                </button>
+              </div>
             {/each}
           </div>
         </div>
@@ -271,6 +290,25 @@
     {/if}
   </div>
 </section>
+
+{#if previewModal}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="preview-modal-backdrop"
+    onclick={() => { previewModal = null; }}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+  >
+    <div class="preview-modal-body" onclick={(e) => e.stopPropagation()}>
+      <button type="button" class="preview-modal-close" aria-label="Fermer l aperçu" onclick={() => { previewModal = null; }}>
+        &#x2715;
+      </button>
+      <img class="preview-modal-image" src={previewModal.src} alt={previewModal.alt} />
+    </div>
+  </div>
+{/if}
 
 <style>
   .mode-switch {
@@ -321,7 +359,7 @@
 
   .template-library-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
     gap: 1rem;
   }
 
@@ -331,14 +369,35 @@
     align-items: flex-start;
     gap: 0.45rem;
     width: 100%;
-    padding: 1rem;
+    padding: 0.85rem;
     border: 1px solid var(--color-purple-border);
     border-radius: calc(var(--radius-base) * 0.75);
     background: rgba(255, 255, 255, 0.92);
     color: var(--color-purple-dark);
-    cursor: pointer;
     transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
     text-align: left;
+  }
+
+  .template-preview-trigger {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+    border-radius: calc(var(--radius-base) * 0.6);
+  }
+
+  .template-card-select {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
   }
 
   .template-card:hover {
@@ -368,17 +427,24 @@
   .template-preview-image,
   .template-preview-fallback {
     width: 100%;
-    height: 24rem;
+    height: 13rem;
     border: 1px solid rgba(19, 56, 108, 0.12);
     border-radius: calc(var(--radius-base) * 0.6);
     background: #f8fbff;
     overflow: hidden;
+    transition: transform 0.18s ease, border-color 0.18s ease;
   }
 
   .template-preview-image {
     display: block;
     object-fit: cover;
     object-position: center top;
+  }
+
+  .template-preview-trigger:hover .template-preview-image,
+  .template-preview-trigger:focus-visible .template-preview-image {
+    transform: scale(1.02);
+    border-color: rgba(17, 196, 212, 0.55);
   }
 
   .template-preview-fallback {
@@ -407,20 +473,71 @@
 
   @media (max-width: 980px) {
     .template-library-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
     }
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 640px) {
     .mode-switch {
       display: flex;
       flex-direction: column;
       border-radius: calc(var(--radius-base) * 0.75);
     }
 
+    .template-library-grid {
+      grid-template-columns: 1fr;
+    }
+
     .template-preview-image,
     .template-preview-fallback {
-      height: 20rem;
+      height: 16rem;
     }
+  }
+
+  .preview-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 16, 32, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    z-index: 60;
+    cursor: zoom-out;
+  }
+
+  .preview-modal-body {
+    position: relative;
+    max-width: min(90vw, 900px);
+    max-height: 92vh;
+    background: white;
+    border-radius: calc(var(--radius-base) * 0.75);
+    overflow: auto;
+    cursor: default;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  }
+
+  .preview-modal-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 92vh;
+    object-fit: contain;
+  }
+
+  .preview-modal-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 2rem;
+    height: 2rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(12, 16, 32, 0.75);
+    color: white;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 1;
   }
 </style>

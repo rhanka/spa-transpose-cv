@@ -750,21 +750,21 @@ function buildCelestialSidebarHeading(text: string, style: ResolvedTemplateStyle
     text,
     font: style.bodyFont,
     color: style.sectionBannerText,
-    size: 15,
+    size: 24,
     bold: true,
     smallCaps: true,
-    before: 60,
-    after: 12,
+    before: 40,
+    after: 6,
     borderBottomColor: style.mutedText,
   });
 }
 
-function buildCelestialSidebarText(text: string, style: ResolvedTemplateStyle, after = 8): string {
+function buildCelestialSidebarText(text: string, style: ResolvedTemplateStyle, after = 4): string {
   return buildHeaderParagraph({
     text,
     font: style.bodyFont,
     color: style.bodyText,
-    size: 12,
+    size: 22,
     after,
   });
 }
@@ -774,27 +774,27 @@ function buildCelestialSidebarBullet(text: string, style: ResolvedTemplateStyle)
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
-    '<w:tabs><w:tab w:val="left" w:pos="340"/></w:tabs>' +
-    '<w:ind w:left="340" w:hanging="340"/>' +
-    '<w:spacing w:after="10" w:line="205" w:lineRule="auto"/>' +
-    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr>` +
+    '<w:tabs><w:tab w:val="left" w:pos="240"/></w:tabs>' +
+    '<w:ind w:left="240" w:hanging="240"/>' +
+    '<w:spacing w:after="4" w:line="240" w:lineRule="auto"/>' +
+    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>` +
     '</w:pPr>' +
-    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="10"/><w:szCs w:val="10"/></w:rPr><w:t>•</w:t></w:r>` +
-    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="12"/><w:szCs w:val="12"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.accentColor}"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>•</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
     '</w:p>'
   );
 }
 
-function buildCelestialMainHeading(text: string, style: ResolvedTemplateStyle, before = 90): string {
+function buildCelestialMainHeading(text: string, style: ResolvedTemplateStyle, before = 80): string {
   return buildHeaderParagraph({
     text,
     font: style.bodyFont,
     color: style.sectionBannerText,
-    size: 18,
+    size: 32,
     bold: true,
     smallCaps: true,
     before,
-    after: 20,
+    after: 10,
     borderBottomColor: style.sectionBannerFill,
   });
 }
@@ -804,13 +804,13 @@ function buildCelestialRightBullet(text: string, style: ResolvedTemplateStyle): 
   return (
     `    <w:p w14:paraId="${pid()}" w14:textId="77777777" ${PR}>` +
     `<w:pPr><w:widowControl w:val="0"/>${BDR}` +
-    '<w:tabs><w:tab w:val="left" w:pos="360"/></w:tabs>' +
-    '<w:ind w:left="360" w:hanging="360"/>' +
-    '<w:spacing w:after="14" w:line="220" w:lineRule="auto"/>' +
-    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
+    '<w:tabs><w:tab w:val="left" w:pos="300"/></w:tabs>' +
+    '<w:ind w:left="300" w:hanging="300"/>' +
+    '<w:spacing w:after="6" w:line="250" w:lineRule="auto"/>' +
+    `<w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>` +
     '</w:pPr>' +
-    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="10"/><w:szCs w:val="10"/></w:rPr><w:t>•</w:t></w:r>` +
-    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t>•</w:t></w:r>` +
+    `<w:r><w:rPr>${bodyFont}<w:color w:val="${style.bodyText}"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:tab/><w:t>${text}</w:t></w:r>` +
     '</w:p>'
   );
 }
@@ -824,24 +824,24 @@ function buildCelestialJobEntry(job: CvData['experience'][number], style: Resolv
       text: job.dates,
       font: style.bodyFont,
       color: style.mutedText,
-      size: 13,
+      size: 22,
       bold: true,
-      after: 8,
+      after: 4,
     }),
     buildHeaderParagraph({
       text: job.title,
       font: style.bodyFont,
       color: style.bodyText,
-      size: 17,
+      size: 28,
       bold: true,
-      after: 6,
+      after: 4,
     }),
     buildHeaderParagraph({
       text: companyLine,
       font: style.bodyFont,
       color: style.mutedText,
-      size: 13,
-      after: 14,
+      size: 22,
+      after: 8,
     }),
     ...bullets.map((bullet) => buildCelestialRightBullet(bullet, style)),
     buildHeaderParagraph({
@@ -849,7 +849,7 @@ function buildCelestialJobEntry(job: CvData['experience'][number], style: Resolv
       font: style.bodyFont,
       color: style.bodyText,
       size: 1,
-      after: 8,
+      after: 6,
     }),
   ];
 }
@@ -861,7 +861,7 @@ function buildCelestialEducationEntry(entry: CvData['education'][number], style:
       text: entry.year,
       font: style.bodyFont,
       color: style.mutedText,
-      size: 13,
+      size: 22,
       bold: true,
       after: 4,
     }),
@@ -869,17 +869,17 @@ function buildCelestialEducationEntry(entry: CvData['education'][number], style:
       text: line1 ?? entry.description,
       font: style.bodyFont,
       color: style.bodyText,
-      size: 14,
+      size: 26,
       bold: true,
-      after: line2 ? 2 : 10,
+      after: line2 ? 4 : 8,
     }),
     ...(line2
       ? [buildHeaderParagraph({
           text: line2,
           font: style.bodyFont,
           color: style.mutedText,
-          size: 13,
-          after: 10,
+          size: 22,
+          after: 8,
         })]
       : []),
   ];
@@ -906,7 +906,7 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
       text: part.toUpperCase(),
       font: style.headingFont,
       color: style.bodyText,
-      size: 24,
+      size: 44,
       bold: true,
       after: index === displayNameParts.length - 1 ? 6 : 0,
     }));
@@ -918,8 +918,8 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
       text: roleText,
       font: style.bodyFont,
       color: style.mutedText,
-      size: 12,
-      after: 18,
+      size: 24,
+      after: 12,
     }));
   }
 
@@ -932,13 +932,13 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
   }
   if (hasContactLikeDetails) {
     data.languages.forEach((language) => {
-      leftParagraphs.push(buildCelestialSidebarText(`${language.label.replace(/:\s*$/, '')} ${language.level}`, style, 10));
+      leftParagraphs.push(buildCelestialSidebarText(language.level, style, 6));
     });
   } else if (data.languages.length > 0) {
     leftParagraphs.push(buildCelestialSidebarText(
       `Langues: ${data.languages.map((language) => `${language.label.replace(/:\s*$/, '')} ${language.level}`).join(' · ')}`,
       style,
-      14,
+      8,
     ));
   }
 
@@ -951,8 +951,8 @@ function buildOrbitLikeDocumentXml(data: CvData, contract: TemplateContract, xml
     text: buildCelestialSummary(data),
     font: style.bodyFont,
     color: style.mutedText,
-    size: 14,
-    after: 36,
+    size: 22,
+    after: 16,
   }));
   rightParagraphs.push(buildCelestialMainHeading('EXPERIENCE', style, 0));
   data.experience.slice(0, 2).forEach((job) => {
