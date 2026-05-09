@@ -1,7 +1,12 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeFile, readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
+
+const execFileAsync = promisify(execFile);
 import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
@@ -18,6 +23,7 @@ import {
 } from './template-contract.js';
 import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
 import { unpackDocx, packDocx } from './docx-tools.js';
+import { defaultLatoSource, embedLatoFonts } from './font-embedding.js';
 
 // SSE emitter type — set by the route handler
 export type SseEmitter = (fileIndex: number, event: SseEvent) => void;
@@ -72,26 +78,27 @@ function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'
  * that WORK EXPERIENCE is NOT on page 1 (= skills/sectors fit on page 1).
  */
 async function validatePage1WithPdf(docxPath: string, tenantConfig: TenantConfig): Promise<string[]> {
-  const { execFile } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execFileAsync = promisify(execFile);
   const errors: string[] = [];
   const experienceSectionLabel = getPrimaryExperienceSectionLabel(tenantConfig.templateContract);
   const sectorSectionLabel = getPrimarySectorSectionLabel(tenantConfig.templateContract);
+  const workDir = await mkdtemp(join(tmpdir(), 'lo-page1-'));
+  const profileDir = join(workDir, 'profile');
 
   try {
-    const pdfDir = '/tmp';
     const baseName = docxPath.split('/').pop()!.replace('.docx', '');
     await execFileAsync('libreoffice', [
-      '--headless', '--convert-to', 'pdf', docxPath, '--outdir', pdfDir,
+      `-env:UserInstallation=file://${profileDir}`,
+      '--headless',
+      '--convert-to', 'pdf',
+      '--outdir', workDir,
+      docxPath,
     ], { timeout: 30_000 });
 
-    const pdfPath = join(pdfDir, `${baseName}.pdf`);
+    const pdfPath = join(workDir, `${baseName}.pdf`);
     const { stdout: page1 } = await execFileAsync('pdftotext', ['-f', '1', '-l', '1', pdfPath, '-'], {
       maxBuffer: 1024 * 1024,
     });
 
-    // Page 1 should contain non-experience sections only.
     if (experienceSectionLabel && page1.toUpperCase().includes(experienceSectionLabel.toUpperCase())) {
       errors.push(`Page 1 overflow: ${experienceSectionLabel} found on page 1 — skills/sectors are too short or page break missing`);
     }
@@ -100,7 +107,11 @@ async function validatePage1WithPdf(docxPath: string, tenantConfig: TenantConfig
       errors.push(`Page 1 overflow: ${sectorSectionLabel} not found on page 1 — skills descriptions are too long`);
     }
   } catch (err) {
-    logger.warn({ docxPath, err: (err as Error).message }, 'PDF validation skipped (LibreOffice error)');
+    const message = (err as Error).message;
+    logger.error({ docxPath, err: message }, 'PDF validation failed (LibreOffice error)');
+    errors.push(`PDF validation failed: ${message}`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
   }
 
   return errors;
@@ -282,6 +293,15 @@ async function buildTemplateDocx(
   // Pack
   const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
   await packDocx(workDir, outputPath, templateDocxPath);
+
+  // Embed the Lato font family so the downloaded DOCX looks identical in MS
+  // Word on a machine where Lato is not installed. packDocx strips any stale
+  // fonts from the base template, so we always start from a clean slate here.
+  try {
+    await embedLatoFonts(outputPath, defaultLatoSource(process.cwd()));
+  } catch (err) {
+    logger.warn({ err }, 'Lato font embedding skipped');
+  }
 }
 
 /**

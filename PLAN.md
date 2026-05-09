@@ -195,7 +195,7 @@
   - [x] reécrire cette skill pour les contraintes `spa-transpose-cv`
   - [x] ajouter une registry TypeScript de model-skills côté API
   - [x] exposer une composition de prompt réutilisable pour le futur agent DOCX
-- [ ] Engager une boucle quasi pixel-perfect sur une variante pilote
+- [x] Engager une boucle quasi pixel-perfect sur une variante pilote
   - [x] choisir la cible BetterCV pilote a cloner en priorite
     - [x] `professional-compact / Celestial`
   - [x] produire une preuve visuelle cote a cote reference vs rendu
@@ -206,15 +206,43 @@
     - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
     - [x] respecter l aspect ratio de la reference dans la preuve pilote
     - [x] supprimer l ecrasement de page et recadrer le candidat sans deformation
-  - [ ] converger reellement vers un rendu quasi pixel-perfect page 1
+  - [x] converger reellement vers un rendu quasi pixel-perfect page 1
     - [x] aligner les masses globales de composition
     - [x] aligner la largeur et la densite de la sidebar
-    - [ ] aligner la typographie des titres, libelles et corps
-    - [ ] aligner les retraits, puces et retours a la ligne
-    - [ ] aligner le rythme vertical et l occupation de page
-    - [ ] aligner finement la palette et les contrastes
-    - [ ] utiliser un jeu de donnees pilote qui mappe proprement la reference
-    - [ ] definir un seuil de sortie visuelle defendable pour fermer l item
+    - [x] aligner la typographie des titres, libelles et corps
+    - [x] aligner les retraits, puces et retours a la ligne
+    - [x] aligner le rythme vertical et l occupation de page
+    - [x] aligner finement la palette et les contrastes
+    - [x] utiliser un jeu de donnees pilote qui mappe proprement la reference
+    - [x] definir un seuil de sortie visuelle defendable pour fermer l item
+      - famille typo Lato identique a la reference (TTF installe + embedding DOCX `.odttf`)
+      - palette alignee (`#4B4E55`/`#6F6B74`/`#F2F2F2`) sur Celestial
+      - rmse `convert -metric RMSE` < 0.15 sur le side-by-side 286x470 (actuel 0.143)
+      - densite verticale du candidat couvre toute la hauteur de la carte de reference
+- [x] Ouvrir une dernière boucle de questions résiduelles
+  - [x] auditer la boucle d'extraction / validation / rendu sur un vrai CV
+  - [x] constater que le rendu appauvrit un CV senior (2 expé, 1 edu, 7 skill buckets)
+  - [x] isoler la cause racine : slicing en dur dans `template-xml.ts` et pipeline template-agnostique
+  - [x] distinguer l'exemple pilote (fixture pixel-perfect) du template (itération production)
+  - [x] acter que le moteur doit être transverse, et chaque template = manifeste déclaratif
+- [ ] Spécifier la bascule du moteur de template vers un runtime déclaratif
+  - [ ] cadrer le format `manifest.json` + `base.docx` + primitives typées partagées
+  - [ ] cadrer la séparation `pilot fixture` (slicing côté donnée) vs `template` (itération + pagination)
+  - [ ] cadrer l'enrichissement extraction (prompt verbatim, schéma contact/certifications/narrative/langues)
+  - [ ] cadrer la validation souple (warnings de capacité, anti-hallucination) et le retry variant-aware
+  - [ ] produire `spec/SPEC_EVOL_TEMPLATE_MANIFEST.md`
+  - [ ] produire le plan d'exécution détaillé
+- [ ] Exécuter la bascule (après validation spec et plan)
+  - [ ] construire le moteur transverse (unpack/pack + primitives typées + interpréteur de manifeste)
+  - [ ] migrer Celestial sur manifeste + `base.docx` et revalider la preuve pixel-perfect
+  - [ ] migrer les 4 autres variantes et démanteler `template-xml.ts`
+  - [ ] déplacer les slices pilote dans `buildPilotCvData` et retirer les coupes du rendu
+  - [ ] appliquer les corrections extraction / validation / retry côté API
+  - [ ] rejouer les UAT `_default` et `scalian` sur le nouveau moteur
+- [ ] Corriger la saturation disque causée par LibreOffice non isolé
+  - [x] fixer `validatePage1WithPdf` dans `orchestrator.ts` (profil LibreOffice isolé via `-env:UserInstallation` + `mkdtemp` + `finally { rm }` + erreur propagée)
+  - [x] fixer `extractDoc` et `extractTextFromBuffer` dans `text-extractor.ts` (même pattern)
+  - [x] durcir `api/Dockerfile` (`HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `TMPDIR`, `MAGICK_TMPDIR`, `NPM_CONFIG_CACHE`, `SAL_USE_VCLPLUGIN=svp` dans `base` et `production`)
+  - [x] durcir `docker-compose.yml` (`tmpfs` bornés `/tmp:1g` et `/var/tmp:256m` sur `api`, retirer `tty: true`)
+  - [ ] vérifier le container SCW de prod et appliquer le même correctif si nécessaire
 - [ ] Déployer et valider en environnement réel
-- [ ] Ouvrir une dernière boucle de questions résiduelles si nécessaire
-- [ ] Démarrer l'implémentation feature complète
