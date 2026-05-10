@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "rulesets": {
+    "default": {
+      "page1": {
+        "experienceSectionMustNotAppearOnPage1": true,
+        "sectorSectionMustAppearOnPage1": true,
+        "matchMode": "case-insensitive-substring"
+      },
+      "header": {
+        "titleLine1MaxChars": 25,
+        "titleLine2MaxChars": 25
+      }
+    }
+  }
+}
