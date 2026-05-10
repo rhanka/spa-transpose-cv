@@ -1,7 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import type { CvData } from './cv-agent.js';
-import type { TemplateContract, TemplateSectionKey } from './template-contract.js';
-import { getTemplateVariantDefinition } from './template-variant-catalog.js';
+import type {
+  TemplateContract,
+  TemplateHeaderStyle,
+  TemplateJobStyle,
+  TemplateSectionKey,
+  TemplateSectionStyle,
+} from './template-contract.js';
 
 function pid(): string {
   const n = Math.floor(Math.random() * (0x4fffffff - 0x40000000 + 1)) + 0x40000000;
@@ -22,9 +27,9 @@ interface ResolvedTemplateStyle {
   sectionBannerText: string;
   bodyText: string;
   mutedText: string;
-  headerStyle: ReturnType<typeof getTemplateVariantDefinition>['headerStyle'];
-  sectionStyle: ReturnType<typeof getTemplateVariantDefinition>['sectionStyle'];
-  jobStyle: ReturnType<typeof getTemplateVariantDefinition>['jobStyle'];
+  headerStyle: TemplateHeaderStyle;
+  sectionStyle: TemplateSectionStyle;
+  jobStyle: TemplateJobStyle;
   sectionBeforeTwip: number;
   sectionAfterTwip: number;
   lineTwip: number;
@@ -85,7 +90,6 @@ function resolveVariantSpacing(contract: TemplateContract) {
 
 function resolveTemplateStyle(contract: TemplateContract): ResolvedTemplateStyle {
   const spacing = resolveVariantSpacing(contract);
-  const definition = getTemplateVariantDefinition(contract.layout.variant);
 
   return {
     headingFont: readTokenString(contract.styleTokens.fonts.heading, 'Cambria'),
@@ -95,9 +99,9 @@ function resolveTemplateStyle(contract: TemplateContract): ResolvedTemplateStyle
     sectionBannerText: normalizeColor(contract.styleTokens.colors.sectionBannerText, '1F2937'),
     bodyText: normalizeColor(contract.styleTokens.colors.bodyText, '000000'),
     mutedText: normalizeColor(contract.styleTokens.colors.mutedText, '5B6470'),
-    headerStyle: definition.headerStyle,
-    sectionStyle: definition.sectionStyle,
-    jobStyle: definition.jobStyle,
+    headerStyle: contract.rendering.headerStyle,
+    sectionStyle: contract.rendering.sectionStyle,
+    jobStyle: contract.rendering.jobStyle,
     sectionBeforeTwip: spacing.sectionBeforeTwip,
     sectionAfterTwip: spacing.sectionAfterTwip,
     lineTwip: spacing.lineTwip,

@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { CvData } from './cv-agent.js';
-import { getTemplateVariantDefinition } from './template-variant-catalog.js';
 
 export const templateVariantSchema = z.enum([
   'ats-core',
@@ -8,6 +7,33 @@ export const templateVariantSchema = z.enum([
   'executive-modern',
   'professional-compact',
   'brand-accent',
+]);
+
+export const templateHeaderStyleSchema = z.enum([
+  'ats-minimal',
+  'simple-clean',
+  'compact-split',
+  'modern-band',
+  'professional-classic',
+  'brand-accent',
+]);
+
+export const templateSectionStyleSchema = z.enum([
+  'rule-caps',
+  'subtle-label',
+  'compact-rule',
+  'filled-bar',
+  'classic-band',
+  'centered-rule',
+  'left-accent',
+]);
+
+export const templateJobStyleSchema = z.enum([
+  'ats-plain',
+  'simple-balanced',
+  'modern-emphasis',
+  'classic-consulting',
+  'compact-dense',
 ]);
 
 export const templateHeaderFieldKeySchema = z.enum([
@@ -30,6 +56,12 @@ export const templateSectionKeySchema = z.enum([
   'education',
   'tools',
 ]);
+
+export const templateRenderingSchema = z.object({
+  headerStyle: templateHeaderStyleSchema,
+  sectionStyle: templateSectionStyleSchema,
+  jobStyle: templateJobStyleSchema,
+}).strict();
 
 export const templateContractSchema = z.object({
   version: z.literal('v1'),
@@ -58,6 +90,7 @@ export const templateContractSchema = z.object({
     fonts: z.record(z.union([z.string().trim().min(1), z.number()])),
     spacing: z.record(z.union([z.string().trim().min(1), z.number()])),
   }),
+  rendering: templateRenderingSchema,
   output: z.object({
     filenamePattern: z.string().trim().min(1),
   }),
@@ -65,7 +98,26 @@ export const templateContractSchema = z.object({
 
 export type TemplateVariant = z.infer<typeof templateVariantSchema>;
 export type TemplateSectionKey = z.infer<typeof templateSectionKeySchema>;
+export type TemplateHeaderStyle = z.infer<typeof templateHeaderStyleSchema>;
+export type TemplateSectionStyle = z.infer<typeof templateSectionStyleSchema>;
+export type TemplateJobStyle = z.infer<typeof templateJobStyleSchema>;
+export type TemplateRendering = z.infer<typeof templateRenderingSchema>;
 export type TemplateContract = z.infer<typeof templateContractSchema>;
+
+/**
+ * Per-variant rendering hints (style + section labels). Built once at tenant
+ * config hydration time and passed through to {@link applyVariantDefinition}
+ * so the runtime never has to reach into a global catalog.
+ */
+export interface VariantRenderingHints {
+  rendering: TemplateRendering;
+  styleOverrides: {
+    colors?: Record<string, string>;
+    fonts?: Record<string, string | number>;
+    spacing?: Record<string, string | number>;
+  };
+  sectionLabelOverrides?: Partial<Record<TemplateSectionKey, string>>;
+}
 
 export const legacyTemplateSeedSchema = z.object({
   headerFields: z.object({
@@ -122,9 +174,19 @@ function mergeRecordValues<T extends string | number>(
   };
 }
 
-function applyVariantDefinition(contract: TemplateContract, variant: TemplateVariant): TemplateContract {
-  const definition = getTemplateVariantDefinition(variant);
-
+/**
+ * Apply per-variant rendering hints (style overrides, section label overrides,
+ * inline rendering kinds) onto a contract. The hints are passed in by the
+ * caller — this function does not look anything up. Pipeline-runtime callers
+ * source the hints from the per-tenant manifest; loaders may source them from
+ * a transitional shim (variant catalog) until tenant configs carry their own
+ * `rendering` blocks on disk.
+ */
+function applyVariantDefinition(
+  contract: TemplateContract,
+  variant: TemplateVariant,
+  hints: VariantRenderingHints,
+): TemplateContract {
   return templateContractSchema.parse({
     ...contract,
     layout: {
@@ -133,13 +195,14 @@ function applyVariantDefinition(contract: TemplateContract, variant: TemplateVar
     },
     sections: contract.sections.map((section) => ({
       ...section,
-      label: definition.sectionLabelOverrides?.[section.key] ?? section.label,
+      label: hints.sectionLabelOverrides?.[section.key] ?? section.label,
     })),
     styleTokens: {
-      colors: mergeRecordValues(contract.styleTokens.colors, definition.styleOverrides.colors),
-      fonts: mergeRecordValues(contract.styleTokens.fonts, definition.styleOverrides.fonts),
-      spacing: mergeRecordValues(contract.styleTokens.spacing, definition.styleOverrides.spacing),
+      colors: mergeRecordValues(contract.styleTokens.colors, hints.styleOverrides.colors),
+      fonts: mergeRecordValues(contract.styleTokens.fonts, hints.styleOverrides.fonts),
+      spacing: mergeRecordValues(contract.styleTokens.spacing, hints.styleOverrides.spacing),
     },
+    rendering: { ...hints.rendering },
   });
 }
 
@@ -148,6 +211,7 @@ export function buildLegacyTemplateContract(options: {
   variant: string;
   theme?: LegacyThemeSeed;
   template?: LegacyTemplateSeed;
+  rendering: TemplateRendering;
 }): TemplateContract {
   const variant = templateVariantSchema.parse(options.variant);
   const template = legacyTemplateSeedSchema.parse(options.template ?? {});
@@ -190,6 +254,7 @@ export function buildLegacyTemplateContract(options: {
         lineTwip: 300,
       },
     },
+    rendering: { ...options.rendering },
     output: {
       filenamePattern: template.outputNaming ?? 'CV_Profile_{name}.docx',
     },
@@ -202,20 +267,29 @@ export function buildLegacyTemplateContract(options: {
   return parsed;
 }
 
+function fillMissingRendering(raw: unknown, fallback: TemplateRendering): unknown {
+  if (raw && typeof raw === 'object' && !('rendering' in (raw as Record<string, unknown>))) {
+    return { ...(raw as Record<string, unknown>), rendering: { ...fallback } };
+  }
+  return raw;
+}
+
 export function ensureTemplateContract(options: {
   templateContractVersion: string;
   variant: string;
   theme?: LegacyThemeSeed;
   template?: LegacyTemplateSeed;
   templateContract?: unknown;
+  variantHints: VariantRenderingHints;
 }): TemplateContract {
   const contract = options.templateContract
-    ? templateContractSchema.parse(options.templateContract)
+    ? templateContractSchema.parse(fillMissingRendering(options.templateContract, options.variantHints.rendering))
     : buildLegacyTemplateContract({
       templateContractVersion: options.templateContractVersion,
       variant: options.variant,
       theme: options.theme,
       template: options.template,
+      rendering: options.variantHints.rendering,
     });
 
   if (contract.version !== options.templateContractVersion) {
@@ -226,14 +300,15 @@ export function ensureTemplateContract(options: {
     throw new Error(`Template contract variant mismatch: config=${options.variant}, contract=${contract.layout.variant}`);
   }
 
-  return applyVariantDefinition(contract, templateVariantSchema.parse(options.variant));
+  return applyVariantDefinition(contract, templateVariantSchema.parse(options.variant), options.variantHints);
 }
 
 export function cloneTemplateContractWithVariant(
   contract: TemplateContract,
   variant: TemplateVariant,
+  hints: VariantRenderingHints,
 ): TemplateContract {
-  return applyVariantDefinition(contract, variant);
+  return applyVariantDefinition(contract, variant, hints);
 }
 
 export function getRequiredSectionLabels(contract: TemplateContract): string[] {
