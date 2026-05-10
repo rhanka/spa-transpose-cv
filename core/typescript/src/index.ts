@@ -92,6 +92,9 @@ export * from './template/render.js';
 // and by language ports (P1.4 / P1.5) that need the same conversion.
 export { manifestToContract } from './template/bridge.js';
 
+// Transpose pipeline (Task 21) — the keystone Contract 1 entry point.
+export { transpose } from './transpose.js';
+
 // Logger (Task 14)
 export { defaultLogger } from './util/log.js';
 export type { CoreLogger } from './util/log.js';
