@@ -13,14 +13,17 @@ import { extractTextFromBuffer } from './text-extractor.js';
 import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
 import { getActiveProvider, getProviderConfig } from './llm/index.js';
 import { validateDocxBuffer } from './docx-reader.js';
+import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 import {
-  sectionHeader, workSectionHeader, skillBullet, sectorCategory, sectorItem,
-  emptyPara, jobEntry, educationLine, assembleDocument, getXmlHeader, updateHeader,
-} from './scalian-xml.js';
+  cloneTemplateContractWithVariant,
+  deriveOutputNameFromTemplateContract,
+  getPrimaryExperienceSectionLabel,
+  getPrimarySectorSectionLabel,
+  validateCvDataAgainstTemplateContract,
+} from './template-contract.js';
+import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
 import { unpackDocx, packDocx } from './docx-tools.js';
-
-const TEMPLATE_DIR = join(process.cwd(), 'templates');
-const TEMPLATE_DOCX = join(TEMPLATE_DIR, 'Scalian_Template.docx');
+import { defaultLatoSource, embedLatoFonts } from './font-embedding.js';
 
 // SSE emitter type — set by the route handler
 export type SseEmitter = (fileIndex: number, event: SseEvent) => void;
@@ -37,18 +40,47 @@ export interface SseEvent {
   tokenInfo?: string;
 }
 
+function resolveRuntimeTenantConfig(
+  tenantConfig: TenantConfig,
+  meta: Pick<SessionMeta, 'templateVariant'>,
+): TenantConfig {
+  const allowedVariants = new Set([
+    tenantConfig.variant,
+    ...(tenantConfig.templateLibrary?.options.map((option) => option.id) ?? []),
+  ]);
+  const selectedVariant = meta.templateVariant && allowedVariants.has(meta.templateVariant)
+    ? meta.templateVariant
+    : tenantConfig.templateLibrary?.defaultVariant ?? tenantConfig.variant;
+
+  if (selectedVariant === tenantConfig.variant) {
+    return tenantConfig;
+  }
+
+  return {
+    ...tenantConfig,
+    variant: selectedVariant,
+    templateContract: cloneTemplateContractWithVariant(tenantConfig.templateContract, selectedVariant),
+  };
+}
+
+function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'>): string {
+  const promptParts = [meta.prompt.trim()];
+  if (meta.targetCompany) {
+    promptParts.push(
+      `TARGET COMPANY CONTEXT: tailor the emphasis for ${meta.targetCompany} without inventing facts and without altering dates, employers, certifications, or responsibilities.`,
+    );
+  }
+  return promptParts.filter(Boolean).join('\n\n');
+}
+
 /**
  * Convert DOCX to PDF via LibreOffice, extract page 1 text, verify
  * that WORK EXPERIENCE is NOT on page 1 (= skills/sectors fit on page 1).
- *
- * Saturation-safe: isolated LibreOffice profile under a mkdtemp workdir,
- * always cleaned up via finally{rm}, errors propagated as structured
- * validation findings rather than swallowed. A previous version of this
- * function caused the container writable layer to drift to 414 GB by
- * leaving zombie LO profiles in /root/.config/libreoffice.
  */
-async function validatePage1WithPdf(docxPath: string): Promise<string[]> {
+async function validatePage1WithPdf(docxPath: string, tenantConfig: TenantConfig): Promise<string[]> {
   const errors: string[] = [];
+  const experienceSectionLabel = getPrimaryExperienceSectionLabel(tenantConfig.templateContract);
+  const sectorSectionLabel = getPrimarySectorSectionLabel(tenantConfig.templateContract);
   const workDir = await mkdtemp(join(tmpdir(), 'lo-page1-'));
   const profileDir = join(workDir, 'profile');
 
@@ -67,14 +99,12 @@ async function validatePage1WithPdf(docxPath: string): Promise<string[]> {
       maxBuffer: 1024 * 1024,
     });
 
-    // Page 1 should contain skills and sectors only. WORK EXPERIENCE should start on page 2+.
-    if (page1.includes('WORK EXPERIENCE')) {
-      errors.push('Page 1 overflow: WORK EXPERIENCE found on page 1 — skills/sectors are too short or page break missing');
+    if (experienceSectionLabel && page1.toUpperCase().includes(experienceSectionLabel.toUpperCase())) {
+      errors.push(`Page 1 overflow: ${experienceSectionLabel} found on page 1 — skills/sectors are too short or page break missing`);
     }
 
-    // Check that SECTOR-SPECIFIC SKILLS is on page 1
-    if (!page1.includes('SECTOR')) {
-      errors.push('Page 1 overflow: SECTOR-SPECIFIC SKILLS not found on page 1 — skills descriptions are too long');
+    if (sectorSectionLabel && !page1.toUpperCase().includes(sectorSectionLabel.toUpperCase())) {
+      errors.push(`Page 1 overflow: ${sectorSectionLabel} not found on page 1 — skills descriptions are too long`);
     }
   } catch (err) {
     const message = (err as Error).message;
@@ -105,22 +135,6 @@ function escapeXml(text: string): string {
     .replace(/œ/g, '&#x0153;');
 }
 
-/**
- * Derive output filename per CLAUDE.md conventions:
- * - Anonymized (source has _XXXXX pattern): Scalian_Profile_Candidate_XXXXX_EN.docx
- * - Nominative: Scalian_Profile_{FirstName}_EN.docx
- */
-function deriveOutputName(originalName: string, cvName: string): string {
-  // Check if source is anonymized (SCALO pattern with numeric ID)
-  const idMatch = originalName.match(/_(\d{4,})[\s.]/);
-  if (idMatch) {
-    return `Scalian_Profile_Candidate_${idMatch[1]}_EN.docx`;
-  }
-  // Nominative: use first name (first word of the name)
-  const firstName = cvName.split(/\s+/)[0].replace(/[^a-zA-Z]/g, '');
-  return `Scalian_Profile_${firstName}_EN.docx`;
-}
-
 async function processOneCV(
   sessionId: string,
   fileIndex: number,
@@ -130,6 +144,7 @@ async function processOneCV(
   encryptedName: string,
   emitSse?: SseEmitter,
   providerId?: string,
+  tenantConfig?: TenantConfig,
 ): Promise<{ cvData: CvData; outputName: string; sourceText: string; usage: TokenUsage } | null> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const startTime = Date.now();
@@ -167,18 +182,23 @@ async function processOneCV(
 
     // 3. Build DOCX
     emitSse?.(fileIndex, { phase: 'building_docx', elapsed_ms: Date.now() - startTime });
-    const outputName = deriveOutputName(originalName, cvData.name);
-    await buildScalianDocx(cvData, sessionDir, fileIndex);
+    const activeTenantConfig = tenantConfig ?? await getTenantConfig({
+      explicitSlug: DEFAULT_TENANT_SLUG,
+    });
+    const templateDocxPath = await getTenantTemplatePath(activeTenantConfig);
+    const outputName = deriveOutputNameFromTemplateContract(activeTenantConfig.templateContract, originalName, cvData.name);
+    await buildTemplateDocx(cvData, activeTenantConfig, sessionDir, fileIndex, templateDocxPath);
 
     // 4. Validate DOCX (agent auto-relecture)
     emitSse?.(fileIndex, { phase: 'validating', elapsed_ms: Date.now() - startTime });
     const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
     const outputData = await readFile(outputPath);
-    const validation = await validateDocxBuffer(outputData);
+    const headerErrors = validateCvDataAgainstTemplateContract(cvData, activeTenantConfig.templateContract);
+    const validation = await validateDocxBuffer(outputData, activeTenantConfig.templateContract);
 
     // 4b. PDF validation: check page 1 doesn't overflow
-    const pdfErrors = await validatePage1WithPdf(outputPath);
-    const allErrors = [...validation.errors, ...pdfErrors];
+    const pdfErrors = await validatePage1WithPdf(outputPath, activeTenantConfig);
+    const allErrors = [...headerErrors, ...validation.errors, ...pdfErrors];
 
     if (allErrors.length > 0) {
       logger.warn({ sessionId, file: originalName, errors: allErrors }, 'DOCX validation failed');
@@ -192,7 +212,7 @@ async function processOneCV(
       );
       agentUsage.input_tokens += retryUsage.input_tokens;
       agentUsage.output_tokens += retryUsage.output_tokens;
-      await buildScalianDocx(retryData, sessionDir, fileIndex);
+      await buildTemplateDocx(retryData, activeTenantConfig, sessionDir, fileIndex, templateDocxPath);
     }
 
     // 5. Encrypt output
@@ -219,81 +239,69 @@ async function processOneCV(
   }
 }
 
-async function buildScalianDocx(
+async function buildTemplateDocx(
   data: CvData,
+  tenantConfig: TenantConfig,
   sessionDir: string,
   fileIndex: number,
+  templateDocxPath: string,
 ): Promise<void> {
   const workDir = join(sessionDir, 'tmp', `work_${fileIndex}`);
-  await unpackDocx(TEMPLATE_DOCX, workDir);
+  await unpackDocx(templateDocxPath, workDir);
 
-  const P: string[] = [];
-
-  // Technical Skills
-  P.push(sectionHeader('Technical SKILLS'));
-  for (const skill of data.technicalSkills.slice(0, 7)) {
-    P.push(skillBullet(escapeXml(skill.label), escapeXml(skill.description)));
-  }
-
-  // Sector-Specific Skills
-  P.push(sectionHeader('SECTOR-SPECIFIC SKILLS'));
-  if (data.sectors.length > 0) {
-    P.push(sectorCategory('Sectors'));
-    data.sectors.forEach((s, i) => {
-      P.push(sectorItem(escapeXml(s), i === data.sectors.length - 1 && data.domains.length === 0));
-    });
-  }
-  if (data.domains.length > 0) {
-    P.push(sectorCategory('Domains'));
-    data.domains.forEach((d, i) => {
-      P.push(sectorItem(escapeXml(d), i === data.domains.length - 1));
-    });
-  }
-
-  // Work Experience
-  P.push(workSectionHeader('WORK EXPERIENCE'));
-  P.push(emptyPara());
-  for (const job of data.experience) {
-    P.push(...jobEntry({
+  // Assemble document.xml
+  const xmlHeader = await getXmlHeader(join(workDir, 'word', 'document.xml'));
+  const doc = buildTemplateDocumentXml({
+    ...data,
+    name: escapeXml(data.name),
+    title_line1: escapeXml(data.title_line1),
+    title_line2: escapeXml(data.title_line2),
+    technicalSkills: data.technicalSkills.map((skill) => ({
+      label: escapeXml(skill.label),
+      description: escapeXml(skill.description),
+    })),
+    sectors: data.sectors.map((sector) => escapeXml(sector)),
+    domains: data.domains.map((domain) => escapeXml(domain)),
+    experience: data.experience.map((job) => ({
+      ...job,
       company: escapeXml(job.company),
       description: escapeXml(job.description),
       dates: escapeXml(job.dates),
       title: escapeXml(job.title),
-      tasks: job.tasks.map(t => escapeXml(t)),
-      achievements: job.achievements.map(a => escapeXml(a)),
+      tasks: job.tasks.map((task) => escapeXml(task)),
+      achievements: job.achievements.map((achievement) => escapeXml(achievement)),
       techEnvironment: escapeXml(job.techEnvironment),
-    }));
-  }
-
-  // Languages
-  P.push(sectionHeader('LANGUAGES SKILLS'));
-  for (const lang of data.languages) {
-    P.push(skillBullet(escapeXml(lang.label), escapeXml(lang.level)));
-  }
-
-  // Education
-  P.push(sectionHeader('EDUCATION/CERTIFICATION'));
-  for (const edu of data.education) {
-    P.push(educationLine(escapeXml(edu.year), escapeXml(edu.description)));
-  }
-
-  // Assemble document.xml
-  const xmlHeader = await getXmlHeader(join(workDir, 'word', 'document.xml'));
-  const doc = assembleDocument(P, xmlHeader);
+    })),
+    languages: data.languages.map((language) => ({
+      label: escapeXml(language.label),
+      level: escapeXml(language.level),
+    })),
+    education: data.education.map((entry) => ({
+      year: escapeXml(entry.year),
+      description: escapeXml(entry.description),
+    })),
+  }, tenantConfig.templateContract, xmlHeader);
   await writeFile(join(workDir, 'word', 'document.xml'), doc);
 
-  // Update header — field names per CLAUDE.md
-  await updateHeader(
-    join(workDir, 'word', 'header2.xml'),
-    escapeXml(data.name),
-    escapeXml(data.title_line1),
-    escapeXml(data.title_line2),
-    data.years,
-  );
+  await writeTemplateHeader(join(workDir, 'word', 'header2.xml'), {
+    name: escapeXml(data.name),
+    title_line1: escapeXml(data.title_line1),
+    title_line2: escapeXml(data.title_line2),
+    years: data.years,
+  }, tenantConfig.templateContract);
 
   // Pack
   const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
-  await packDocx(workDir, outputPath, TEMPLATE_DOCX);
+  await packDocx(workDir, outputPath, templateDocxPath);
+
+  // Embed the Lato font family so the downloaded DOCX looks identical in MS
+  // Word on a machine where Lato is not installed. packDocx strips any stale
+  // fonts from the base template, so we always start from a clean slate here.
+  try {
+    await embedLatoFonts(outputPath, defaultLatoSource(process.cwd()));
+  } catch (err) {
+    logger.warn({ err }, 'Lato font embedding skipped');
+  }
 }
 
 /**
@@ -303,6 +311,7 @@ async function conductorValidate(
   sessionId: string,
   fileIndex: number,
   sessionKey: Buffer,
+  tenantConfig: TenantConfig,
   originalName: string,
   outputName: string,
   sourceText: string,
@@ -320,15 +329,13 @@ async function conductorValidate(
     const outputText = await extractTextFromDocxBuffer(docxData);
 
     // Structural validation
-    const validation = await validateDocxBuffer(docxData);
+    const validation = await validateDocxBuffer(docxData, tenantConfig.templateContract);
     const structErrors = validation.valid ? [] : validation.errors;
 
     // QA analyst call for translation quality (uses active LLM provider)
     emitSse?.(fileIndex, { phase: 'validating', thinking_delta: 'Conductor: analyse qualité traduction...', elapsed_ms: 0 });
 
-    const provider = await getActiveProvider(providerId);
-    const qaResult = await provider.generate({
-      system: `You are a QA analyst checking the transposition quality of a CV into Scalian format.
+    const qaSystemPrompt = `You are a QA analyst checking the transposition quality of a CV into the target consulting template.
 
 Do NOT comment on the CV content (career, skills, relevance).
 ONLY check fidelity and conformity of the transposition.
@@ -351,8 +358,13 @@ Acceptable restructuring (combining roles, inferring achievements from task desc
 
 If no significant issue: — RAS
 
-Each bullet: 1 short sentence, max 10 words. Markdown.`,
-      userMessage: `${extraInstruction ? extraInstruction + '\n\n' : ''}SOURCE FILE: ${originalName}\n\nSOURCE TEXT:\n${sourceText}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`,
+Each bullet: 1 short sentence, max 10 words. Markdown.`;
+    const qaUserPrompt = `${extraInstruction ? extraInstruction + '\n\n' : ''}SOURCE FILE: ${originalName}\n\nSOURCE TEXT:\n${sourceText}\n\n---\n\nGENERATED OUTPUT TEXT:\n${outputText}${structErrors.length > 0 ? `\n\nSTRUCTURAL VALIDATION ERRORS: ${structErrors.join('; ')}` : ''}`;
+
+    const provider = await getActiveProvider(providerId);
+    const qaResult = await provider.generate({
+      system: qaSystemPrompt,
+      userMessage: qaUserPrompt,
       maxTokens: 1024,
       enableReasoning: false,
     });
@@ -373,6 +385,12 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
   const sessionKey = getSessionKey(sessionId);
   if (!sessionKey) throw new Error(`No key in cache for session ${sessionId}`);
 
+  const tenantConfig = resolveRuntimeTenantConfig(
+    await getTenantConfig({ explicitSlug: meta.tenant }),
+    meta,
+  );
+  const effectivePrompt = buildEffectivePrompt(meta);
+
   const concurrency = env.MAX_CONCURRENT_AGENTS;
   let running = 0;
   const queue: (() => void)[] = [];
@@ -387,7 +405,13 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
   }
 
   const sessionProvider = meta.provider;
-  logger.info({ sessionId, fileCount: meta.files.length, concurrency, provider: sessionProvider || env.LLM_PROVIDER }, 'Launching parallel CV processing');
+  logger.info({
+    sessionId,
+    tenant: tenantConfig.slug,
+    fileCount: meta.files.length,
+    concurrency,
+    provider: sessionProvider || env.LLM_PROVIDER,
+  }, 'Launching parallel CV processing');
 
   // Results for batch summary
   const results: { originalName: string; outputName: string; attention_cv: string; attention_trad: string; tokenInfo?: string }[] = [];
@@ -397,12 +421,33 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
     try {
       const f = meta.files[idx];
       logger.info({ sessionId, fileIndex: idx, file: f.originalName }, 'Processing CV');
-      let result = await processOneCV(sessionId, idx, sessionKey, meta.prompt, f.originalName, f.encryptedName, emitSse, sessionProvider);
+      let result = await processOneCV(
+        sessionId,
+        idx,
+        sessionKey,
+        effectivePrompt,
+        f.originalName,
+        f.encryptedName,
+        emitSse,
+        sessionProvider,
+        tenantConfig,
+      );
 
       if (result) {
         // Conductor validation
         let totalUsage = { ...result.usage };
-        let qaResult = await conductorValidate(sessionId, idx, sessionKey, f.originalName, result.outputName, result.sourceText, emitSse, undefined, sessionProvider);
+        let qaResult = await conductorValidate(
+          sessionId,
+          idx,
+          sessionKey,
+          tenantConfig,
+          f.originalName,
+          result.outputName,
+          result.sourceText,
+          emitSse,
+          undefined,
+          sessionProvider,
+        );
         totalUsage.input_tokens += qaResult.usage.input_tokens;
         totalUsage.output_tokens += qaResult.usage.output_tokens;
         let attention_trad = qaResult.text;
@@ -412,13 +457,13 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
           logger.info({ sessionId, file: f.originalName, feedback: attention_trad }, 'Conductor found errors, relaunching agent');
           emitSse?.(idx, { phase: 'validating', thinking_delta: `Conductor: errors detected, retrying...` });
           const retryResult = await processOneCV(sessionId, idx, sessionKey,
-            `${meta.prompt}\n\nCONDUCTOR QA FEEDBACK — fix these errors:\n${attention_trad}`,
-            f.originalName, f.encryptedName, emitSse, sessionProvider);
+            `${effectivePrompt}\n\nCONDUCTOR QA FEEDBACK — fix these errors:\n${attention_trad}`,
+            f.originalName, f.encryptedName, emitSse, sessionProvider, tenantConfig);
           if (retryResult) {
             totalUsage.input_tokens += retryResult.usage.input_tokens;
             totalUsage.output_tokens += retryResult.usage.output_tokens;
             const qa2 = await conductorValidate(
-              sessionId, idx, sessionKey, f.originalName, retryResult.outputName, retryResult.sourceText, emitSse,
+              sessionId, idx, sessionKey, tenantConfig, f.originalName, retryResult.outputName, retryResult.sourceText, emitSse,
               `This is a SECOND review after a fix attempt. Your previous review may have had false positives (e.g., a tech appearing in skill syntheses sourced from another role). Be MORE LENIENT: only flag issues you are CERTAIN about. If fixed, return "— RAS".`,
               sessionProvider,
             );

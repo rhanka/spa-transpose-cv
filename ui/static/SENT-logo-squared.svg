@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+  width="229.49001"
+  height="229.49039"
+  viewBox="0 0 229.49001 229.49039"
+  version="1.1"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:svg="http://www.w3.org/2000/svg"
+>
+  <title>SENT — Services et Expertise en Numerique et Technologies</title>
+  <desc>Logo vectoriel minimaliste pour SENT</desc>
+  <g>
+    <rect x="0" y="0" width="63.859509" height="63.859509" rx="9.8245401" fill="#133D5E" />
+    <rect x="82.666176" y="0" width="63.859509" height="63.859509" rx="31.929754" fill="#133D5E" opacity="0.6" />
+    <rect x="82.666176" y="165.63087" width="63.859509" height="63.859509" rx="31.929754" fill="#133D5E" opacity="0.6" />
+    <rect x="0" y="81.153633" width="63.859509" height="63.859509" rx="31.929754" fill="#133D5E" opacity="0.6" />
+    <rect x="165.81834" y="81.153633" width="63.859509" height="63.859509" rx="31.929754" fill="#133D5E" opacity="0.6" />
+    <rect x="82.666176" y="81.153633" width="63.859509" height="63.859509" rx="14.73681" fill="#133D5E" />
+    <rect x="165.81834" y="165.63087" width="63.859509" height="63.859509" rx="9.8245401" fill="#133D5E" />
+    <rect x="165.81834" y="0" width="63.859509" height="63.859509" rx="9.8245401" fill="#133D5E" />
+    <rect x="0" y="165.63087" width="63.859509" height="63.859509" rx="9.8245401" fill="#133D5E" />
+  </g>
+</svg>

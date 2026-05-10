@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
 import { logger } from '../config/logger.js';
@@ -13,16 +13,74 @@ import {
   updateStatus,
 } from '../services/session-manager.js';
 import { createEmitter, subscribe } from '../services/event-bus.js';
+import {
+  getTenantConfig,
+  resolveTenantSlug,
+  TenantConfigError,
+  type TenantConfig,
+} from '../services/tenant-config.js';
+import { templateVariantSchema } from '../services/template-contract.js';
 
 export const sessionRoutes = new Hono();
+
+function handleTenantError(c: Context, error: unknown) {
+  if (error instanceof TenantConfigError) {
+    const status = error.statusCode === 404 ? 404 : error.statusCode === 400 ? 400 : 500;
+    return c.json({
+      error: error.message,
+      code: error.code,
+    }, status);
+  }
+
+  logger.error({ err: error }, 'Failed to resolve tenant for session route');
+  return c.json({
+    error: 'Failed to resolve tenant',
+    code: 'tenant_resolve_failed',
+  }, 500);
+}
+
+function resolveRequestedTenant(c: Context): string {
+  return resolveTenantSlug({
+    explicitSlug: c.req.param('slug'),
+    headerTenant: c.req.header('X-Tenant'),
+  });
+}
+
+async function resolveExistingTenant(c: Context): Promise<TenantConfig> {
+  return getTenantConfig({
+    explicitSlug: c.req.param('slug'),
+    headerTenant: c.req.header('X-Tenant'),
+  });
+}
+
+function ensureSessionTenantAccess(
+  c: Context,
+  sessionTenant: string,
+) {
+  try {
+    const requestedTenant = resolveRequestedTenant(c);
+    if (requestedTenant !== sessionTenant) {
+      return c.json({ error: 'Session not found' }, 404);
+    }
+    return null;
+  } catch (error) {
+    return handleTenantError(c, error);
+  }
+}
 
 // POST /api/sessions — create session
 sessionRoutes.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = z.object({ password: z.string().min(1) }).safeParse(body);
   if (!parsed.success) return c.json({ error: 'Password is required' }, 400);
-  const meta = await createSession(parsed.data.password);
-  return c.json({ sessionId: meta.id, expiresAt: meta.expiresAt }, 201);
+
+  try {
+    const tenant = await resolveExistingTenant(c);
+    const meta = await createSession(parsed.data.password, tenant.slug);
+    return c.json({ sessionId: meta.id, expiresAt: meta.expiresAt, tenant: meta.tenant }, 201);
+  } catch (error) {
+    return handleTenantError(c, error);
+  }
 });
 
 // POST /api/sessions/:id/upload — upload files (multipart)
@@ -33,6 +91,8 @@ sessionRoutes.post('/:id/upload', async (c) => {
 
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
   const key = authenticateSession(id, password, meta.salt);
 
   const formData = await c.req.formData();
@@ -57,16 +117,24 @@ sessionRoutes.post('/:id/ready', async (c) => {
 
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
   authenticateSession(id, password, meta.salt);
 
   const body = await c.req.json().catch(() => ({}));
   const parsed = z.object({
     prompt: z.string().default(''),
     provider: z.string().optional(),
+    templateVariant: templateVariantSchema.optional(),
+    targetCompany: z.string().trim().max(120).optional(),
   }).safeParse(body);
   meta.prompt = parsed.success ? parsed.data.prompt : '';
   if (parsed.success && parsed.data.provider) {
     meta.provider = parsed.data.provider;
+  }
+  if (parsed.success) {
+    meta.templateVariant = parsed.data.templateVariant;
+    meta.targetCompany = parsed.data.targetCompany || undefined;
   }
   meta.status = 'ready';
   await writeMeta(meta);
@@ -82,6 +150,8 @@ sessionRoutes.post('/:id/run', async (c) => {
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
   if (meta.status !== 'ready') return c.json({ error: `Session status is ${meta.status}, expected ready` }, 400);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
   authenticateSession(id, password, meta.salt);
 
   const { runOrchestrator } = await import('../services/orchestrator.js');
@@ -101,6 +171,8 @@ sessionRoutes.get('/:id/status', async (c) => {
   const { id } = c.req.param();
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
 
   return stream(c, async (s) => {
     c.header('Content-Type', 'text/event-stream');
@@ -155,9 +227,12 @@ sessionRoutes.get('/:id/results', async (c) => {
   const { id } = c.req.param();
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
 
   const outputs = await listOutputs(id);
   return c.json({
+    tenant: meta.tenant,
     status: meta.status,
     expiresAt: meta.expiresAt,
     files: meta.files.map(f => ({
@@ -178,6 +253,8 @@ sessionRoutes.get('/:id/download/:file', async (c) => {
 
   const meta = await getMeta(id);
   if (!meta) return c.json({ error: 'Session not found' }, 404);
+  const tenantResponse = ensureSessionTenantAccess(c, meta.tenant);
+  if (tenantResponse) return tenantResponse;
 
   try {
     const key = authenticateSession(id, password, meta.salt);

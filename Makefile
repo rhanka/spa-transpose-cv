@@ -8,8 +8,23 @@ DOCKER_COMPOSE ?= docker compose
 
 export API_PORT ?= 8686
 export UI_PORT ?= 5175
+export MAILDEV_SMTP_PORT ?= 1026
+export MAILDEV_UI_PORT ?= 1081
 export VITE_API_BASE_URL ?= http://localhost:$(API_PORT)/api
 export CORS_ALLOWED_ORIGINS ?= http://localhost:$(UI_PORT),http://127.0.0.1:$(UI_PORT),http://ui:5173
+export TENANT_S3_BUCKET ?= cv-transpose-config
+export TENANT_S3_REGION ?= fr-par
+export TENANT_S3_ENDPOINT ?= https://s3.$(TENANT_S3_REGION).scw.cloud
+export TENANT_S3_ACCESS_KEY ?= $(shell scw config get access-key 2>/dev/null)
+export TENANT_S3_SECRET_KEY ?= $(shell scw config get secret-key 2>/dev/null)
+export DEV_TENANT_STORAGE_BACKEND ?= s3
+export DEV_TENANT_S3_BUCKET ?= cv-transpose-dev
+export DEV_TENANT_S3_REGION ?= fr-par
+export DEV_TENANT_S3_ENDPOINT ?= http://minio:9000
+export MINIO_ROOT_USER ?= minioadmin
+export MINIO_ROOT_PASSWORD ?= minioadmin
+export MINIO_API_PORT ?= 9000
+export MINIO_CONSOLE_PORT ?= 9001
 
 export API_VERSION    ?= $(shell find api/src api/package.json api/Dockerfile -type f 2>/dev/null | LC_ALL=C sort | xargs cat 2>/dev/null | sha1sum | sed 's/\(......\).*/\1/')
 export API_IMAGE_NAME ?= transpose-cv-api
@@ -78,7 +93,7 @@ build-api: ## Build API Docker image for production
 
 .PHONY: build-ui
 build-ui: ## Build UI locally (SvelteKit static, deployed via GH Pages)
-	cd ui && VITE_API_BASE_URL=https://scalian-cv-api.sent-tech.ca/api npm run build
+	cd ui && VITE_API_BASE_URL=https://cv-api.sent-tech.ca/api npm run build
 
 # -----------------------------------------------------------------------------
 # Type checking
@@ -94,6 +109,58 @@ typecheck-ui: ## Run SvelteKit check on UI
 
 .PHONY: typecheck
 typecheck: typecheck-api typecheck-ui ## Run all type checks
+
+# -----------------------------------------------------------------------------
+# Tests
+# -----------------------------------------------------------------------------
+
+.PHONY: test-api
+test-api: ## Run API unit tests
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'files=$$(find src \( -name "*.test.ts" -o -name "*.spec.ts" \) | sort); if [ -z "$$files" ]; then echo "No API tests found"; exit 0; fi; node --import tsx --test $$files'
+
+.PHONY: smoke-tenant-e2e
+smoke-tenant-e2e: ## Run tenant E2E smoke (TENANT=_default|scalian)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" INPUT_FILE="$(if $(strip $(INPUT_FILE)),$(INPUT_FILE),templates/references/cgi_source_example_fictional.docx)" SESSION_PASSWORD="$(if $(strip $(SESSION_PASSWORD)),$(SESSION_PASSWORD),smoke-pass)" API_BASE_URL="$(if $(strip $(API_BASE_URL)),$(API_BASE_URL),http://localhost:8686/api)" PROVIDER="$(PROVIDER)" TEMPLATE_VARIANT="$(TEMPLATE_VARIANT)" TARGET_COMPANY="$(TARGET_COMPANY)" TIMEOUT_MS="$(if $(strip $(TIMEOUT_MS)),$(TIMEOUT_MS),180000)" POLL_INTERVAL_MS="$(if $(strip $(POLL_INTERVAL_MS)),$(POLL_INTERVAL_MS),2000)" npx tsx scripts/smoke-tenant-e2e.ts'
+
+.PHONY: analyze-template-docx
+analyze-template-docx: ## Analyze a supplier DOCX example into a TemplateContract (PROFILE=..., INPUT_FILE=..., OUTPUT_FILE=...)
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'PROFILE="$(if $(strip $(PROFILE)),$(PROFILE),cgi)"; INPUT_FILE="$(if $(strip $(INPUT_FILE)),$(INPUT_FILE),templates/references/cgi_source_example_fictional.docx)"; OUTPUT_FILE="$(if $(strip $(OUTPUT_FILE)),$(OUTPUT_FILE),templates/references/cgi_source_analysis.json)"; npx tsx scripts/analyze-template-docx.ts "$$PROFILE" "$$INPUT_FILE" "$$OUTPUT_FILE"'
+
+.PHONY: create-cgi-source-example
+create-cgi-source-example: ## Rebuild the fictional CGI supplier example from the raw CGI CV
+	node --experimental-strip-types api/scripts/create-cgi-source-example.ts
+
+.PHONY: create-default-tenant-seed
+create-default-tenant-seed: ## Rebuild the default tenant seed from the Scalian source reference
+	node --experimental-strip-types api/scripts/create-default-tenant-seed.ts
+
+.PHONY: generate-template-previews
+generate-template-previews: ## Rebuild variant preview DOCX/PDF/PNG assets from the real DOCX engine
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api npx tsx scripts/generate-template-previews.ts
+	mkdir -p ui/static/template-previews
+	cp api/templates/references/template-previews/assets/*.png ui/static/template-previews/
+
+.PHONY: template-pilot-proof
+template-pilot-proof: ## Build pilot visual proof (VARIANT=professional-compact, REFERENCE_IMAGE=tmp/...png, OUTPUT_DIR=tmp/...)
+	@if [ -z "$(REFERENCE_IMAGE)" ]; then \
+		echo "Error: REFERENCE_IMAGE is required (e.g. make template-pilot-proof VARIANT=professional-compact REFERENCE_IMAGE=tmp/pilot-ref/celestial-reference-page.png)"; \
+		exit 1; \
+	fi
+	@$(MAKE) generate-template-previews
+	cd api && node --import tsx scripts/generate-template-pilot-proof.ts "$(if $(strip $(VARIANT)),$(VARIANT),professional-compact)" "$(REFERENCE_IMAGE)" "$(if $(strip $(OUTPUT_DIR)),$(OUTPUT_DIR),tmp/template-pilot-proof/$(if $(strip $(VARIANT)),$(VARIANT),professional-compact))"
+
+.PHONY: docx-style-diff
+docx-style-diff: ## Compare two DOCX files for style-only differences (SOURCE_DOCX=..., CANDIDATE_DOCX=...)
+	node --experimental-strip-types api/scripts/docx-style-diff.ts "$(SOURCE_DOCX)" "$(CANDIDATE_DOCX)" "$(if $(strip $(OUTPUT_JSON)),$(OUTPUT_JSON),tmp/docs/docx-style-diff/report.json)" "$(if $(strip $(RENDER_DIR)),$(RENDER_DIR),tmp/docs/docx-style-diff)" "$(if $(strip $(DIFF_LIMIT)),$(DIFF_LIMIT),20)"
+
+.PHONY: uat-tenant
+uat-tenant: ## Run tenant smoke flow once (TENANT=..., TEMPLATE_VARIANT=..., TARGET_COMPANY=...)
+	@$(MAKE) smoke-tenant-e2e TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" TEMPLATE_VARIANT="$(TEMPLATE_VARIANT)" TARGET_COMPANY="$(TARGET_COMPANY)"
+
+.PHONY: uat-tenants
+uat-tenants: ## Run the tenant smoke flow for _default then scalian
+	@$(MAKE) smoke-tenant-e2e TENANT=_default
+	@$(MAKE) smoke-tenant-e2e TENANT=scalian
 
 # -----------------------------------------------------------------------------
 # Docker registry
@@ -126,6 +193,23 @@ check-scw:
 scw-create-namespace: check-scw ## Create Scaleway container namespace
 	@echo "Creating namespace transpose-cv..."
 	@scw container namespace create name=transpose-cv
+
+.PHONY: storage-status
+storage-status: check-scw ## List Object Storage buckets in the configured region
+	@scw object bucket list region=$(TENANT_S3_REGION)
+
+.PHONY: storage-create
+storage-create: check-scw ## Create the tenant Object Storage bucket in Scaleway
+	@echo "Creating Object Storage bucket $(TENANT_S3_BUCKET) in $(TENANT_S3_REGION)..."
+	@scw object bucket create $(TENANT_S3_BUCKET) region=$(TENANT_S3_REGION) acl=private
+
+.PHONY: admin-hash
+admin-hash: ## Generate ADMIN_PASSWORD_HASH and ADMIN_PASSWORD_SALT (PASSWORD="...")
+	@if [ -z "$(PASSWORD)" ]; then \
+		echo "Error: PASSWORD is required (e.g. make admin-hash PASSWORD='change-me')"; \
+		exit 1; \
+	fi
+	@node api/scripts/hash-admin-password.mjs "$(PASSWORD)"
 
 .PHONY: deploy-api-init
 deploy-api-init: check-scw ## Create API container in Scaleway namespace (first time)
@@ -178,14 +262,15 @@ wait-for-api: check-scw ## Wait for API container to be ready
 
 SCW_API_CONTAINER_ID ?= $(shell scw container container list 2>/dev/null | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}')
 SCW_API_DOMAIN       = transposecv8smikinq-transpose-cv-api.functions.fnc.fr-par.scw.cloud
-CUSTOM_API_DOMAIN    = scalian-cv-api.sent-tech.ca
-CUSTOM_UI_DOMAIN     = scalian-cv.sent-tech.ca
+CUSTOM_API_DOMAIN    = cv-api.sent-tech.ca
+CUSTOM_UI_DOMAIN     = cv.sent-tech.ca
+LEGACY_UI_DOMAIN     = scalian-cv.sent-tech.ca
 
 .PHONY: dns-setup
-dns-setup: dns-api dns-ui scw-custom-domain ## Setup all DNS records + SCW custom domain
+dns-setup: dns-api dns-ui dns-ui-legacy scw-custom-domain ## Setup canonical DNS records + legacy UI alias
 
 .PHONY: dns-api
-dns-api: ## Create CNAME scalian-cv-api.sent-tech.ca → SCW (Cloudflare)
+dns-api: ## Create CNAME cv-api.sent-tech.ca → SCW (Cloudflare)
 	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
 		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
 	fi
@@ -193,11 +278,11 @@ dns-api: ## Create CNAME scalian-cv-api.sent-tech.ca → SCW (Cloudflare)
 	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
 		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
 		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"scalian-cv-api","content":"$(SCW_API_DOMAIN)","ttl":1,"proxied":false}' \
-		| python3 -c "import sys,json; r=json.load(sys.stdin); print('OK' if r.get('success') else f'Error: {r.get(\"errors\",r)}')"
+		--data '{"type":"CNAME","name":"cv-api","content":"$(SCW_API_DOMAIN)","ttl":1,"proxied":false}' \
+		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
 
 .PHONY: dns-ui
-dns-ui: ## Create CNAME scalian-cv.sent-tech.ca → rhanka.github.io (Cloudflare)
+dns-ui: ## Create CNAME cv.sent-tech.ca → rhanka.github.io (Cloudflare)
 	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
 		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
 	fi
@@ -205,8 +290,20 @@ dns-ui: ## Create CNAME scalian-cv.sent-tech.ca → rhanka.github.io (Cloudflare
 	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
 		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
 		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"scalian-cv","content":"rhanka.github.io","ttl":1,"proxied":false}' \
-		| python3 -c "import sys,json; r=json.load(sys.stdin); print('OK' if r.get('success') else f'Error: {r.get(\"errors\",r)}')"
+		--data '{"type":"CNAME","name":"cv","content":"rhanka.github.io","ttl":1,"proxied":false}' \
+		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
+
+.PHONY: dns-ui-legacy
+dns-ui-legacy: ## Create legacy CNAME scalian-cv.sent-tech.ca → cv.sent-tech.ca
+	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
+		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
+	fi
+	@echo "Creating legacy CNAME $(LEGACY_UI_DOMAIN) → $(CUSTOM_UI_DOMAIN)..."
+	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
+		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
+		-H "Content-Type: application/json" \
+		--data '{"type":"CNAME","name":"scalian-cv","content":"$(CUSTOM_UI_DOMAIN)","ttl":1,"proxied":false}' \
+		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
 
 .PHONY: scw-custom-domain
 scw-custom-domain: check-scw ## Register custom domain on SCW API container
@@ -236,3 +333,43 @@ exec-api: ## Execute command in API container (CMD="...")
 .PHONY: exec-ui
 exec-ui: ## Execute command in UI container (CMD="...")
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec ui sh -c "$(CMD)"
+
+.PHONY: storage-dev-bootstrap
+storage-dev-bootstrap: ## Start local MinIO, create the dev bucket and seed tenant configs
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d minio
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm minio-init
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml run --rm tenant-storage-seed
+
+.PHONY: storage-dev-verify
+storage-dev-verify: ## Verify tenant configs resolve from local MinIO
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'npx tsx scripts/verify-s3-tenants.ts _default scalian'
+
+.PHONY: uat-localhost
+uat-localhost: ## Start the localhost stack with MinIO-backed tenant storage and run UAT
+	@$(MAKE) up
+	@$(MAKE) storage-dev-verify
+	@$(MAKE) uat-tenants
+
+.PHONY: tenants-migrate-s3
+tenants-migrate-s3: ## Upload tenant registry/assets to S3 (SLUGS="_default scalian")
+	@$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec \
+		-e TENANT_STORAGE_BACKEND=s3 \
+		-e TENANT_S3_BUCKET="$(TENANT_S3_BUCKET)" \
+		-e TENANT_S3_REGION="$(TENANT_S3_REGION)" \
+		-e TENANT_S3_ENDPOINT="$(TENANT_S3_ENDPOINT)" \
+		-e TENANT_S3_ACCESS_KEY="$(TENANT_S3_ACCESS_KEY)" \
+		-e TENANT_S3_SECRET_KEY="$(TENANT_S3_SECRET_KEY)" \
+		-e TENANT_S3_PREFIX="$(TENANT_S3_PREFIX)" \
+		api sh -c 'npx tsx scripts/migrate-tenants-to-s3.ts "$$@"' sh $(if $(strip $(SLUGS)),$(SLUGS),_default scalian)
+
+.PHONY: tenants-verify-s3
+tenants-verify-s3: ## Verify tenant configs load from S3 (SLUGS="_default scalian")
+	@$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec \
+		-e TENANT_STORAGE_BACKEND=s3 \
+		-e TENANT_S3_BUCKET="$(TENANT_S3_BUCKET)" \
+		-e TENANT_S3_REGION="$(TENANT_S3_REGION)" \
+		-e TENANT_S3_ENDPOINT="$(TENANT_S3_ENDPOINT)" \
+		-e TENANT_S3_ACCESS_KEY="$(TENANT_S3_ACCESS_KEY)" \
+		-e TENANT_S3_SECRET_KEY="$(TENANT_S3_SECRET_KEY)" \
+		-e TENANT_S3_PREFIX="$(TENANT_S3_PREFIX)" \
+		api sh -c 'npx tsx scripts/verify-s3-tenants.ts "$$@"' sh $(if $(strip $(SLUGS)),$(SLUGS),_default scalian)

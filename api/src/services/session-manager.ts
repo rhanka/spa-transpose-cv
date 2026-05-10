@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { env } from '../config/env.js';
 import { generateSessionId, generateSalt, deriveKey, encrypt, decrypt } from './crypto.js';
 import { logger } from '../config/logger.js';
+import { DEFAULT_TENANT_SLUG, normalizeTenantSlug } from './tenant-config.js';
+import type { TemplateVariant } from './template-contract.js';
 
 export type SessionStatus = 'created' | 'uploading' | 'ready' | 'processing' | 'done' | 'error';
 
@@ -16,10 +18,13 @@ export interface FileEntry {
 
 export interface SessionMeta {
   id: string;
+  tenant: string;
   createdAt: string;
   salt: string;
   prompt: string;
   provider?: string;
+  templateVariant?: TemplateVariant;
+  targetCompany?: string;
   status: SessionStatus;
   files: FileEntry[];
   expiresAt: string;
@@ -30,6 +35,10 @@ const keyCache = new Map<string, Buffer>();
 
 // Mutex per session to prevent meta.json race conditions
 const metaLocks = new Map<string, Promise<void>>();
+
+type StoredSessionMeta = Omit<SessionMeta, 'tenant'> & {
+  tenant?: string;
+};
 
 async function withMetaLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
   const prev = metaLocks.get(id) ?? Promise.resolve();
@@ -52,7 +61,22 @@ function metaPath(id: string): string {
   return join(sessionDir(id), 'meta.json');
 }
 
-export async function createSession(password: string): Promise<SessionMeta> {
+function normalizeSessionTenant(input?: string): string {
+  try {
+    return normalizeTenantSlug(input ?? DEFAULT_TENANT_SLUG);
+  } catch {
+    return DEFAULT_TENANT_SLUG;
+  }
+}
+
+function hydrateSessionMeta(meta: StoredSessionMeta): SessionMeta {
+  return {
+    ...meta,
+    tenant: normalizeSessionTenant(meta.tenant),
+  };
+}
+
+export async function createSession(password: string, tenant = DEFAULT_TENANT_SLUG): Promise<SessionMeta> {
   const id = generateSessionId();
   const salt = generateSalt();
   const key = deriveKey(password, salt);
@@ -66,6 +90,7 @@ export async function createSession(password: string): Promise<SessionMeta> {
   const expiresAt = new Date(Date.now() + env.SESSION_MAX_AGE_HOURS * 3600_000).toISOString();
   const meta: SessionMeta = {
     id,
+    tenant: normalizeSessionTenant(tenant),
     createdAt: new Date().toISOString(),
     salt,
     prompt: '',
@@ -75,14 +100,14 @@ export async function createSession(password: string): Promise<SessionMeta> {
   };
 
   await writeMeta(meta);
-  logger.info({ sessionId: id }, 'Session created');
+  logger.info({ sessionId: id, tenant: meta.tenant }, 'Session created');
   return meta;
 }
 
 export async function getMeta(id: string): Promise<SessionMeta | null> {
   try {
     const data = await readFile(metaPath(id), 'utf-8');
-    return JSON.parse(data) as SessionMeta;
+    return hydrateSessionMeta(JSON.parse(data) as StoredSessionMeta);
   } catch {
     return null;
   }

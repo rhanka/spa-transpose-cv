@@ -41,8 +41,6 @@ async function extractDocx(filePath: string): Promise<string> {
 }
 
 async function extractDoc(filePath: string): Promise<string> {
-  // Convert .doc to .docx via LibreOffice. Saturation-safe: isolated LO
-  // profile under a mkdtemp workdir, always cleaned via finally{rm}.
   const workDir = await mkdtemp(join(tmpdir(), 'doc-extract-'));
   const profileDir = join(workDir, 'profile');
   const tmpDoc = join(workDir, 'input.doc');

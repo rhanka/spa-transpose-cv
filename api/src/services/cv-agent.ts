@@ -1,5 +1,6 @@
+import { z } from 'zod';
 import { logger } from '../config/logger.js';
-import { getActiveProvider, type TokenUsage, type LlmStreamCallbacks } from './llm/index.js';
+import { getActiveProvider, type TokenUsage } from './llm/index.js';
 
 const SYSTEM_PROMPT = `You are an expert CV analyst for Scalian, a tech consultancy. You extract structured data from CVs and return it as JSON.
 
@@ -58,27 +59,38 @@ CONSTRAINTS:
 - Use en-dash (–) for date ranges, not hyphens.
 - Return ONLY valid JSON. No markdown, no code fences, no explanation.`;
 
-export interface CvData {
-  name: string;
-  title_line1: string;
-  title_line2: string;
-  years: string;
-  technicalSkills: { label: string; description: string }[];
-  sectors: string[];
-  domains: string[];
-  experience: {
-    company: string;
-    description: string;
-    dates: string;
-    title: string;
-    tasks: string[];
-    achievements: string[];
-    techEnvironment: string;
-  }[];
-  languages: { label: string; level: string }[];
-  education: { year: string; description: string }[];
-  attention_cv: string;
-}
+export const cvDataSchema = z.object({
+  name: z.string().trim().min(1),
+  title_line1: z.string(),
+  title_line2: z.string(),
+  years: z.string(),
+  technicalSkills: z.array(z.object({
+    label: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+  })),
+  sectors: z.array(z.string().trim().min(1)),
+  domains: z.array(z.string().trim().min(1)),
+  experience: z.array(z.object({
+    company: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+    dates: z.string().trim().min(1),
+    title: z.string().trim().min(1),
+    tasks: z.array(z.string().trim().min(1)),
+    achievements: z.array(z.string().trim()),
+    techEnvironment: z.string().trim(),
+  })),
+  languages: z.array(z.object({
+    label: z.string().trim().min(1),
+    level: z.string().trim().min(1),
+  })),
+  education: z.array(z.object({
+    year: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+  })),
+  attention_cv: z.string(),
+});
+
+export type CvData = z.infer<typeof cvDataSchema>;
 
 export type { TokenUsage };
 
@@ -133,7 +145,7 @@ export async function extractCvData(
   const jsonStr = fullText.replace(/^```json?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
 
   try {
-    const data = JSON.parse(jsonStr) as CvData;
+    const data = cvDataSchema.parse(JSON.parse(jsonStr));
     // Validate header constraints (ask 40 in prompt, accept up to 45)
     if (data.title_line1.length > 45) {
       throw new Error(`title_line1 too long (${data.title_line1.length} chars, max 45): "${data.title_line1}"`);
