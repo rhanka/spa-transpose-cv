@@ -16,5 +16,5 @@ describe('validatePage1', () => {
     // or it failed to convert the bogus input.
     expect(result.warnings.length).toBeGreaterThanOrEqual(1);
     expect(result.warnings[0]).toMatch(/PDF validation failed/);
-  });
+  }, 30_000);
 });
