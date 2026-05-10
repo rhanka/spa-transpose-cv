@@ -34,6 +34,9 @@ export * from './docx/tools.js';
 export * from './docx/reader.js';
 export * from './docx/font-embedding.js';
 
+// Text extraction (Task 16)
+export * from './extract/text.js';
+
 // Logger (Task 14)
 export { defaultLogger } from './util/log.js';
 export type { CoreLogger } from './util/log.js';
