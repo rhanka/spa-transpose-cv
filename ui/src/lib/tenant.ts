@@ -43,19 +43,6 @@ export interface TenantConfig {
     heroBackground?: string;
     shellBackground?: string;
   };
-  templateLibrary?: {
-    enabled: boolean;
-    defaultVariant: string;
-    options: Array<{
-      id: string;
-      label: string;
-      description: string;
-      recommendedFor?: string;
-      previewImagePath?: string;
-      referenceLabel?: string;
-      referenceSummary?: string;
-    }>;
-  };
 }
 
 export function resolveTenantSlugFromPath(pathname: string): string {
