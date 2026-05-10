@@ -6,6 +6,8 @@ import { logger } from './config/logger.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { healthRoutes } from './routes/health.js';
 import { modelRoutes } from './routes/models.js';
+import { tenantRoutes } from './routes/tenants.js';
+import { adminRoutes } from './routes/admin.js';
 
 export const app = new Hono();
 
@@ -25,7 +27,7 @@ app.use(secureHeaders({
 app.use(cors({
   origin: env.CORS_ALLOWED_ORIGINS.split(','),
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'X-Session-Password'],
+  allowHeaders: ['Authorization', 'Content-Type', 'X-Session-Password', 'X-Tenant'],
   credentials: true,
 }));
 
@@ -40,6 +42,9 @@ app.use(async (c, next) => {
 // Routes
 app.route('/api/health', healthRoutes);
 app.route('/api/models', modelRoutes);
+app.route('/api/tenants', tenantRoutes);
+app.route('/api/admin', adminRoutes);
+app.route('/api/tenants/:slug/sessions', sessionRoutes);
 app.route('/api/sessions', sessionRoutes);
 
 // Root

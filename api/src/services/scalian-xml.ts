@@ -358,7 +358,7 @@ export function assembleDocument(paragraphs: string[], xmlHeader: string): strin
  * Update header2.xml with candidate info.
  *
  * The template has these text nodes that need replacing:
- *   "Fabien Antoine" -> name
+ *   "Candidate Name" -> name
  *   "CxO"            -> titleLine1
  *   "Advisor"        -> titleLine2
  *   "23"             -> years
@@ -371,7 +371,7 @@ export async function updateHeader(
   years: string,
 ): Promise<void> {
   let h = await readFile(header2Path, 'utf-8');
-  h = h.replace('>Fabien Antoine<', `>${name}<`);
+  h = h.replace(/>(?:Candidate Name|Legacy Candidate Name)</, `>${name}<`);
   h = h.replace('>CxO<', `>${titleLine1}<`);
   h = h.replace('> Advisor<', `> ${titleLine2}<`);
   h = h.replace('>Advisor<', `>${titleLine2}<`);

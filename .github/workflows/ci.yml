@@ -85,10 +85,8 @@ jobs:
       - name: Build
         working-directory: ui
         env:
-          VITE_API_BASE_URL: https://scalian-cv-api.sent-tech.ca/api
+          VITE_API_BASE_URL: https://cv-api.sent-tech.ca/api
         run: npm run build
-      - name: Add CNAME
-        run: echo "scalian-cv.sent-tech.ca" > ui/build/CNAME
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ui/build

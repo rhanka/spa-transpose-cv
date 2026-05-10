@@ -1,0 +1,50 @@
+{
+  "sourceUrl": "https://www.scalian.com/en/",
+  "finalUrl": "https://www.scalian.com/en/",
+  "fetchedAt": "2026-04-11T17:48:58.761Z",
+  "siteName": "Scalian",
+  "logoUrl": "https://www.scalian.com/wp-content/uploads/2022/04/Logo-Scalian-2.jpg",
+  "stylesheetUrls": [
+    "https://www.scalian.com/wp/wp-includes/css/dist/block-library/style.min.css",
+    "https://www.scalian.com/wp-content/plugins/fulltext-search/style/wpfts_autocomplete.css",
+    "https://www.scalian.com/wp-content/themes/studiometa/dist/css/app.1b4dcce69b8a8aded643.css?ver=36756f3fdb6b2490521f5bcc8761bce2"
+  ],
+  "detected": {
+    "metaThemeColor": "#FFFFFF",
+    "maskIconColor": "#1D1148",
+    "logoColors": [],
+    "colors": [
+      "#9CA3AF",
+      "#FFFFFF",
+      "#1D1148",
+      "#E9E4F8",
+      "#60BB9B",
+      "#777091",
+      "#635A84",
+      "#F2F3FE",
+      "#B4CAD8",
+      "#4B2882"
+    ],
+    "fonts": [
+      "Inter",
+      "Poppins",
+      "Cattily",
+      "Noto Sans"
+    ]
+  },
+  "mappedTheme": {
+    "primaryColor": "#1D1148",
+    "primaryDark": "#180E3B",
+    "accentColor": "#60BB9B",
+    "accentHover": "#54A588",
+    "surfaceBorder": "#E9E4F8",
+    "surfaceSubtle": "#FFFFFF",
+    "fontHeading": "Poppins",
+    "fontBody": "Noto Sans",
+    "borderRadius": "0px"
+  },
+  "notes": [
+    "Limited mapping to tenant-rendered theme tokens only.",
+    "Palette derived from HTML, inline SVG and linked stylesheets; layout components are intentionally ignored."
+  ]
+}

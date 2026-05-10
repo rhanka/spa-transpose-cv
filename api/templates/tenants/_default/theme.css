@@ -1,0 +1,15 @@
+:root {
+  --color-purple-dark: #13386c;
+  --color-purple: #1b4f98;
+  --color-purple-light: #2d66b5;
+  --color-purple-lighter: #5e88c6;
+  --color-purple-border: #d8e8f6;
+  --color-purple-bg: #f2f8fd;
+  --color-green: #11c4d4;
+  --color-green-hover: #2bbdee;
+  --color-white: #ffffff;
+  --color-gradient-start: #13386c;
+  --color-gradient-end: #11c4d4;
+  --ease-smooth: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --shadow-card: 0 20px 40px 0 rgba(19, 56, 108, 0.12);
+}

@@ -1,159 +1,248 @@
-# PLAN.md — Scalian CV Transpose SPA
+# PLAN.md — Multi-tenant CV Platform
 
-> Dernière mise à jour : 2026-03-23
-
-## Phases
-
-### Phase 0 — Scaffolding projet ✅
-- [x] SPEC_VOL.md (spec brute)
-- [x] SPEC.md (spec raffinée)
-- [x] PLAN.md (ce fichier)
-
-### Phase 1 — Monorepo & infra de base ✅
-- [x] Structure monorepo `api/` + `ui/` (inspiré top-ai-ideas-fullstack)
-- [x] `api/package.json` — Hono, @anthropic-ai/sdk, jszip, zod, pino
-- [x] `api/tsconfig.json` + build esbuild
-- [x] `api/src/index.ts` — serveur Hono minimal + health check
-- [x] `api/Dockerfile` — multi-stage (dev/build/prod)
-- [x] `ui/package.json` — SvelteKit 2 + Svelte 5, Tailwind, adapter-static
-- [x] `ui/svelte.config.js` + `ui/vite.config.ts`
-- [x] `ui/Dockerfile` — multi-stage (dev/build/prod avec Nginx)
-- [x] `docker-compose.yml` + `docker-compose.dev.yml`
-- [x] `Makefile` — targets: dev, build, publish, deploy
-- [x] `.env.example` — template des variables
-- [x] `.gitignore` + `.dockerignore`
-- [x] Commit atomique
-
-### Phase 2 — API core (sessions + chiffrement) ✅
-- [x] `api/src/config/env.ts` — validation env (Zod)
-- [x] `api/src/services/crypto.ts` — PBKDF2 + AES-256-GCM (derive, encrypt, decrypt)
-- [x] `api/src/services/session-manager.ts` — CRUD sessions filesystem
-- [x] `api/src/services/purge.ts` — sweep sessions expirées
-- [x] `api/src/middleware/rate-limit.ts`
-- [x] `api/src/middleware/security-headers.ts`
-- [x] `api/src/routes/sessions.ts` — POST create, POST upload, GET status, GET results, GET download
-- [x] `api/src/routes/health.ts`
-- [x] Commit atomique
-
-### Phase 3 — Port TypeScript du toolkit Scalian ✅
-- [x] `api/src/services/scalian-xml.ts` — port complet des builders XML
-- [x] `api/src/services/docx-tools.ts` — unpack/pack/validate DOCX
-- [x] `api/src/services/text-extractor.ts` — wrapper pdftotext + pandoc
-- [x] Template copié dans api/templates/
-- [x] Commit atomique
-
-### Phase 4 — Agent Claude orchestrator ✅
-- [x] `api/src/services/cv-agent.ts` — prompt système + appel Claude Sonnet
-- [x] `api/src/services/orchestrator.ts` — lance N agents en parallèle, SSE progress
-- [x] Prompt système embarqué (extraction + mapping JSON structuré)
-- [x] Concurrency pool (MAX_CONCURRENT_AGENTS)
-- [x] Batch summary generation
-- [x] Commit atomique
-
-### Phase 5 — Frontend SPA Svelte 5 ✅
-- [x] Design system Scalian : CSS custom properties + Tailwind tokens
-- [x] Layout global : header Scalian (logo gradient), footer
-- [x] Upload page : drag & drop, password, prompt, validation
-- [x] Session page : password gate, SSE progress, download, share URL
-- [x] `ui/src/lib/api.ts` — client API (fetch wrapper)
-- [x] `ui/src/lib/stores/session.ts` — état session (Svelte stores)
-- [x] Commit atomique
-
-### Phase 6 — Intégration & tests ✅
-- [x] Docker compose : API + UI fonctionnels ensemble
-- [x] API health check OK (200)
-- [x] Session create/results API OK
-- [x] UI serving correctly (200)
-- [x] Fix app.html (%sveltekit.head%)
-- [x] Fix Docker dev workflow (svelte-kit sync)
-- [x] Commit atomique
-
-### Phase 7 — Déploiement ✅
-- [x] Namespace SCW `transpose-cv` créé (ce42c9e9-da17-407a-a61d-4032e0e80e1d)
-- [x] API container SCW créé (1d2a0965-...) — rollout via `make deploy`
-- [x] Domain API : `scalian-cv-api.sent-tech.ca` (CNAME → SCW)
-- [x] Domain UI : `scalian-cv.sent-tech.ca` (GitHub Pages)
-- [x] CI/CD unifié : `.github/workflows/ci.yml`
-  - Change detection (dorny/paths-filter)
-  - Build API image + typecheck (parallel)
-  - Build UI static + typecheck (parallel)
-  - Publish API → SCW registry
-  - Deploy API → SCW rollout
-  - Deploy UI → GitHub Pages
-- [x] Repo GitHub créé : `rhanka/spa-transpose-cv`
-- [x] Commits atomiques tout le long
-
-### Phase 8 — Infra & DNS ✅
-- [x] DNS CNAME configurés (Cloudflare)
-- [x] GitHub Pages + custom domain
-- [x] Secrets GitHub (6/6)
-- [x] SCW custom domain registered
-- [x] min-scale=1 (session persistence)
-
-### Phase 9 — SPEC v2 : fidélité, streaming, validation (en cours)
-
-#### 9a — Lecture DOCX en TS (supprimer pandoc)
-- [ ] `api/src/services/docx-reader.ts` : jszip + xmldom → extraire `<w:t>` text nodes
-- [ ] Remplacer `text-extractor.ts` pour DOCX (garder pdftotext pour PDF)
-- [ ] Tests : round-trip read sur un DOCX Scalian généré
-
-#### 9b — Prompt Claude : fidélité + contraintes header
-- [ ] Intégrer règle fidélité dans le prompt système (ne jamais inventer)
-- [ ] Contraindre `title_line1` max 25 chars, `title_line2` max 25 chars
-- [ ] Nommage conforme : `Scalian_Profile_{Nom}_EN.docx` / `Candidate_XXXXX`
-- [ ] Champs JSON alignés sur CLAUDE.md : `name`, `title_line1`, `title_line2`, `years`
-
-#### 9c — Validation agent (auto-relecture)
-- [ ] Après génération DOCX : relire via docx-reader
-- [ ] Vérifier : 5 sections, pas de XML brut, page 1 <= 28 paragraphes, headers <= 25 chars
-- [ ] Si échec → retry 1x avec erreur renvoyée à Claude
-- [ ] Agent retourne tableau 4 colonnes (Entrée / Sortie / Attention CV / Attention trad)
-
-#### 9d — Validation conductor
-- [ ] Relecture DOCX via docx-reader après chaque agent
-- [ ] Vérifier sections, cohérence postes, XML propre
-- [ ] Remplir "Attention traduction" (interprétation du conductor)
-- [ ] Si problème critique → relance agent 1x
-- [ ] `batch_summary.docx` généré (pas pandoc — via XML builders ou lib docx)
-
-#### 9e — Streaming Claude (extended thinking + SSE)
-- [ ] `thinking: { type: "enabled", budget_tokens: 4096 }` + `stream: true`
-- [ ] SSE par fichier : phase, thinking_delta, content_delta, parsed_keys, elapsed_ms
-- [ ] Parsing optimiste JSON : name, title_line1, titres de postes au fil du stream
-- [ ] API : refactor routes/sessions GET /status pour SSE enrichi
-
-#### 9f — Frontend grid face-à-face
-- [ ] Grid streaming (2 cols) : fichier source | streaming Claude live
-- [ ] Grid résultat (4 cols) : source | DOCX | Attention CV | Attention trad
-- [ ] Responsive : 1fr en mobile
-- [ ] Timer par fichier + stall detection (120s)
-- [ ] ZIP complet + batch_summary.docx en bas
-- [ ] Parsing optimiste affiché (nom, postes en cours)
-
-#### 9g — Commit, test local, deploy, test remote
-- [ ] Test local 3 CVs : make exec-api
-- [ ] Commit atomique
-- [ ] Deploy SCW + GH Pages
-- [ ] Test remote 3 CVs
-
-## Décisions techniques
-
-| Décision | Choix | Raison |
-|----------|-------|--------|
-| Pas de DB | Filesystem /data/ | Simplicité, RGPD (purge = rm -rf) |
-| Pas de S3 | Volume local | Pas de dépendance externe, chiffrement simple |
-| AES-256-GCM | Node crypto natif | Pas de dépendance, standard |
-| PBKDF2 | 100k itérations | Résistant au brute-force, natif Node |
-| Hono | Ultra-léger | Parfait pour serverless, API similaire Express |
-| adapter-static | SPA pure | Pas de SSR nécessaire, Nginx pour servir |
-| Claude Sonnet | Extraction CV | Bon rapport coût/qualité |
-| Monorepo | api/ + ui/ | Pattern validé sur top-ai-ideas-fullstack |
-
-## Risques
-
-| Risque | Mitigation |
-|--------|------------|
-| Volume éphémère SCW = perte données au redéploiement | Acceptable : données temporaires par design (48h) |
-| Rate limit Anthropic | Max 5 agents concurrents, queue si > 5 |
-| Fichiers volumineux en mémoire | Streaming chiffrement, limit 50 MB total |
-| Mot de passe faible | Avertissement UI, pas de blocage (choix utilisateur) |
+- [x] Reconstituer le contexte de la session Claude `fd867de2-819c-4ff1-9993-4e422d86c826`
+- [x] Consolider la vision produit dans `spec/SPEC_INTENT.md`
+- [x] Stocker la session Q/R dans `spec/SPEC_INTENT_QA_SESSION.md`
+- [x] Qualifier l'architecture multi-tenant dans `spec/SPEC_EVOL_MULTI_TENANT.md`
+- [x] Qualifier le système de template/agents dans `spec/SPEC_EVOL_TEMPLATE_AGENT.md`
+- [x] Commit de sédimentation des specs et du plan
+- [x] Créer le tenant `_default` à partir d'un template Scalian neutralisé
+  - [x] neutraliser le template DOCX de base
+  - [x] produire le `config.json` `_default`
+  - [x] produire le `theme.css` `_default`
+  - [x] brancher le runtime implicite sur `_default`
+- [x] Analyser le CV CGI comme référence de second modèle consulting
+  - [x] extraire la structure OOXML utile
+  - [x] produire un template CGI neutralisé sans PII ni marque
+  - [x] décider que `cgi` sert de premier exemple fournisseur de test
+- [x] Conserver un template CGI de test hors git
+  - [x] régénérer le template de test depuis le CV brut
+  - [x] ignorer explicitement les artefacts de test
+- [x] Définir et implémenter le `TemplateContract`
+  - [x] header
+  - [x] sections
+  - [x] style tokens
+  - [x] règles de nommage de sortie
+- [x] Refactorer le moteur OOXML vers un rendu paramétrique
+  - [x] sortir de `scalian-xml.ts`
+  - [x] brancher le contrat de template
+  - [x] supporter plusieurs variantes sûres pour ATS
+- [x] Mettre en place la résolution de tenant dans l'UI
+  - [x] `/` -> `_default`
+  - [x] `/{slug}` -> tenant
+  - [x] réserver `admin`, `api`, `session`
+  - [x] rendre les pages session tenant-aware
+- [x] Mettre en place la résolution de tenant dans l'API
+  - [x] lecture seed locale transitoire
+  - [x] retirer le seed publié `cgi` et garder le test en brouillon
+  - [x] lecture S3 SCW
+  - [x] cache mémoire court
+  - [x] `GET /api/tenants/:slug/config`
+  - [x] faire porter le slug tenant par la session
+  - [x] isoler `status/results/download` par tenant
+- [x] Créer le storage S3 SCW du projet
+  - [x] bucket `cv-transpose-config`
+  - [x] config locale du backend S3
+- [x] Mettre en place l'auth admin DB-less
+  - [x] `ADMIN_PASSWORD_HASH`
+  - [x] `ADMIN_PASSWORD_SALT` ou `ADMIN_SEED_SECRET`
+  - [x] OTP email corporate
+  - [x] verrou first-come-first-served en S3
+- [x] Créer l'agent d'analyse de template DOCX
+  - [x] Scalian
+  - [x] CGI
+  - [x] sortie `TemplateContract`
+- [x] Créer l'agent de scraping de marque
+  - [x] fetch HTML/CSS
+  - [x] extraction palette/fonts/logo
+  - [x] mapping limité aux composants rendus
+- [x] Conserver le runtime provider existant pour les agents
+  - [x] garder l'orchestrateur actuel
+  - [x] préserver le streaming de réflexion provider
+  - [x] éviter toute couche runtime supplémentaire non demandée
+- [x] Migrer les premiers tenants vers S3
+  - [x] `_default`
+  - [x] `scalian`
+  - [x] `registry.json`
+- [x] Mettre en place la stratégie domaine et redirections
+  - [x] `cv.sent-tech.ca`
+  - [x] redirection `scalian-cv.sent-tech.ca` -> `/scalian/`
+  - [x] aucun DNS dynamique au runtime applicatif
+- [x] Ajouter les tests et UAT
+  - [x] unit `TemplateContract`
+  - [x] unit tenant resolver
+  - [x] e2e upload -> rendu -> download par tenant
+  - [x] UAT `_default`
+  - [x] UAT `scalian`
+- [x] Ajouter MinIO pour l'env de dev
+  - [x] service local + console
+  - [x] init bucket + seed tenant local
+  - [x] UAT localhost sur backend S3 compatible
+- [x] Valider le produit en localhost avant tout déploiement réel
+  - [x] stack locale complète
+  - [x] backend S3 compatible en dev
+  - [x] smoke `_default`
+  - [x] smoke `scalian`
+- [x] Corriger les bogues découverts en UAT locale
+  - [x] rebrander `_default` en Sent Tech
+  - [x] supprimer le vocabulaire interne "tenant" de l'UI publique
+  - [x] ajouter des favicons tenant-aware
+  - [x] retirer `cgi` du seed publié local
+  - [x] ouvrir la bibliothèque de templates sur la page d'origine
+  - [x] porter le choix de template dans la session
+  - [x] enrichir la checklist UAT localhost
+- [x] Réaligner l'écran `_default` sur le flux de création d'espace société
+  - [x] retirer le faux champ "entreprise cible"
+  - [x] remettre une galerie cohérente avec l'inspiration BetterCV
+  - [x] implémenter le formulaire `URL société + email corporate + OTP + template DOCX`
+  - [x] brancher la création de tenant draft via l'API admin
+  - [x] corriger le hero/header tenant-aware Sent Tech et Scalian
+- [x] Réaligner la bibliothèque de templates sur de vraies références BetterCV
+  - [x] supprimer la galerie CSS factice au profit d'aperçus rendus par le moteur DOCX
+  - [x] rendre les variantes réellement distinctes par header, intertitres et blocs d'expérience
+  - [x] générer des preuves locales DOCX/PDF/PNG pour chaque variante
+- [x] Renforcer la signature de composition de deux variantes clés
+  - [x] densifier `professional-compact` avec header compact et sections inline
+  - [x] pousser `executive-modern` vers un hero de page plus premium et centré
+  - [x] régénérer les aperçus réels après cette seconde passe
+- [x] Reprendre la bibliothèque de templates sur des cibles BetterCV crédibles
+  - [x] auditer les familles BetterCV réellement visées pour éviter les labels mensongers
+  - [x] remapper les variantes sur des cibles cohérentes (`Aether`, `Celestial`, `Horizon`, `Solstice`, `Keystone`)
+  - [x] ajouter un rendu `Keystone` distinct avec bandeau fusionné et sidebar
+  - [x] ajouter un rendu `Solstice` centré et plus classique
+  - [x] raccourcir les données d'aperçu pour produire des vignettes mono-page lisibles
+- [x] Corriger la cohérence et l'affichage des aperçus de bibliothèque
+  - [x] remapper un même CV PM plus consistant sur toutes les variantes
+  - [x] recharger les variantes aérées pour éviter les pages 1 à moitié vides
+  - [x] générer des miniatures de galerie dédiées au lieu d'exposer le PNG A4 brut
+  - [x] recadrer les previews sur la zone haute utile de la page 1 pour les cartes UI
+  - [x] adapter l'UI pour afficher des cartes de preview lisibles plutot qu'une page complete miniaturisee
+- [x] Corriger le rendu de polices des aperçus générés dans l'env de dev Docker
+  - [x] embarquer un socle de polices fiable dans l'image API
+  - [x] réaligner les variantes DOCX sur des familles présentes dans le conteneur
+  - [x] regénérer les aperçus via `make` et les revalider visuellement
+- [x] Mener une itération de rendu quasi pixel-perfect sur les variantes compactes
+  - [x] réduire la masse typographique de la sidebar gauche
+  - [x] remplacer les puces Word implicites par des puces contrôlées par le renderer
+  - [x] réintroduire un rythme vertical crédible entre titres, listes et blocs d'expérience
+  - [x] revalider visuellement les aperçus finaux avant commit
+- [x] Durcir la lisibilité de la variante compacte dans la bibliothèque
+  - [x] alléger encore la hiérarchie de la sidebar gauche
+  - [x] élargir légèrement la colonne compacte utile sans casser la colonne principale
+  - [x] resserrer le CV de démonstration pour un aperçu compact crédible
+  - [x] revalider sur les PNG finaux consommés par l'UI
+- [x] Corriger les micro-défauts typographiques restants de la variante compacte
+  - [x] supprimer l'effet de chevauchement perçu dans la sidebar
+  - [x] réaligner les retours à la ligne des puces sur le texte et non sur la puce
+  - [x] revalider les zones exactes remontées en revue visuelle
+- [x] Corriger les bogues découverts dans la seconde vague d'UAT locale
+  - [x] reprendre le fond Sent Tech d'origine et rendre le logo lisible
+  - [x] supprimer les badges de titre redondants dans le hero
+  - [x] renommer la promesse Sent Tech en `Remettez votre CV en forme`
+  - [x] éradiquer les formulations franglaises de l'UI publique
+  - [x] supprimer le champ `Slug attendu` de l'écran public
+  - [x] neutraliser l'exemple du site de référence
+  - [x] masquer l'accès opérateur Sent Tech derrière une entrée discrète
+  - [x] remplacer le champ fichier natif du builder par une vraie zone de dépôt
+  - [x] confirmer et documenter Maildev pour les tests email locaux
+- [x] Réaligner le header Sent Tech de l'app sur le site source
+  - [x] supprimer le cartouche gris séparé sur la landing `_default`
+  - [x] remettre le header en surimpression du hero avec le vrai wordmark
+  - [x] retirer le label `CV Transpose` du header public Sent Tech
+  - [x] recaler la teinte du fond sur les stops HSL exacts du site source
+- [x] Ajuster la promesse publique du builder Sent Tech
+  - [x] remplacer la copie descriptive interne par une promesse marketing courte
+  - [x] aligner le hero et la carte builder sur le même message
+  - [x] supprimer la césure parasite sur `1h30`
+- [x] Corriger le scaffolding template et réaligner la référence CGI
+  - [x] distinguer clairement `references/` et `tenants/`
+  - [x] déplacer la source Scalian analysée sous `api/templates/references/`
+  - [x] retirer `tenants/cgi` des seeds runtime commités
+  - [x] produire un exemple CGI fictif mais fidèle au document fournisseur
+  - [x] faire analyser cet exemple par `template-analysis-agent`
+  - [x] exposer l'analyse via `make analyze-template-docx`
+- [x] Industrialiser l'audit de style DOCX source vs exemple fictif
+  - [x] identifier automatiquement les differences OOXML hors texte
+  - [x] ajouter une validation visuelle rendue page par page
+  - [x] definir la mitigation par patch textuel OOXML
+  - [x] appliquer la mitigation au cas CGI jusqu'a `styleEqual=true`
+- [x] Mutualiser l'outillage DOCX en TypeScript dans l'API
+  - [x] sortir toute logique commitee en Python
+  - [x] centraliser les methodes dans `api/src/services/docx-tooling.ts`
+  - [x] reduire `api/scripts/*` a des wrappers temporaires pour `make`
+  - [x] valider le lot via `make`
+- [x] Restaurer les preuves image explicites de l'audit DOCX TypeScript
+  - [x] générer `page-XX-side-by-side.png` depuis le flux TS
+  - [x] exposer ces artefacts dans le rapport produit
+  - [x] revalider la recette CGI avec ces preuves
+- [x] Renforcer l'anonymisation du faux profil CGI avant purge historique
+  - [x] remplacer le contenu par un parcours PM inventé de 10 ans
+  - [x] verifier l'absence des marqueurs sensibles du CV source
+  - [x] regenerer l'analyse et les preuves de style
+- [x] Neutraliser le gras parasite dans les paragraphes du faux CV CGI
+  - [x] conserver le gras des titres
+  - [x] rerouter le texte narratif vers les runs non gras
+  - [x] regenerer le DOCX et controler visuellement
+- [x] Purger l'historique local des commits contenant la version trop proche
+  - [x] reecrire le commit local `f0c60ee`
+  - [x] expirer les reflogs locaux et elaguer les objets non references
+- [x] Eradiquer toute trace de CV non anonymise dans l'historique git local
+  - [x] nettoyer le code, les specs et les references DOCX committees
+  - [x] sortir les entrees brutes sensibles du flux committe au profit d'un chemin prive hors git
+  - [x] reconstruire un historique local propre a partir d'un arbre nettoye
+- [x] Poser une infrastructure de model-skills pour le modèle embarqué de l'app
+  - [x] retrouver la source DOCX issue du helper adapte depuis le skill Claude
+  - [x] reécrire cette skill pour les contraintes `spa-transpose-cv`
+  - [x] ajouter une registry TypeScript de model-skills côté API
+  - [x] exposer une composition de prompt réutilisable pour le futur agent DOCX
+- [x] Engager une boucle quasi pixel-perfect sur une variante pilote
+  - [x] choisir la cible BetterCV pilote a cloner en priorite
+    - [x] `professional-compact / Celestial`
+  - [x] produire une preuve visuelle cote a cote reference vs rendu
+    - [x] extraire une reference locale croppee depuis la carte BetterCV
+    - [x] generer un premier cote a cote `reference vs rendu`
+  - [x] industrialiser ce diff visuel pour un rerun autonome
+    - [x] target `make template-pilot-proof`
+    - [x] rapport `HTML + JSON + side-by-side + diff heatmap`
+    - [x] respecter l aspect ratio de la reference dans la preuve pilote
+    - [x] supprimer l ecrasement de page et recadrer le candidat sans deformation
+  - [x] converger reellement vers un rendu quasi pixel-perfect page 1
+    - [x] aligner les masses globales de composition
+    - [x] aligner la largeur et la densite de la sidebar
+    - [x] aligner la typographie des titres, libelles et corps
+    - [x] aligner les retraits, puces et retours a la ligne
+    - [x] aligner le rythme vertical et l occupation de page
+    - [x] aligner finement la palette et les contrastes
+    - [x] utiliser un jeu de donnees pilote qui mappe proprement la reference
+    - [x] definir un seuil de sortie visuelle defendable pour fermer l item
+      - famille typo Lato identique a la reference (TTF installe + embedding DOCX `.odttf`)
+      - palette alignee (`#4B4E55`/`#6F6B74`/`#F2F2F2`) sur Celestial
+      - rmse `convert -metric RMSE` < 0.15 sur le side-by-side 286x470 (actuel 0.143)
+      - densite verticale du candidat couvre toute la hauteur de la carte de reference
+- [x] Ouvrir une dernière boucle de questions résiduelles
+  - [x] auditer la boucle d'extraction / validation / rendu sur un vrai CV
+  - [x] constater que le rendu appauvrit un CV senior (2 expé, 1 edu, 7 skill buckets)
+  - [x] isoler la cause racine : slicing en dur dans `template-xml.ts` et pipeline template-agnostique
+  - [x] distinguer l'exemple pilote (fixture pixel-perfect) du template (itération production)
+  - [x] acter que le moteur doit être transverse, et chaque template = manifeste déclaratif
+- [ ] Spécifier la bascule du moteur de template vers un runtime déclaratif
+  - [ ] cadrer le format `manifest.json` + `base.docx` + primitives typées partagées
+  - [ ] cadrer la séparation `pilot fixture` (slicing côté donnée) vs `template` (itération + pagination)
+  - [ ] cadrer l'enrichissement extraction (prompt verbatim, schéma contact/certifications/narrative/langues)
+  - [ ] cadrer la validation souple (warnings de capacité, anti-hallucination) et le retry variant-aware
+  - [ ] produire `spec/SPEC_EVOL_TEMPLATE_MANIFEST.md`
+  - [ ] produire le plan d'exécution détaillé
+- [ ] Exécuter la bascule (après validation spec et plan)
+  - [ ] construire le moteur transverse (unpack/pack + primitives typées + interpréteur de manifeste)
+  - [ ] migrer Celestial sur manifeste + `base.docx` et revalider la preuve pixel-perfect
+  - [ ] migrer les 4 autres variantes et démanteler `template-xml.ts`
+  - [ ] déplacer les slices pilote dans `buildPilotCvData` et retirer les coupes du rendu
+  - [ ] appliquer les corrections extraction / validation / retry côté API
+  - [ ] rejouer les UAT `_default` et `scalian` sur le nouveau moteur
+- [ ] Corriger la saturation disque causée par LibreOffice non isolé
+  - [x] fixer `validatePage1WithPdf` dans `orchestrator.ts` (profil LibreOffice isolé via `-env:UserInstallation` + `mkdtemp` + `finally { rm }` + erreur propagée)
+  - [x] fixer `extractDoc` et `extractTextFromBuffer` dans `text-extractor.ts` (même pattern)
+  - [x] durcir `api/Dockerfile` (`HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `TMPDIR`, `MAGICK_TMPDIR`, `NPM_CONFIG_CACHE`, `SAL_USE_VCLPLUGIN=svp` dans `base` et `production`)
+  - [x] durcir `docker-compose.yml` (`tmpfs` bornés `/tmp:1g` et `/var/tmp:256m` sur `api`, retirer `tty: true`)
+  - [ ] vérifier le container SCW de prod et appliquer le même correctif si nécessaire
+- [ ] Déployer et valider en environnement réel

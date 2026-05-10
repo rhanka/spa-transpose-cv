@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { DOMParser } from '@xmldom/xmldom';
+import { getRequiredSectionLabels, type TemplateContract } from './template-contract.js';
 
 /**
  * Extract all text from a DOCX file by reading word/document.xml
@@ -76,7 +77,10 @@ export async function validateDocx(docxPath: string): Promise<{ valid: boolean; 
   return validateDocxBuffer(data);
 }
 
-export async function validateDocxBuffer(data: Buffer): Promise<{ valid: boolean; errors: string[] }> {
+export async function validateDocxBuffer(
+  data: Buffer,
+  templateContract?: TemplateContract,
+): Promise<{ valid: boolean; errors: string[] }> {
   const zip = await JSZip.loadAsync(data);
   const docXml = zip.file('word/document.xml');
   if (!docXml) return { valid: false, errors: ['No word/document.xml in DOCX'] };
@@ -85,8 +89,10 @@ export async function validateDocxBuffer(data: Buffer): Promise<{ valid: boolean
   const text = extractTextFromXml(xml);
   const errors: string[] = [];
 
-  // Check 5 required sections
-  const required = ['TECHNICAL SKILLS', 'SECTOR-SPECIFIC SKILLS', 'WORK EXPERIENCE', 'LANGUAGES SKILLS', 'EDUCATION/CERTIFICATION'];
+  // Check required sections from the template contract, or fallback to legacy defaults.
+  const required = templateContract
+    ? getRequiredSectionLabels(templateContract)
+    : ['TECHNICAL SKILLS', 'SECTOR-SPECIFIC SKILLS', 'WORK EXPERIENCE', 'LANGUAGES SKILLS', 'EDUCATION/CERTIFICATION'];
   for (const section of required) {
     if (!text.toUpperCase().includes(section.toUpperCase())) {
       errors.push(`Missing section: ${section}`);

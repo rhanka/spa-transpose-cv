@@ -1,0 +1,5 @@
+// Temporary make entrypoint. Shared logic lives in api/src/services/docx-tooling.ts.
+import { createCgiSourceExample } from '../src/services/docx-tooling.ts';
+
+const outputPath = await createCgiSourceExample(process.cwd());
+console.log(outputPath);
