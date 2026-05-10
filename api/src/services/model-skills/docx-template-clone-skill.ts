@@ -39,10 +39,6 @@ This skill is about template fidelity, not CV extraction.
   - main renderer for page structure, headers, sidebars, bullets, and spacing
 - \`api/src/services/docx-tools.ts\`
   - unpack / validate / repack OOXML safely
-- \`api/src/services/docx-tooling.ts\`
-  - render DOCX to PDF/PNG and compare style-preserving transformations
-- \`api/src/services/template-preview.ts\`
-  - generates preview assets and the pilot visual proof loop
 
 ## 4. Required Working Method
 
@@ -62,20 +58,16 @@ When the user asks for a template adaptation, follow this order:
    - bullets / indents / wrapping third
    - palette and contrast last
 5. Validate visually after each meaningful pass.
-   - use the proof loop, not intuition
+   - render a sample DOCX and inspect it; do not rely on intuition
 
-## 5. Visual Proof Rules
+## 5. Visual Comparison Rules
 
-- Reference and candidate must keep the same aspect ratio in the side-by-side proof.
+- Reference and candidate must keep the same aspect ratio in any side-by-side comparison.
 - Do not resize the candidate to "fit" the reference if that distorts the page.
 - Crop from a stable anchor, preferably top-left for page-1 comparison.
 - If white-margin trimming is used, apply it consistently and conservatively.
-- Review all of:
-  - side-by-side view
-  - diff heatmap
-  - final PNG used by the UI preview
 
-A proof that stretches the page is invalid.
+A comparison that stretches the page is invalid.
 
 ## 6. DOCX / OOXML Rules
 
@@ -138,7 +130,7 @@ If the proof still shows obvious block mismatch, the task is not done.
 For a template-clone task, produce one of these:
 - a conservative patch plan tied to repo files
 - a focused renderer change
-- a proof-driven iteration result with explicit remaining gaps
+- an iteration result with explicit remaining gaps
 
 Never hand-wave with "looks better" if the side-by-side still diverges materially.
 `;
