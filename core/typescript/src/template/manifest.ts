@@ -46,7 +46,7 @@ export type ValidationResult =
 
 export function validateTemplateManifest(input: unknown): ValidationResult {
   if (validate(input)) {
-    return { ok: true, manifest: input as TemplateManifest };
+    return { ok: true, manifest: input as unknown as TemplateManifest };
   }
   return {
     ok: false,
