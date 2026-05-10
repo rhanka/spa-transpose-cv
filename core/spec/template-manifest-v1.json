@@ -29,6 +29,72 @@
     "validationRulesRef": {
       "type": "string",
       "description": "Identifiant d'un ruleset dans validation-rules.json"
+    },
+    "rendering": {
+      "type": "object",
+      "description": "Style hints consumed by the renderer. Replaces the legacy variant-catalog lookup. Optional - when absent, the renderer applies a neutral default.",
+      "additionalProperties": false,
+      "properties": {
+        "headerStyle": {
+          "enum": [
+            "ats-minimal",
+            "simple-clean",
+            "compact-split",
+            "modern-band",
+            "professional-classic",
+            "brand-accent"
+          ]
+        },
+        "sectionStyle": {
+          "enum": [
+            "rule-caps",
+            "subtle-label",
+            "compact-rule",
+            "filled-bar",
+            "classic-band",
+            "centered-rule",
+            "left-accent"
+          ]
+        },
+        "jobStyle": {
+          "enum": [
+            "ats-plain",
+            "simple-balanced",
+            "modern-emphasis",
+            "classic-consulting",
+            "compact-dense"
+          ]
+        },
+        "colors": {
+          "type": "object",
+          "description": "Hex color tokens (#RRGGBB). Common keys: accent, sectionBannerFill, sectionBannerText, headingText, bodyText, mutedText.",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          }
+        },
+        "fonts": {
+          "type": "object",
+          "description": "Font family tokens. Common keys: heading, body.",
+          "additionalProperties": {
+            "oneOf": [{ "type": "string" }, { "type": "number" }]
+          }
+        },
+        "spacing": {
+          "type": "object",
+          "description": "Spacing tokens in twips. Common keys: sectionBeforeTwip, sectionAfterTwip, lineTwip.",
+          "additionalProperties": {
+            "oneOf": [{ "type": "string" }, { "type": "number" }]
+          }
+        },
+        "sectionLabelOverrides": {
+          "type": "object",
+          "description": "Per-section label overrides keyed by section key (e.g. technicalSkills, experience).",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "definitions": {

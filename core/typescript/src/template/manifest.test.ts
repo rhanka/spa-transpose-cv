@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import Ajv from 'ajv';
 import schema from '../../../../core/spec/template-manifest-v1.json' assert { type: 'json' };
-import { validateTemplateManifest } from './manifest.js';
+import { DEFAULT_RENDERING, validateTemplateManifest } from './manifest.js';
 
 const minimal = {
   version: '1.0',
@@ -43,5 +43,52 @@ describe('validateTemplateManifest', () => {
     const r = validateTemplateManifest({ broken: true });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('template-manifest-v1 rendering block', () => {
+  it('accepts a manifest with a populated rendering block', () => {
+    const withRendering = {
+      ...minimal,
+      rendering: {
+        headerStyle: 'compact-split',
+        sectionStyle: 'compact-rule',
+        jobStyle: 'compact-dense',
+        colors: { accent: '#6F6B74', bodyText: '#4B4E55' },
+        fonts: { heading: 'Lato', body: 'Lato' },
+        spacing: { sectionBeforeTwip: 120, lineTwip: 240 },
+        sectionLabelOverrides: { experience: 'EXPERIENCE' },
+      },
+    };
+    const r = validateTemplateManifest(withRendering);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.manifest.rendering?.headerStyle).toBe('compact-split');
+      expect(r.manifest.rendering?.colors?.accent).toBe('#6F6B74');
+    }
+  });
+
+  it('tolerates a manifest without rendering (older tenants)', () => {
+    const r = validateTemplateManifest(minimal);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.manifest.rendering).toBeUndefined();
+  });
+
+  it('rejects an unknown headerStyle value', () => {
+    const bad = { ...minimal, rendering: { headerStyle: 'fancy-glow' } };
+    const r = validateTemplateManifest(bad);
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a malformed color (must be #RRGGBB)', () => {
+    const bad = { ...minimal, rendering: { colors: { accent: 'red' } } };
+    const r = validateTemplateManifest(bad);
+    expect(r.ok).toBe(false);
+  });
+
+  it('exposes a non-empty DEFAULT_RENDERING fallback', () => {
+    expect(DEFAULT_RENDERING.headerStyle).toBeTruthy();
+    expect(DEFAULT_RENDERING.sectionStyle).toBeTruthy();
+    expect(DEFAULT_RENDERING.jobStyle).toBeTruthy();
   });
 });
