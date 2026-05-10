@@ -33,11 +33,11 @@ This skill is about template fidelity, not CV extraction.
 
 - \`api/src/services/template-analysis-agent.ts\`
   - extracts section headings, fonts, colors, header hints, and a first \`TemplateContract\`
-- \`api/src/services/template-contract.ts\`
+- \`core/typescript/src/template/contract.ts\` (via \`@cv-transpose/core\`)
   - normalizes target structure and output naming rules
-- \`api/src/services/template-xml.ts\`
+- \`core/typescript/src/template/render.ts\` (via \`@cv-transpose/core\`)
   - main renderer for page structure, headers, sidebars, bullets, and spacing
-- \`api/src/services/docx-tools.ts\`
+- \`core/typescript/src/docx/tools.ts\` (via \`@cv-transpose/core\`)
   - unpack / validate / repack OOXML safely
 
 ## 4. Required Working Method

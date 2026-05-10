@@ -14,7 +14,7 @@ test('returns the DOCX template clone skill content', () => {
   const skill = getModelSkill('docx-template-clone');
   assert.match(skill.content, /DOCX Template Clone Skill/i);
   assert.match(skill.content, /TypeScript only/i);
-  assert.match(skill.content, /template-xml\.ts/i);
+  assert.match(skill.content, /template\/render\.ts/i);
 });
 
 test('composes a system prompt with deduplicated skills', () => {
