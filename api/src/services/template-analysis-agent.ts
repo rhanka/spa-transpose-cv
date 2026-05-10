@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
-import { extractHeaderInfo, extractTextFromDocx } from './docx-reader.js';
 import {
+  extractHeaderInfo,
+  extractTextFromDocx,
   templateContractSchema,
   type TemplateContract,
   type TemplateSectionKey,
   type TemplateVariant,
-} from './template-contract.js';
+} from '@cv-transpose/core';
 
 export type TemplateAnalysisProfile = 'scalian' | 'cgi';
 

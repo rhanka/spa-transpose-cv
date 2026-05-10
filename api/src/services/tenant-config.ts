@@ -12,7 +12,7 @@ import {
   templateVariantSchema,
   type TemplateContract,
   type TemplateRendering,
-} from './template-contract.js';
+} from '@cv-transpose/core';
 
 /**
  * Fallback rendering block used when a tenant config predates the inline

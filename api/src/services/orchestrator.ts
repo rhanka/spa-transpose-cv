@@ -2,24 +2,28 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-import { validatePage1 } from '@cv-transpose/core';
-import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
-import { decrypt, encrypt } from './crypto.js';
-import { extractTextFromBuffer } from './text-extractor.js';
-import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
-import { getActiveProvider, getProviderConfig } from './llm/index.js';
-import { validateDocxBuffer } from './docx-reader.js';
-import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 import {
+  validatePage1,
+  extractTextFromBuffer,
+  validateDocxBuffer,
   deriveOutputNameFromTemplateContract,
   getPrimaryExperienceSectionLabel,
   getPrimarySectorSectionLabel,
   getRequiredSectionLabels,
   validateCvDataAgainstTemplateContract,
-} from './template-contract.js';
-import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
-import { unpackDocx, packDocx } from './docx-tools.js';
-import { defaultLatoSource, embedLatoFonts } from './font-embedding.js';
+  buildTemplateDocumentXml,
+  getXmlHeader,
+  writeTemplateHeader,
+  unpackDocx,
+  packDocx,
+  defaultLatoSource,
+  embedLatoFonts,
+} from '@cv-transpose/core';
+import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
+import { decrypt, encrypt } from './crypto.js';
+import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
+import { getActiveProvider, getProviderConfig } from './llm/index.js';
+import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 
 // SSE emitter type — set by the route handler
 export type SseEmitter = (fileIndex: number, event: SseEvent) => void;
@@ -260,7 +264,7 @@ async function conductorValidate(
   try {
     const encData = await readFile(encOutputPath);
     const docxData = decrypt(encData, sessionKey);
-    const { extractTextFromDocxBuffer } = await import('./docx-reader.js');
+    const { extractTextFromDocxBuffer } = await import('@cv-transpose/core');
     const outputText = await extractTextFromDocxBuffer(docxData);
 
     // Structural validation
