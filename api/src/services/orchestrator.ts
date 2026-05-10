@@ -57,10 +57,15 @@ function resolveRuntimeTenantConfig(
     return tenantConfig;
   }
 
+  const hints = tenantConfig.variantHints[selectedVariant];
+  if (!hints) {
+    throw new Error(`Tenant "${tenantConfig.slug}" does not advertise rendering hints for variant "${selectedVariant}"`);
+  }
+
   return {
     ...tenantConfig,
     variant: selectedVariant,
-    templateContract: cloneTemplateContractWithVariant(tenantConfig.templateContract, selectedVariant),
+    templateContract: cloneTemplateContractWithVariant(tenantConfig.templateContract, selectedVariant, hints),
   };
 }
 

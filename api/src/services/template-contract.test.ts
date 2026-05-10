@@ -6,12 +6,25 @@ import {
   ensureTemplateContract,
   getRequiredSectionLabels,
   validateCvDataAgainstTemplateContract,
+  type TemplateRendering,
+  type VariantRenderingHints,
 } from './template-contract.js';
+
+const baseRendering: TemplateRendering = {
+  headerStyle: 'ats-minimal',
+  sectionStyle: 'rule-caps',
+  jobStyle: 'ats-plain',
+};
+
+function hints(rendering: TemplateRendering = baseRendering): VariantRenderingHints {
+  return { rendering, styleOverrides: {} };
+}
 
 test('buildLegacyTemplateContract keeps required section labels from the provided seed', () => {
   const contract = buildLegacyTemplateContract({
     templateContractVersion: 'v1',
     variant: 'brand-accent',
+    rendering: { headerStyle: 'brand-accent', sectionStyle: 'left-accent', jobStyle: 'compact-dense' },
     theme: {
       accentColor: '#5236AB',
       primaryColor: '#5236AB',
@@ -34,12 +47,14 @@ test('buildLegacyTemplateContract keeps required section labels from the provide
   ]);
   assert.equal(contract.output.filenamePattern, 'Tenant_Profile_{name}.docx');
   assert.equal(contract.layout.variant, 'brand-accent');
+  assert.equal(contract.rendering.headerStyle, 'brand-accent');
 });
 
 test('ensureTemplateContract rejects a mismatched template variant', () => {
   const contract = buildLegacyTemplateContract({
     templateContractVersion: 'v1',
     variant: 'consulting-classic',
+    rendering: { headerStyle: 'professional-classic', sectionStyle: 'centered-rule', jobStyle: 'classic-consulting' },
     template: {
       sections: ['technicalSkills', 'experience'],
     },
@@ -51,6 +66,7 @@ test('ensureTemplateContract rejects a mismatched template variant', () => {
         templateContractVersion: 'v1',
         variant: 'brand-accent',
         templateContract: contract,
+        variantHints: hints({ headerStyle: 'brand-accent', sectionStyle: 'left-accent', jobStyle: 'compact-dense' }),
       }),
     /Template contract variant mismatch/,
   );
@@ -60,6 +76,7 @@ test('deriveOutputNameFromTemplateContract sanitizes names and prefers candidate
   const contract = buildLegacyTemplateContract({
     templateContractVersion: 'v1',
     variant: 'ats-core',
+    rendering: baseRendering,
     template: {
       outputNaming: 'Profile_{name}.docx',
     },
@@ -79,6 +96,7 @@ test('validateCvDataAgainstTemplateContract reports header overflow and missing 
   const contract = buildLegacyTemplateContract({
     templateContractVersion: 'v1',
     variant: 'ats-core',
+    rendering: baseRendering,
   });
 
   const errors = validateCvDataAgainstTemplateContract(

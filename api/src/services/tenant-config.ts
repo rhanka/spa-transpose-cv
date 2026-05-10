@@ -8,9 +8,10 @@ import {
   ensureTemplateContract,
   legacyTemplateSeedSchema,
   legacyThemeSeedSchema,
-  templateContractSchema,
   templateVariantSchema,
   type TemplateContract,
+  type TemplateVariant,
+  type VariantRenderingHints,
 } from './template-contract.js';
 import { getTemplateVariantDefinition } from './template-variant-catalog.js';
 
@@ -57,13 +58,22 @@ const rawTenantConfigSchema = z.object({
   branding: tenantBrandingSchema,
   templateLibrary: tenantTemplateLibrarySchema,
   template: legacyTemplateSeedSchema.optional(),
-  templateContract: templateContractSchema.optional(),
+  // Raw, untyped templateContract: loaders may inject the rendering block from
+  // a transitional catalog shim before re-parsing through the strict
+  // templateContractSchema in ensureTemplateContract().
+  templateContract: z.unknown().optional(),
 });
 
 type RawTenantConfig = z.infer<typeof rawTenantConfigSchema>;
 
 export interface TenantConfig extends Omit<RawTenantConfig, 'templateContract'> {
   templateContract: TemplateContract;
+  /**
+   * Per-variant rendering hints for every variant the tenant exposes (default
+   * variant + library options). Populated at hydration time from the
+   * transitional catalog shim so the runtime never has to look anything up.
+   */
+  variantHints: Record<TemplateVariant, VariantRenderingHints>;
 }
 
 interface CachedTenantConfig {
@@ -117,6 +127,27 @@ export function resolveTenantSlug(options: {
   return normalizeTenantSlug(options.explicitSlug ?? options.headerTenant ?? DEFAULT_TENANT_SLUG);
 }
 
+/**
+ * Build VariantRenderingHints from the variant catalog. This is the only
+ * surviving call into the catalog at config-hydration time — it acts as a
+ * transitional shim so existing tenant configs (which still reference
+ * variants by id rather than carrying inline rendering blocks) continue to
+ * load. Once tenant configs ship their own `rendering` blocks on disk, this
+ * helper can read them directly and the catalog will become deletable.
+ */
+function variantHintsFor(variant: TemplateVariant): VariantRenderingHints {
+  const definition = getTemplateVariantDefinition(variant);
+  return {
+    rendering: {
+      headerStyle: definition.headerStyle,
+      sectionStyle: definition.sectionStyle,
+      jobStyle: definition.jobStyle,
+    },
+    styleOverrides: definition.styleOverrides,
+    sectionLabelOverrides: definition.sectionLabelOverrides,
+  };
+}
+
 function hydrateTenantConfig(config: RawTenantConfig): TenantConfig {
   const templateLibrary = config.templateLibrary
     ? {
@@ -133,15 +164,26 @@ function hydrateTenantConfig(config: RawTenantConfig): TenantConfig {
     }
     : undefined;
 
+  const advertisedVariants = new Set<TemplateVariant>([
+    config.variant,
+    ...(config.templateLibrary?.options.map((option) => option.id) ?? []),
+  ]);
+
+  const variantHints: Record<TemplateVariant, VariantRenderingHints> = Object.fromEntries(
+    Array.from(advertisedVariants).map((variant) => [variant, variantHintsFor(variant)]),
+  ) as Record<TemplateVariant, VariantRenderingHints>;
+
   return {
     ...config,
     templateLibrary,
+    variantHints,
     templateContract: ensureTemplateContract({
       templateContractVersion: config.templateContractVersion,
       variant: config.variant,
       theme: config.theme,
       template: config.template,
       templateContract: config.templateContract,
+      variantHints: variantHints[config.variant],
     }),
   };
 }

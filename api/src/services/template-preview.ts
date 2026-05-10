@@ -8,8 +8,31 @@ import type { CvData } from './cv-agent.js';
 import { renderDocxToPng } from './docx-tooling.js';
 import { packDocx, unpackDocx } from './docx-tools.js';
 import { defaultLatoSource, embedLatoFonts } from './font-embedding.js';
-import { ensureTemplateContract, cloneTemplateContractWithVariant, type TemplateContract, type TemplateVariant } from './template-contract.js';
-import { TEMPLATE_PREVIEW_SAMPLE_DATA, TEMPLATE_VARIANT_DEFINITIONS, getTemplateVariantDefinition } from './template-variant-catalog.js';
+import {
+  ensureTemplateContract,
+  cloneTemplateContractWithVariant,
+  type TemplateContract,
+  type TemplateVariant,
+  type VariantRenderingHints,
+} from './template-contract.js';
+import {
+  TEMPLATE_PREVIEW_SAMPLE_DATA,
+  TEMPLATE_VARIANT_DEFINITIONS,
+  getTemplateVariantDefinition,
+} from './template-variant-catalog.js';
+
+function variantHintsFromCatalog(variant: TemplateVariant): VariantRenderingHints {
+  const definition = getTemplateVariantDefinition(variant);
+  return {
+    rendering: {
+      headerStyle: definition.headerStyle,
+      sectionStyle: definition.sectionStyle,
+      jobStyle: definition.jobStyle,
+    },
+    styleOverrides: definition.styleOverrides,
+    sectionLabelOverrides: definition.sectionLabelOverrides,
+  };
+}
 import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
 
 const execFileAsync = promisify(execFile);
@@ -187,6 +210,7 @@ async function loadDefaultContract(rootDir: string): Promise<TemplateContract> {
     theme: raw.theme,
     template: raw.template as never,
     templateContract: raw.templateContract,
+    variantHints: variantHintsFromCatalog(raw.variant as TemplateVariant),
   });
 }
 
@@ -457,7 +481,7 @@ export async function generateTemplateVariantPreviews(rootDir = process.cwd()): 
 
   for (const variant of Object.keys(TEMPLATE_VARIANT_DEFINITIONS) as TemplateVariant[]) {
     const definition = getTemplateVariantDefinition(variant);
-    const contract = cloneTemplateContractWithVariant(baseContract, variant);
+    const contract = cloneTemplateContractWithVariant(baseContract, variant, variantHintsFromCatalog(variant));
     const variantDir = join(proofDir, variant);
     await mkdir(variantDir, { recursive: true });
 
@@ -520,7 +544,7 @@ export async function generateTemplatePilotProof(params: {
   const reportHtmlPath = join(outputDir, 'index.html');
 
   const baseContract = await loadDefaultContract(apiRoot);
-  const contract = cloneTemplateContractWithVariant(baseContract, params.variant);
+  const contract = cloneTemplateContractWithVariant(baseContract, params.variant, variantHintsFromCatalog(params.variant));
   await buildVariantDocx({
     apiRoot,
     variant: params.variant,
