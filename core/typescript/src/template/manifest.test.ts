@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import Ajv from 'ajv';
 import schema from '../../../../core/spec/template-manifest-v1.json' assert { type: 'json' };
+import { validateTemplateManifest } from './manifest.js';
 
 const minimal = {
   version: '1.0',
@@ -28,5 +29,19 @@ describe('template-manifest-v1', () => {
     const ajv = new Ajv();
     const validate = ajv.compile(schema);
     expect(validate(bad)).toBe(false);
+  });
+});
+
+describe('validateTemplateManifest', () => {
+  it('returns ok+manifest on valid input', () => {
+    const r = validateTemplateManifest(minimal);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.manifest.tenantKey).toBe('direct:test');
+  });
+
+  it('returns ok=false with errors on invalid input', () => {
+    const r = validateTemplateManifest({ broken: true });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.length).toBeGreaterThan(0);
   });
 });
