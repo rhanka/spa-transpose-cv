@@ -7,7 +7,6 @@ import {
   getRequiredSectionLabels,
   validateCvDataAgainstTemplateContract,
   type TemplateRendering,
-  type VariantRenderingHints,
 } from './template-contract.js';
 
 const baseRendering: TemplateRendering = {
@@ -15,10 +14,6 @@ const baseRendering: TemplateRendering = {
   sectionStyle: 'rule-caps',
   jobStyle: 'ats-plain',
 };
-
-function hints(rendering: TemplateRendering = baseRendering): VariantRenderingHints {
-  return { rendering, styleOverrides: {} };
-}
 
 test('buildLegacyTemplateContract keeps required section labels from the provided seed', () => {
   const contract = buildLegacyTemplateContract({
@@ -66,7 +61,7 @@ test('ensureTemplateContract rejects a mismatched template variant', () => {
         templateContractVersion: 'v1',
         variant: 'brand-accent',
         templateContract: contract,
-        variantHints: hints({ headerStyle: 'brand-accent', sectionStyle: 'left-accent', jobStyle: 'compact-dense' }),
+        defaultRendering: { headerStyle: 'brand-accent', sectionStyle: 'left-accent', jobStyle: 'compact-dense' },
       }),
     /Template contract variant mismatch/,
   );

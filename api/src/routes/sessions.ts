@@ -19,8 +19,6 @@ import {
   TenantConfigError,
   type TenantConfig,
 } from '../services/tenant-config.js';
-import { templateVariantSchema } from '../services/template-contract.js';
-
 export const sessionRoutes = new Hono();
 
 function handleTenantError(c: Context, error: unknown) {
@@ -125,7 +123,6 @@ sessionRoutes.post('/:id/ready', async (c) => {
   const parsed = z.object({
     prompt: z.string().default(''),
     provider: z.string().optional(),
-    templateVariant: templateVariantSchema.optional(),
     targetCompany: z.string().trim().max(120).optional(),
   }).safeParse(body);
   meta.prompt = parsed.success ? parsed.data.prompt : '';
@@ -133,7 +130,6 @@ sessionRoutes.post('/:id/ready', async (c) => {
     meta.provider = parsed.data.provider;
   }
   if (parsed.success) {
-    meta.templateVariant = parsed.data.templateVariant;
     meta.targetCompany = parsed.data.targetCompany || undefined;
   }
   meta.status = 'ready';

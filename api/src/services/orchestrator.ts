@@ -15,7 +15,6 @@ import { getActiveProvider, getProviderConfig } from './llm/index.js';
 import { validateDocxBuffer } from './docx-reader.js';
 import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 import {
-  cloneTemplateContractWithVariant,
   deriveOutputNameFromTemplateContract,
   getPrimaryExperienceSectionLabel,
   getPrimarySectorSectionLabel,
@@ -39,34 +38,6 @@ export interface SseEvent {
   attention_cv?: string;
   attention_trad?: string;
   tokenInfo?: string;
-}
-
-function resolveRuntimeTenantConfig(
-  tenantConfig: TenantConfig,
-  meta: Pick<SessionMeta, 'templateVariant'>,
-): TenantConfig {
-  const allowedVariants = new Set([
-    tenantConfig.variant,
-    ...(tenantConfig.templateLibrary?.options.map((option) => option.id) ?? []),
-  ]);
-  const selectedVariant = meta.templateVariant && allowedVariants.has(meta.templateVariant)
-    ? meta.templateVariant
-    : tenantConfig.templateLibrary?.defaultVariant ?? tenantConfig.variant;
-
-  if (selectedVariant === tenantConfig.variant) {
-    return tenantConfig;
-  }
-
-  const hints = tenantConfig.variantHints[selectedVariant];
-  if (!hints) {
-    throw new Error(`Tenant "${tenantConfig.slug}" does not advertise rendering hints for variant "${selectedVariant}"`);
-  }
-
-  return {
-    ...tenantConfig,
-    variant: selectedVariant,
-    templateContract: cloneTemplateContractWithVariant(tenantConfig.templateContract, selectedVariant, hints),
-  };
 }
 
 function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'>): string {
@@ -397,10 +368,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
   const sessionKey = getSessionKey(sessionId);
   if (!sessionKey) throw new Error(`No key in cache for session ${sessionId}`);
 
-  const tenantConfig = resolveRuntimeTenantConfig(
-    await getTenantConfig({ explicitSlug: meta.tenant }),
-    meta,
-  );
+  const tenantConfig = await getTenantConfig({ explicitSlug: meta.tenant });
   const effectivePrompt = buildEffectivePrompt(meta);
 
   const concurrency = env.MAX_CONCURRENT_AGENTS;
