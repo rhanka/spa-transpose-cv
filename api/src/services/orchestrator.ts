@@ -19,6 +19,7 @@ import {
   deriveOutputNameFromTemplateContract,
   getPrimaryExperienceSectionLabel,
   getPrimarySectorSectionLabel,
+  getRequiredSectionLabels,
   validateCvDataAgainstTemplateContract,
 } from './template-contract.js';
 import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
@@ -194,7 +195,10 @@ async function processOneCV(
     const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
     const outputData = await readFile(outputPath);
     const headerErrors = validateCvDataAgainstTemplateContract(cvData, activeTenantConfig.templateContract);
-    const validation = await validateDocxBuffer(outputData, activeTenantConfig.templateContract);
+    const validation = await validateDocxBuffer(
+      outputData,
+      getRequiredSectionLabels(activeTenantConfig.templateContract),
+    );
 
     // 4b. PDF validation: check page 1 doesn't overflow
     const pdfErrors = await validatePage1WithPdf(outputPath, activeTenantConfig);
@@ -329,7 +333,10 @@ async function conductorValidate(
     const outputText = await extractTextFromDocxBuffer(docxData);
 
     // Structural validation
-    const validation = await validateDocxBuffer(docxData, tenantConfig.templateContract);
+    const validation = await validateDocxBuffer(
+      docxData,
+      getRequiredSectionLabels(tenantConfig.templateContract),
+    );
     const structErrors = validation.valid ? [] : validation.errors;
 
     // QA analyst call for translation quality (uses active LLM provider)
