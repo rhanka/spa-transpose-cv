@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { cvDataSchema, type CvData } from '@cv-transpose/core';
 import { logger } from '../config/logger.js';
 import { getActiveProvider, type TokenUsage } from './llm/index.js';
 
@@ -59,38 +59,12 @@ CONSTRAINTS:
 - Use en-dash (–) for date ranges, not hyphens.
 - Return ONLY valid JSON. No markdown, no code fences, no explanation.`;
 
-export const cvDataSchema = z.object({
-  name: z.string().trim().min(1),
-  title_line1: z.string(),
-  title_line2: z.string(),
-  years: z.string(),
-  technicalSkills: z.array(z.object({
-    label: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-  })),
-  sectors: z.array(z.string().trim().min(1)),
-  domains: z.array(z.string().trim().min(1)),
-  experience: z.array(z.object({
-    company: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-    dates: z.string().trim().min(1),
-    title: z.string().trim().min(1),
-    tasks: z.array(z.string().trim().min(1)),
-    achievements: z.array(z.string().trim()),
-    techEnvironment: z.string().trim(),
-  })),
-  languages: z.array(z.object({
-    label: z.string().trim().min(1),
-    level: z.string().trim().min(1),
-  })),
-  education: z.array(z.object({
-    year: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-  })),
-  attention_cv: z.string(),
-});
-
-export type CvData = z.infer<typeof cvDataSchema>;
+// CV profile schema/type live in @cv-transpose/core (so the template contract,
+// which is also in core, can reference them without an api/-side dep). Re-export
+// them here to keep the legacy `./cv-agent.js` import path working for callers
+// that haven't migrated to importing from `@cv-transpose/core` directly.
+export { cvDataSchema };
+export type { CvData };
 
 export type { TokenUsage };
 

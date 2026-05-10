@@ -34,6 +34,42 @@ export type {
   RenderingJobStyle,
 } from './template/manifest.js';
 
+// Template contract (Task 17) — schema + helpers for the per-tenant
+// template contract document.
+export {
+  templateVariantSchema,
+  templateHeaderStyleSchema,
+  templateSectionStyleSchema,
+  templateJobStyleSchema,
+  templateHeaderFieldKeySchema,
+  templateSectionKeySchema,
+  templateRenderingSchema,
+  templateContractSchema,
+  legacyTemplateSeedSchema,
+  legacyThemeSeedSchema,
+  buildLegacyTemplateContract,
+  ensureTemplateContract,
+  getRequiredSectionLabels,
+  getPrimaryExperienceSectionLabel,
+  getPrimarySectorSectionLabel,
+  deriveOutputNameFromTemplateContract,
+  validateCvDataAgainstTemplateContract,
+} from './template/contract.js';
+export type {
+  TemplateVariant,
+  TemplateSectionKey,
+  TemplateHeaderStyle,
+  TemplateSectionStyle,
+  TemplateJobStyle,
+  TemplateRendering,
+  TemplateContract,
+} from './template/contract.js';
+
+// CV profile (Task 17) — used by template contract validation; lives in core
+// so the contract has no api-side type dependency.
+export { cvDataSchema } from './cv/profile.js';
+export type { CvData } from './cv/profile.js';
+
 // DOCX helpers (Task 14)
 export * from './docx/tools.js';
 export * from './docx/reader.js';
