@@ -50,7 +50,8 @@ Parent : `spec/SPEC_EVOL_MULTI_MARKETPLACE.md`
 
 ### 1.1 Signature de la fonction publique
 
-**TypeScript** (`cv-transpose-core/typescript/src/index.ts`) :
+**TypeScript** (`core/typescript/src/index.ts`, package npm
+`@cv-transpose/core` consommé via npm workspace local) :
 
 ```ts
 export interface InputFile {
@@ -123,7 +124,7 @@ export interface TransposeOutput {
 export async function transpose(input: TransposeInput): Promise<TransposeOutput>;
 ```
 
-**Python** (`cv-transpose-core/python/cv_transpose_core/__init__.py`) — mêmes
+**Python** (`core/python/cv_transpose_core/__init__.py`) — mêmes
 champs en `snake_case`, mêmes invariants, mêmes erreurs :
 
 ```python
@@ -187,16 +188,18 @@ async def transpose(input_: TransposeInput) -> TransposeOutput: ...
 
 ### 1.3 Versioning
 
-- `cv-transpose-core` est un repo dédié, semver strict.
-- Les ports TS et Python sont publiés en parallèle, mêmes numéros de
-  version (`x.y.z`).
+- Le cœur vit dans `core/` du monorepo `spa-transpose-cv`. Versioning via
+  tags Git annotés `core-vX.Y.Z` (semver strict sur les contrats publics
+  ci-dessus).
+- Les ports TS et Python avancent en parallèle, mêmes numéros de version
+  (le tag couvre les deux).
 - Bump majeur dès qu'une signature publique change.
 
 ## Contrat 2 — Manifeste de template (JSON Schema v1)
 
 ### 2.1 Schéma
 
-Stocké à `cv-transpose-core/schemas/template-manifest-v1.json`.
+Stocké à `core/schemas/template-manifest-v1.json`.
 
 Structure minimale (extraits, schéma complet versionné) :
 
@@ -268,7 +271,7 @@ Structure minimale (extraits, schéma complet versionné) :
   `"version": "1.0"`. La validation est faite au chargement par chaque
   port (TS via `ajv`, Python via `jsonschema`).
 - Le manifeste référence `validationRulesRef` dans
-  `cv-transpose-core/validation-rules.json` (catalogue de rulesets nommés,
+  `core/validation-rules.json` (catalogue de rulesets nommés,
   versionné en parallèle).
 
 ## Contrat 3 — API assets backoffice (HTTP + JWT)
@@ -330,7 +333,7 @@ max-age=300` (5 min).
 ### 4.1 Layout
 
 ```
-cv-transpose-core/
+core/
 ├── fixtures/
 │   ├── cv-001-junior-pm.pdf
 │   ├── cv-001-junior-pm.expected-extraction.json   # JSON attendu après LLM
@@ -364,7 +367,7 @@ cv-transpose-core/
 
 | Comparaison | Tolérance | Outil |
 |---|---|---|
-| Structure OOXML (XPath, attributs, ordre) | **0** (égalité stricte après normalisation) | helper `normalize_docx(bytes) -> tree` implémenté dans chaque port (`cv-transpose-core/typescript/src/test/normalize.ts`, `cv-transpose-core/python/cv_transpose_core/test/normalize.py`), spécifié par le même pseudocode dans `cv-transpose-core/spec/normalize-docx.md` (zéroïsation timestamps, tri attributs, suppression IDs aléatoires) |
+| Structure OOXML (XPath, attributs, ordre) | **0** (égalité stricte après normalisation) | helper `normalize_docx(bytes) -> tree` implémenté dans chaque port (`core/typescript/src/test/normalize.ts`, `core/python/cv_transpose_core/test/normalize.py`), spécifié par le même pseudocode dans `core/spec/normalize-docx.md` (zéroïsation timestamps, tri attributs, suppression IDs aléatoires) |
 | Rendu PNG page 1 | RMSE < **0.15** sur 286×470 | `convert -metric RMSE` (LibreOffice côté CI uniquement) |
 | Extraction JSON (LLM-judge) | recall ≥ **0.95** sur (`name`, `experiences[].title`, `experiences[].dates`, `languages[].name`) | LLM externe en test (Claude ou Gemini) |
 
