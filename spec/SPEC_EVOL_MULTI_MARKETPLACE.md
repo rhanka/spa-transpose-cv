@@ -100,24 +100,28 @@ cœur doit être exécutable dans ces sandbox, donc Python.
 Le shell web tourne en TypeScript (Hono) et rend déjà bien. Le réécrire en
 Python serait du churn pour aucun gain produit.
 
-Solution retenue : **manifeste partagé + double port**.
+Solution retenue : **manifeste partagé + double port**, vivant dans un
+dossier `core/` au top-level du monorepo `spa-transpose-cv` (pas de repo
+dédié en phase MVP).
 
-- Un **manifeste de comportement** versionné semver, dans un dépôt unique
-  (`cv-transpose-core`) :
-  - `prompts/*.md` (prompts texte ; consommés mot-pour-mot par les trois
-    shells)
-  - `workflow.yaml` (étapes du pipeline : extract → map → render → validate,
-    avec leurs paramètres et leurs gates)
-  - `validation-rules.json` (règles d'alignement page 1, sections,
-    typographie)
-  - `template-schema.json` (schéma JSON du manifeste de template entreprise)
-  - `fixtures/*.{pdf,docx}` + `golden/*.docx` (CVs canoniques + sorties
-    attendues, pour les tests d'équivalence)
+- Un **manifeste de comportement** versionné via tags Git du monorepo, à
+  `core/` :
+  - `core/spec/prompts/*.md` (prompts texte ; consommés mot-pour-mot par
+    les trois shells)
+  - `core/spec/workflow.yaml` (étapes du pipeline : extract → map →
+    render → validate, avec leurs paramètres et leurs gates)
+  - `core/spec/validation-rules.json` (règles d'alignement page 1,
+    sections, typographie)
+  - `core/spec/template-manifest-v1.json` (schéma JSON du manifeste de
+    template entreprise)
+  - `core/fixtures/*.{pdf,docx}` + `core/golden/*.docx` (CVs canoniques +
+    sorties attendues, pour les tests d'équivalence)
 - Deux **portages exécutifs** qui consomment ce manifeste :
-  - `cv_transpose_core/` Python (pure Python : `zipfile`, `lxml`,
-    `python-docx`, fontes vendored), pour les deux agents marketplace.
-  - `cv-transpose-core/` TypeScript (réutilise `jszip`, `xmldom`,
-    l'orchestrateur existant), pour le shell web.
+  - `core/python/cv_transpose_core/` (pure Python : `zipfile`, `lxml`,
+    `python-docx`, fontes vendored), zippé au build des agents
+    marketplace.
+  - `core/typescript/` (réutilise `jszip`, `xmldom`, l'orchestrateur
+    existant), importé par le shell web via npm workspace local.
 
 Tests d'équivalence obligatoires sur chaque release du manifeste, voir §6.
 
@@ -168,8 +172,9 @@ Tests d'équivalence obligatoires sur chaque release du manifeste, voir §6.
 - Continue à servir les acheteurs directs.
 - UX riche conservée : galerie de templates, dropzone, batch, previews
   rendus, partage de session 48 h.
-- Importe `cv-transpose-core` TypeScript en remplacement progressif de la
-  logique aujourd'hui dans `api/src/services/`.
+- Importe le package local `core/typescript/` (alias npm
+  `@cv-transpose/core`) en remplacement progressif de la logique
+  aujourd'hui dans `api/src/services/`.
 - Persistance session 48 h chiffrée AES-256-GCM conservée.
 
 ### 4.3 Agent MS Copilot
@@ -204,17 +209,26 @@ Tests d'équivalence obligatoires sur chaque release du manifeste, voir §6.
 - **Distribution** : publication Agentspace / Agent Gallery via Google
   partner program, niveau basique en phase 1.
 
-### 4.5 Cœur partagé (`cv-transpose-core`)
+### 4.5 Cœur partagé (`core/` dans le monorepo)
 
-- Repo Git dédié, semver strict.
+- Vit dans le dossier `core/` du monorepo `spa-transpose-cv`, pas de repo
+  dédié en phase MVP. Versioning via tags Git `core-v1.x.y`.
 - Source de vérité du **comportement** (prompts, workflow, validation,
   schéma template, fixtures, golden).
-- Deux dossiers de code :
-  - `python/` — package Python pur (`zipfile`, `lxml`, `python-docx`),
-    fontes Lato vendored, importable dans les sandbox Copilot et Gemini.
-  - `typescript/` — package TypeScript (réutilise `jszip`, `xmldom`,
-    `fast-xml-parser`), publié en npm privé pour le shell web.
-- Tests d'équivalence sous `tests/equivalence/` (cf. §6).
+- Structure :
+  - `core/spec/` — manifeste partagé (prompts, workflow, validation, JSON
+    Schema), source de vérité.
+  - `core/python/cv_transpose_core/` — package Python pur (`zipfile`,
+    `lxml`, `python-docx`), fontes Lato vendored, zippé au build des
+    agents marketplace.
+  - `core/typescript/` — package TypeScript (réutilise `jszip`, `xmldom`,
+    `fast-xml-parser`), importé par le shell web via npm workspace local
+    (chemin relatif).
+  - `core/fixtures/` + `core/golden/` — CVs et sorties attendues.
+  - `core/tests/equivalence/` — CI d'équivalence TS ↔ Python.
+- Une extraction en repo dédié (`cv-transpose-core` open source) reste
+  une option future si le cœur trouve des consommateurs externes ; non
+  programmée en phase 1.
 
 ## 5. Data flow
 
@@ -295,7 +309,7 @@ entre TS et Python.
 
 | Niveau | Quoi | Où |
 |---|---|---|
-| Fixtures partagées | ~30 CVs canoniques (junior, senior, multi-langues, edge cases : noms longs, dates ambiguës, lacunes, multi-pages) avec leurs golden DOCX outputs | `cv-transpose-core/tests/fixtures/` |
+| Fixtures partagées | ~30 CVs canoniques (junior, senior, multi-langues, edge cases : noms longs, dates ambiguës, lacunes, multi-pages) avec leurs golden DOCX outputs | `core/fixtures/` + `core/golden/` |
 | Tests unitaires par port | Chaque fonction (extract, map, render, validate) testée séparément en TS et Python | Pipelines CI respectives |
 | Tests d'équivalence | Sur chaque release du cœur : rejouer les fixtures sur les trois ports, diff DOCX (structure OOXML stricte + rendu PNG via LibreOffice). Tolérance définie : 0 sur la structure, RMSE < 0,15 sur le pixel | CI commune au repo cœur |
 | Evals prompts | LLM-judge sur fixtures réelles : extraction GPT-4o vs Gemini vs LLM web. Métrique : recall des champs critiques (nom, expériences, dates, intitulés). Catch les divergences entre LLMs marketplace | CI commune |
@@ -335,8 +349,8 @@ entre TS et Python.
 
 ### Phase 1 — MVP marketplace (~3-4 mois)
 
-- Extraction du cœur depuis l'API monolithe actuelle vers le repo dédié
-  `cv-transpose-core`.
+- Extraction du cœur depuis l'API monolithe actuelle vers le dossier
+  `core/` du monorepo, avec port TS d'abord.
 - Premier port Python (purement Python, pas de LibreOffice in-sandbox).
 - Manifeste partagé : prompts versionnés, workflow YAML, validation rules,
   schéma template, fixtures de base.
