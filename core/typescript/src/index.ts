@@ -87,6 +87,11 @@ export * from './validate/page1.js';
 // re-exported through the api shim at services/template-xml.ts.
 export * from './template/render.js';
 
+// Manifest → contract bridge (Task 21) — converts a public TemplateManifest
+// into the richer TemplateContract the renderer consumes. Used by transpose()
+// and by language ports (P1.4 / P1.5) that need the same conversion.
+export { manifestToContract } from './template/bridge.js';
+
 // Logger (Task 14)
 export { defaultLogger } from './util/log.js';
 export type { CoreLogger } from './util/log.js';
