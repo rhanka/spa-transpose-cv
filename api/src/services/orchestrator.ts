@@ -1,12 +1,8 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-
-const execFileAsync = promisify(execFile);
+import { validatePage1 } from '@cv-transpose/core';
 import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
@@ -48,50 +44,6 @@ function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'
     );
   }
   return promptParts.filter(Boolean).join('\n\n');
-}
-
-/**
- * Convert DOCX to PDF via LibreOffice, extract page 1 text, verify
- * that WORK EXPERIENCE is NOT on page 1 (= skills/sectors fit on page 1).
- */
-async function validatePage1WithPdf(docxPath: string, tenantConfig: TenantConfig): Promise<string[]> {
-  const errors: string[] = [];
-  const experienceSectionLabel = getPrimaryExperienceSectionLabel(tenantConfig.templateContract);
-  const sectorSectionLabel = getPrimarySectorSectionLabel(tenantConfig.templateContract);
-  const workDir = await mkdtemp(join(tmpdir(), 'lo-page1-'));
-  const profileDir = join(workDir, 'profile');
-
-  try {
-    const baseName = docxPath.split('/').pop()!.replace('.docx', '');
-    await execFileAsync('libreoffice', [
-      `-env:UserInstallation=file://${profileDir}`,
-      '--headless',
-      '--convert-to', 'pdf',
-      '--outdir', workDir,
-      docxPath,
-    ], { timeout: 30_000 });
-
-    const pdfPath = join(workDir, `${baseName}.pdf`);
-    const { stdout: page1 } = await execFileAsync('pdftotext', ['-f', '1', '-l', '1', pdfPath, '-'], {
-      maxBuffer: 1024 * 1024,
-    });
-
-    if (experienceSectionLabel && page1.toUpperCase().includes(experienceSectionLabel.toUpperCase())) {
-      errors.push(`Page 1 overflow: ${experienceSectionLabel} found on page 1 — skills/sectors are too short or page break missing`);
-    }
-
-    if (sectorSectionLabel && !page1.toUpperCase().includes(sectorSectionLabel.toUpperCase())) {
-      errors.push(`Page 1 overflow: ${sectorSectionLabel} not found on page 1 — skills descriptions are too long`);
-    }
-  } catch (err) {
-    const message = (err as Error).message;
-    logger.error({ docxPath, err: message }, 'PDF validation failed (LibreOffice error)');
-    errors.push(`PDF validation failed: ${message}`);
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
-  }
-
-  return errors;
 }
 
 function escapeXml(text: string): string {
@@ -177,7 +129,10 @@ async function processOneCV(
     );
 
     // 4b. PDF validation: check page 1 doesn't overflow
-    const pdfErrors = await validatePage1WithPdf(outputPath, activeTenantConfig);
+    const { warnings: pdfErrors } = await validatePage1(new Uint8Array(outputData), {
+      experienceSectionLabel: getPrimaryExperienceSectionLabel(activeTenantConfig.templateContract),
+      sectorSectionLabel: getPrimarySectorSectionLabel(activeTenantConfig.templateContract),
+    });
     const allErrors = [...headerErrors, ...validation.errors, ...pdfErrors];
 
     if (allErrors.length > 0) {
