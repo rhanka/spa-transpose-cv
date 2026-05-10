@@ -9,8 +9,13 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./api:/app/api
+      - ./core:/app/core
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - ./tsconfig.base.json:/app/tsconfig.base.json
       - api_node_modules:/app/node_modules
       - api_member_node_modules:/app/api/node_modules
+      - core_node_modules:/app/core/typescript/node_modules
       - api_data:/data
     environment:
       - TENANT_STORAGE_BACKEND=${DEV_TENANT_STORAGE_BACKEND:-s3}
@@ -83,8 +88,13 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./api:/app/api
+      - ./core:/app/core
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - ./tsconfig.base.json:/app/tsconfig.base.json
       - api_node_modules:/app/node_modules
       - api_member_node_modules:/app/api/node_modules
+      - core_node_modules:/app/core/typescript/node_modules
       - api_data:/data
     working_dir: /app/api
     environment:
@@ -103,5 +113,6 @@ services:
 volumes:
   api_node_modules:
   api_member_node_modules:
+  core_node_modules:
   ui_node_modules:
   minio_data:
