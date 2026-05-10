@@ -1,0 +1,53 @@
+{
+  "name": "Jane Smith",
+  "title_line1": "Junior Product",
+  "title_line2": "Manager",
+  "years": "3 years of experience",
+  "technicalSkills": [
+    {
+      "label": "Product",
+      "description": "Roadmap planning, user research and A/B testing for early-stage mobile features."
+    },
+    {
+      "label": "Tools",
+      "description": "JIRA for backlog management, Figma for prototyping, Mixpanel for product analytics."
+    }
+  ],
+  "sectors": [
+    "Consumer Mobile"
+  ],
+  "domains": [
+    "Product Management",
+    "User Research",
+    "Mobile Apps"
+  ],
+  "experience": [
+    {
+      "company": "TechCorp (fictional)",
+      "description": "Junior Product Manager on a consumer mobile product, working with a 3-person delivery squad.",
+      "dates": "2023 - Present",
+      "title": "Junior Product Manager",
+      "tasks": [
+        "Define and groom the mobile roadmap with engineering and design.",
+        "Run weekly user research sessions and translate insights into prioritised backlog items.",
+        "Coordinate release planning across product, design and engineering."
+      ],
+      "achievements": [
+        "Launched mobile app v2 with a 30% retention uplift.",
+        "Reduced time-to-decision on roadmap proposals from 3 weeks to 5 days."
+      ],
+      "techEnvironment": "JIRA, Figma, Mixpanel, Notion"
+    }
+  ],
+  "languages": [
+    { "label": "English", "level": "Native" },
+    { "label": "French",  "level": "Professional" }
+  ],
+  "education": [
+    {
+      "year": "2023",
+      "description": "MS Computer Science, Tech University (fictional)."
+    }
+  ],
+  "attention_cv": ""
+}
