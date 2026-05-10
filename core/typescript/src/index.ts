@@ -17,9 +17,10 @@ export type {
 // LlmProvider (will be created in Task 12, re-exported here)
 export type { LlmProvider, LlmCompleteArgs, LlmCompleteResult } from './llm.js';
 
-// Template manifest validator (Task 6)
+// Template manifest validator (Task 6) + rendering hints (Task 18)
 export {
   validateTemplateManifest,
+  DEFAULT_RENDERING,
 } from './template/manifest.js';
 export type {
   TemplateManifest,
@@ -27,6 +28,10 @@ export type {
   SectionKind,
   Slot,
   ValidationResult,
+  RenderingHints,
+  RenderingHeaderStyle,
+  RenderingSectionStyle,
+  RenderingJobStyle,
 } from './template/manifest.js';
 
 // DOCX helpers (Task 14)
