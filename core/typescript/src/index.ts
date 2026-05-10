@@ -82,6 +82,11 @@ export * from './extract/text.js';
 // check. Used by the api orchestrator after building the DOCX.
 export * from './validate/page1.js';
 
+// Template renderer (Task 18b) — OOXML rendering driven by the template
+// contract's rendering hints. Consumed by transpose() in core (Task 21) and
+// re-exported through the api shim at services/template-xml.ts.
+export * from './template/render.js';
+
 // Logger (Task 14)
 export { defaultLogger } from './util/log.js';
 export type { CoreLogger } from './util/log.js';
