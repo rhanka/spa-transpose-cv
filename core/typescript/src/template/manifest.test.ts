@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
 import Ajv from 'ajv';
 import schema from '../../../../core/spec/template-manifest-v1.json' assert { type: 'json' };
 import { DEFAULT_RENDERING, validateTemplateManifest } from './manifest.js';
@@ -90,5 +91,25 @@ describe('template-manifest-v1 rendering block', () => {
     expect(DEFAULT_RENDERING.headerStyle).toBeTruthy();
     expect(DEFAULT_RENDERING.sectionStyle).toBeTruthy();
     expect(DEFAULT_RENDERING.jobStyle).toBeTruthy();
+  });
+});
+
+describe('scalian test manifest fixture', () => {
+  it('validates against the v1 schema', () => {
+    const fixturePath = new URL(
+      '../../../../core/fixtures/templates-test/scalian/manifest.json',
+      import.meta.url,
+    );
+    const raw = fs.readFileSync(fixturePath, 'utf8');
+    const result = validateTemplateManifest(JSON.parse(raw));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.manifest.tenantKey).toBe('direct:scalian-test');
+      expect(result.manifest.sections.map(s => s.label)).toEqual([
+        'TECHNICAL SKILLS',
+        'SECTOR-SPECIFIC SKILLS',
+        'WORK EXPERIENCE',
+      ]);
+    }
   });
 });
