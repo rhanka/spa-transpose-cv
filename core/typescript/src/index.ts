@@ -78,6 +78,10 @@ export * from './docx/font-embedding.js';
 // Text extraction (Task 16)
 export * from './extract/text.js';
 
+// Page 1 validation (Task 20) — saturation-safe LibreOffice page-1 overflow
+// check. Used by the api orchestrator after building the DOCX.
+export * from './validate/page1.js';
+
 // Logger (Task 14)
 export { defaultLogger } from './util/log.js';
 export type { CoreLogger } from './util/log.js';
