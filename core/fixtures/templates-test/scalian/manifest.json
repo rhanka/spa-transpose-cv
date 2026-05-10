@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "tenantKey": "direct:scalian-test",
+  "naming": "Scalian_Profile_{name}.docx",
+  "header": {
+    "nameSlot":       { "paragraphIndex": 0, "runIndex": 0, "maxChars": 80 },
+    "titleLine1Slot": { "paragraphIndex": 1, "runIndex": 0, "maxChars": 40 },
+    "titleLine2Slot": { "paragraphIndex": 2, "runIndex": 0, "maxChars": 40 }
+  },
+  "sections": [
+    { "id": "technicalSkills", "kind": "skills",      "label": "TECHNICAL SKILLS",        "maxItems": 8 },
+    { "id": "sectorSkills",    "kind": "skills",      "label": "SECTOR-SPECIFIC SKILLS",  "maxItems": 4 },
+    { "id": "experience",      "kind": "experiences", "label": "WORK EXPERIENCE",         "maxItems": 8 }
+  ],
+  "rendering": {
+    "headerStyle": "brand-accent",
+    "sectionStyle": "left-accent",
+    "jobStyle": "compact-dense",
+    "colors": {
+      "accent": "#0F2137",
+      "sectionBannerFill": "#E9EEF4",
+      "sectionBannerText": "#0F2137",
+      "headingText": "#0F2137",
+      "bodyText": "#1C2735",
+      "mutedText": "#607184"
+    },
+    "fonts": {
+      "heading": "Liberation Sans",
+      "body": "Liberation Sans"
+    },
+    "spacing": {
+      "sectionBeforeTwip": 120,
+      "sectionAfterTwip": 70,
+      "lineTwip": 240
+    }
+  },
+  "validationRulesRef": "default"
+}

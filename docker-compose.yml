@@ -2,8 +2,8 @@ services:
   api:
     image: ${REGISTRY:-local}/${API_IMAGE_NAME:-transpose-cv-api}:${API_VERSION:-latest}
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
       target: ${TARGET:-development}
     environment:
       - NODE_ENV=${TARGET:-development}

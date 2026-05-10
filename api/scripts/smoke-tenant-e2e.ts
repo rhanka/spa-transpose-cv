@@ -6,7 +6,6 @@ const inputFile = (process.env.INPUT_FILE ?? 'templates/references/cgi_source_ex
 const sessionPassword = (process.env.SESSION_PASSWORD ?? 'smoke-pass').trim() || 'smoke-pass';
 const apiBaseUrl = (process.env.API_BASE_URL ?? 'http://localhost:8686/api').trim().replace(/\/+$/g, '');
 const provider = process.env.PROVIDER?.trim() || '';
-const templateVariant = process.env.TEMPLATE_VARIANT?.trim() || '';
 const targetCompany = process.env.TARGET_COMPANY?.trim() || '';
 const timeoutMs = Number.parseInt(process.env.TIMEOUT_MS ?? '180000', 10);
 const pollIntervalMs = Number.parseInt(process.env.POLL_INTERVAL_MS ?? '2000', 10);
@@ -86,7 +85,6 @@ async function main(): Promise<void> {
     body: JSON.stringify({
       prompt: '',
       ...(provider ? { provider } : {}),
-      ...(templateVariant ? { templateVariant } : {}),
       ...(targetCompany ? { targetCompany } : {}),
     }),
   });
@@ -155,7 +153,6 @@ async function main(): Promise<void> {
         tenant,
         sessionId,
         inputName,
-        templateVariant,
         targetCompany,
         outputName,
         outputBytes: outputBuffer.length,

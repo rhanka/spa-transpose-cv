@@ -4,7 +4,7 @@ import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { forceClaimAsRootAdmin, createRootAdminSession, getClaimStatus, verifyClaimOtp, AdminAuthError } from './admin-auth.js';
 import { scrapeBrandTheme } from './brand-scraper-agent.js';
-import { extractTextFromDocxBuffer } from './docx-reader.js';
+import { extractTextFromDocxBuffer } from '@cv-transpose/core';
 import { analyzeTemplateDocx, type TemplateAnalysisProfile } from './template-analysis-agent.js';
 import { clearTenantConfigCache, readStorageObjectText, writeStorageObjectBuffer, writeStorageObjectText } from './tenant-config.js';
 

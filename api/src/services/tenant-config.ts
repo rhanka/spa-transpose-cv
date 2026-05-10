@@ -8,11 +8,23 @@ import {
   ensureTemplateContract,
   legacyTemplateSeedSchema,
   legacyThemeSeedSchema,
-  templateContractSchema,
+  templateRenderingSchema,
   templateVariantSchema,
   type TemplateContract,
-} from './template-contract.js';
-import { getTemplateVariantDefinition } from './template-variant-catalog.js';
+  type TemplateRendering,
+} from '@cv-transpose/core';
+
+/**
+ * Fallback rendering block used when a tenant config predates the inline
+ * `rendering` block on disk. New tenants should always carry their own block;
+ * this default exists only so legacy / partially-migrated configs stay
+ * loadable.
+ */
+const DEFAULT_TENANT_RENDERING: TemplateRendering = {
+  headerStyle: 'ats-minimal',
+  sectionStyle: 'rule-caps',
+  jobStyle: 'ats-plain',
+};
 
 export const DEFAULT_TENANT_SLUG = '_default';
 export const RESERVED_TENANT_SLUGS = ['admin', 'api', 'session'] as const;
@@ -28,21 +40,6 @@ const tenantBrandingSchema = z.object({
   heroBackground: z.string().trim().min(1).optional(),
   shellBackground: z.string().trim().min(1).optional(),
 }).optional();
-const tenantTemplateLibraryOptionSchema = z.object({
-  id: templateVariantSchema,
-  label: z.string().trim().min(1),
-  description: z.string().trim().min(1),
-  recommendedFor: z.string().trim().min(1).optional(),
-  previewImagePath: z.string().trim().min(1).optional(),
-  referenceLabel: z.string().trim().min(1).optional(),
-  referenceSummary: z.string().trim().min(1).optional(),
-});
-const tenantTemplateLibrarySchema = z.object({
-  enabled: z.boolean(),
-  defaultVariant: templateVariantSchema,
-  options: z.array(tenantTemplateLibraryOptionSchema).min(1),
-}).optional();
-
 const rawTenantConfigSchema = z.object({
   slug: tenantSlugSchema,
   displayName: z.string().trim().min(1),
@@ -55,9 +52,12 @@ const rawTenantConfigSchema = z.object({
   active: z.boolean(),
   theme: legacyThemeSeedSchema,
   branding: tenantBrandingSchema,
-  templateLibrary: tenantTemplateLibrarySchema,
   template: legacyTemplateSeedSchema.optional(),
-  templateContract: templateContractSchema.optional(),
+  rendering: templateRenderingSchema.optional(),
+  // Raw, untyped templateContract: parsed through the strict
+  // templateContractSchema in ensureTemplateContract(). Tenant configs are
+  // expected to carry their own `rendering` block here directly.
+  templateContract: z.unknown().optional(),
 });
 
 type RawTenantConfig = z.infer<typeof rawTenantConfigSchema>;
@@ -118,30 +118,15 @@ export function resolveTenantSlug(options: {
 }
 
 function hydrateTenantConfig(config: RawTenantConfig): TenantConfig {
-  const templateLibrary = config.templateLibrary
-    ? {
-      ...config.templateLibrary,
-      options: config.templateLibrary.options.map((option) => {
-        const definition = getTemplateVariantDefinition(option.id);
-        return {
-          ...option,
-          previewImagePath: definition.previewImagePath,
-          referenceLabel: definition.referenceLabel,
-          referenceSummary: definition.referenceSummary,
-        };
-      }),
-    }
-    : undefined;
-
   return {
     ...config,
-    templateLibrary,
     templateContract: ensureTemplateContract({
       templateContractVersion: config.templateContractVersion,
       variant: config.variant,
       theme: config.theme,
       template: config.template,
       templateContract: config.templateContract,
+      defaultRendering: config.rendering ?? DEFAULT_TENANT_RENDERING,
     }),
   };
 }

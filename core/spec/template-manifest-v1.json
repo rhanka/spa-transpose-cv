@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cv-transpose.com/schemas/template-manifest-v1.json",
+  "type": "object",
+  "required": ["version", "tenantKey", "naming", "sections", "header"],
+  "properties": {
+    "version": { "const": "1.0" },
+    "tenantKey": {
+      "type": "string",
+      "pattern": "^(direct|ms|gws):[A-Za-z0-9._-]+$"
+    },
+    "naming": {
+      "type": "string",
+      "description": "Template de nommage du DOCX sortant. Variables : {name} {lang} {ts}"
+    },
+    "header": {
+      "type": "object",
+      "required": ["nameSlot", "titleLine1Slot", "titleLine2Slot"],
+      "properties": {
+        "nameSlot":      { "$ref": "#/definitions/slot" },
+        "titleLine1Slot":{ "$ref": "#/definitions/slot" },
+        "titleLine2Slot":{ "$ref": "#/definitions/slot" }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/section" }
+    },
+    "validationRulesRef": {
+      "type": "string",
+      "description": "Identifiant d'un ruleset dans validation-rules.json"
+    },
+    "rendering": {
+      "type": "object",
+      "description": "Style hints consumed by the renderer. Replaces the legacy variant-catalog lookup. Optional - when absent, the renderer applies a neutral default.",
+      "additionalProperties": false,
+      "properties": {
+        "headerStyle": {
+          "enum": [
+            "ats-minimal",
+            "simple-clean",
+            "compact-split",
+            "modern-band",
+            "professional-classic",
+            "brand-accent"
+          ]
+        },
+        "sectionStyle": {
+          "enum": [
+            "rule-caps",
+            "subtle-label",
+            "compact-rule",
+            "filled-bar",
+            "classic-band",
+            "centered-rule",
+            "left-accent"
+          ]
+        },
+        "jobStyle": {
+          "enum": [
+            "ats-plain",
+            "simple-balanced",
+            "modern-emphasis",
+            "classic-consulting",
+            "compact-dense"
+          ]
+        },
+        "colors": {
+          "type": "object",
+          "description": "Hex color tokens (#RRGGBB). Common keys: accent, sectionBannerFill, sectionBannerText, headingText, bodyText, mutedText.",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          }
+        },
+        "fonts": {
+          "type": "object",
+          "description": "Font family tokens. Common keys: heading, body.",
+          "additionalProperties": {
+            "oneOf": [{ "type": "string" }, { "type": "number" }]
+          }
+        },
+        "spacing": {
+          "type": "object",
+          "description": "Spacing tokens in twips. Common keys: sectionBeforeTwip, sectionAfterTwip, lineTwip.",
+          "additionalProperties": {
+            "oneOf": [{ "type": "string" }, { "type": "number" }]
+          }
+        },
+        "sectionLabelOverrides": {
+          "type": "object",
+          "description": "Per-section label overrides keyed by section key (e.g. technicalSkills, experience).",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "slot": {
+      "type": "object",
+      "required": ["paragraphIndex", "runIndex"],
+      "properties": {
+        "paragraphIndex": { "type": "integer", "minimum": 0 },
+        "runIndex":       { "type": "integer", "minimum": 0 },
+        "maxChars":       { "type": "integer", "minimum": 1 }
+      }
+    },
+    "section": {
+      "type": "object",
+      "required": ["id", "kind", "label"],
+      "properties": {
+        "id":   { "type": "string" },
+        "kind": { "enum": ["experiences", "education", "skills", "languages", "certifications", "narrative"] },
+        "label":{ "type": "string", "maxLength": 80 },
+        "anchorParagraphIndex": { "type": "integer", "minimum": 0 },
+        "maxItems":             { "type": "integer", "minimum": 1 },
+        "itemTemplateRef":      { "type": "string" }
+      }
+    }
+  }
+}

@@ -14,3 +14,7 @@ data
 *.docx
 *.pdf
 *.doc
+
+# Keep api template assets (DOCX/PDF/MD) needed at runtime — context is now monorepo root
+!api/templates
+!api/templates/**

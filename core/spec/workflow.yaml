@@ -1,0 +1,37 @@
+version: 1
+description: Pipeline CV Transpose, source de vérité du comportement.
+steps:
+  - id: extract-text
+    description: Extrait le texte brut du CV source (PDF via pdftotext, DOCX via docx-reader).
+    inputs: [file]
+    outputs: [raw_text]
+    fails_loud: true
+
+  - id: extract-cv
+    description: Appel LLM pour mapper le texte brut vers un JSON structuré conforme au schéma de profil.
+    prompt_ref: prompts/extract-cv.md
+    inputs: [raw_text, tenant_brand]
+    outputs: [profile_json]
+    fails_loud: true
+    retries: 1
+
+  - id: render-docx
+    description: Construit le DOCX OOXML à partir du profil et du manifeste de template.
+    inputs: [profile_json, template_manifest, base_docx, brand]
+    outputs: [docx_bytes]
+    fails_loud: true
+
+  - id: validate-page1
+    description: Vérifie que les sections critiques tiennent en page 1 et que les contraintes d'alignement sont respectées.
+    rules_ref: validation-rules.json
+    inputs: [docx_bytes, template_manifest]
+    outputs: [alignment_report]
+    fails_loud: false
+
+  - id: qa-conductor
+    description: (Optionnel, mode session) Relecture LLM "conducteur" pour signaler les attentions traduction et fidélité.
+    prompt_ref: prompts/qa-conductor.md
+    inputs: [profile_json, alignment_report]
+    outputs: [warnings]
+    fails_loud: false
+    retries: 0

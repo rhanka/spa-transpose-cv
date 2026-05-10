@@ -4,7 +4,6 @@ import { env } from '../config/env.js';
 import { generateSessionId, generateSalt, deriveKey, encrypt, decrypt } from './crypto.js';
 import { logger } from '../config/logger.js';
 import { DEFAULT_TENANT_SLUG, normalizeTenantSlug } from './tenant-config.js';
-import type { TemplateVariant } from './template-contract.js';
 
 export type SessionStatus = 'created' | 'uploading' | 'ready' | 'processing' | 'done' | 'error';
 
@@ -23,7 +22,6 @@ export interface SessionMeta {
   salt: string;
   prompt: string;
   provider?: string;
-  templateVariant?: TemplateVariant;
   targetCompany?: string;
   status: SessionStatus;
   files: FileEntry[];
