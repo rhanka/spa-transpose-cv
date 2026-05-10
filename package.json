@@ -1,0 +1,5 @@
+{
+  "name": "spa-transpose-cv-monorepo",
+  "private": true,
+  "workspaces": ["api", "ui", "core/typescript"]
+}

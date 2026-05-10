@@ -152,14 +152,12 @@ export async function markReady(
   prompt: string,
   options?: {
     provider?: string;
-    templateVariant?: string;
     targetCompany?: string;
   },
   tenantSlug = DEFAULT_TENANT_SLUG,
 ): Promise<void> {
   const body: Record<string, string> = { prompt };
   if (options?.provider) body.provider = options.provider;
-  if (options?.templateVariant) body.templateVariant = options.templateVariant;
   if (options?.targetCompany) body.targetCompany = options.targetCompany;
   const res = await fetch(`${getSessionApiBase(tenantSlug)}/${sessionId}/ready`, {
     method: 'POST',

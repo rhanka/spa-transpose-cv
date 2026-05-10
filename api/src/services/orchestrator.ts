@@ -1,29 +1,29 @@
-import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-
-const execFileAsync = promisify(execFile);
-import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
-import { decrypt, encrypt } from './crypto.js';
-import { extractTextFromBuffer } from './text-extractor.js';
-import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
-import { getActiveProvider, getProviderConfig } from './llm/index.js';
-import { validateDocxBuffer } from './docx-reader.js';
-import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 import {
-  cloneTemplateContractWithVariant,
+  validatePage1,
+  extractTextFromBuffer,
+  validateDocxBuffer,
   deriveOutputNameFromTemplateContract,
   getPrimaryExperienceSectionLabel,
   getPrimarySectorSectionLabel,
+  getRequiredSectionLabels,
   validateCvDataAgainstTemplateContract,
-} from './template-contract.js';
-import { buildTemplateDocumentXml, getXmlHeader, writeTemplateHeader } from './template-xml.js';
-import { unpackDocx, packDocx } from './docx-tools.js';
-import { defaultLatoSource, embedLatoFonts } from './font-embedding.js';
+  buildTemplateDocumentXml,
+  getXmlHeader,
+  writeTemplateHeader,
+  unpackDocx,
+  packDocx,
+  defaultLatoSource,
+  embedLatoFonts,
+} from '@cv-transpose/core';
+import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
+import { decrypt, encrypt } from './crypto.js';
+import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
+import { getActiveProvider, getProviderConfig } from './llm/index.js';
+import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 
 // SSE emitter type — set by the route handler
 export type SseEmitter = (fileIndex: number, event: SseEvent) => void;
@@ -40,29 +40,6 @@ export interface SseEvent {
   tokenInfo?: string;
 }
 
-function resolveRuntimeTenantConfig(
-  tenantConfig: TenantConfig,
-  meta: Pick<SessionMeta, 'templateVariant'>,
-): TenantConfig {
-  const allowedVariants = new Set([
-    tenantConfig.variant,
-    ...(tenantConfig.templateLibrary?.options.map((option) => option.id) ?? []),
-  ]);
-  const selectedVariant = meta.templateVariant && allowedVariants.has(meta.templateVariant)
-    ? meta.templateVariant
-    : tenantConfig.templateLibrary?.defaultVariant ?? tenantConfig.variant;
-
-  if (selectedVariant === tenantConfig.variant) {
-    return tenantConfig;
-  }
-
-  return {
-    ...tenantConfig,
-    variant: selectedVariant,
-    templateContract: cloneTemplateContractWithVariant(tenantConfig.templateContract, selectedVariant),
-  };
-}
-
 function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'>): string {
   const promptParts = [meta.prompt.trim()];
   if (meta.targetCompany) {
@@ -71,50 +48,6 @@ function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'
     );
   }
   return promptParts.filter(Boolean).join('\n\n');
-}
-
-/**
- * Convert DOCX to PDF via LibreOffice, extract page 1 text, verify
- * that WORK EXPERIENCE is NOT on page 1 (= skills/sectors fit on page 1).
- */
-async function validatePage1WithPdf(docxPath: string, tenantConfig: TenantConfig): Promise<string[]> {
-  const errors: string[] = [];
-  const experienceSectionLabel = getPrimaryExperienceSectionLabel(tenantConfig.templateContract);
-  const sectorSectionLabel = getPrimarySectorSectionLabel(tenantConfig.templateContract);
-  const workDir = await mkdtemp(join(tmpdir(), 'lo-page1-'));
-  const profileDir = join(workDir, 'profile');
-
-  try {
-    const baseName = docxPath.split('/').pop()!.replace('.docx', '');
-    await execFileAsync('libreoffice', [
-      `-env:UserInstallation=file://${profileDir}`,
-      '--headless',
-      '--convert-to', 'pdf',
-      '--outdir', workDir,
-      docxPath,
-    ], { timeout: 30_000 });
-
-    const pdfPath = join(workDir, `${baseName}.pdf`);
-    const { stdout: page1 } = await execFileAsync('pdftotext', ['-f', '1', '-l', '1', pdfPath, '-'], {
-      maxBuffer: 1024 * 1024,
-    });
-
-    if (experienceSectionLabel && page1.toUpperCase().includes(experienceSectionLabel.toUpperCase())) {
-      errors.push(`Page 1 overflow: ${experienceSectionLabel} found on page 1 — skills/sectors are too short or page break missing`);
-    }
-
-    if (sectorSectionLabel && !page1.toUpperCase().includes(sectorSectionLabel.toUpperCase())) {
-      errors.push(`Page 1 overflow: ${sectorSectionLabel} not found on page 1 — skills descriptions are too long`);
-    }
-  } catch (err) {
-    const message = (err as Error).message;
-    logger.error({ docxPath, err: message }, 'PDF validation failed (LibreOffice error)');
-    errors.push(`PDF validation failed: ${message}`);
-  } finally {
-    await rm(workDir, { recursive: true, force: true });
-  }
-
-  return errors;
 }
 
 function escapeXml(text: string): string {
@@ -194,10 +127,16 @@ async function processOneCV(
     const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
     const outputData = await readFile(outputPath);
     const headerErrors = validateCvDataAgainstTemplateContract(cvData, activeTenantConfig.templateContract);
-    const validation = await validateDocxBuffer(outputData, activeTenantConfig.templateContract);
+    const validation = await validateDocxBuffer(
+      outputData,
+      getRequiredSectionLabels(activeTenantConfig.templateContract),
+    );
 
     // 4b. PDF validation: check page 1 doesn't overflow
-    const pdfErrors = await validatePage1WithPdf(outputPath, activeTenantConfig);
+    const { warnings: pdfErrors } = await validatePage1(new Uint8Array(outputData), {
+      experienceSectionLabel: getPrimaryExperienceSectionLabel(activeTenantConfig.templateContract),
+      sectorSectionLabel: getPrimarySectorSectionLabel(activeTenantConfig.templateContract),
+    });
     const allErrors = [...headerErrors, ...validation.errors, ...pdfErrors];
 
     if (allErrors.length > 0) {
@@ -325,11 +264,14 @@ async function conductorValidate(
   try {
     const encData = await readFile(encOutputPath);
     const docxData = decrypt(encData, sessionKey);
-    const { extractTextFromDocxBuffer } = await import('./docx-reader.js');
+    const { extractTextFromDocxBuffer } = await import('@cv-transpose/core');
     const outputText = await extractTextFromDocxBuffer(docxData);
 
     // Structural validation
-    const validation = await validateDocxBuffer(docxData, tenantConfig.templateContract);
+    const validation = await validateDocxBuffer(
+      docxData,
+      getRequiredSectionLabels(tenantConfig.templateContract),
+    );
     const structErrors = validation.valid ? [] : validation.errors;
 
     // QA analyst call for translation quality (uses active LLM provider)
@@ -385,10 +327,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
   const sessionKey = getSessionKey(sessionId);
   if (!sessionKey) throw new Error(`No key in cache for session ${sessionId}`);
 
-  const tenantConfig = resolveRuntimeTenantConfig(
-    await getTenantConfig({ explicitSlug: meta.tenant }),
-    meta,
-  );
+  const tenantConfig = await getTenantConfig({ explicitSlug: meta.tenant });
   const effectivePrompt = buildEffectivePrompt(meta);
 
   const concurrency = env.MAX_CONCURRENT_AGENTS;

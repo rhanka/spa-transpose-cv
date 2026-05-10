@@ -33,11 +33,18 @@ RUN mkdir -p /usr/share/fonts/lato && \
     curl -fsSL -o Lato-BoldItalic.ttf https://github.com/google/fonts/raw/main/ofl/lato/Lato-BoldItalic.ttf && \
     fc-cache -f
 WORKDIR /app
+# Workspace manifests first so Docker can cache the install layer when only sources change.
 COPY package.json package-lock.json* ./
+COPY core/typescript/package.json core/typescript/
+COPY api/package.json api/
+COPY ui/package.json ui/
 RUN if [ -f package-lock.json ]; then npm ci; \
     elif [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
     else npm install; fi
-COPY . .
+COPY core/ core/
+COPY api/ api/
+COPY ui/ ui/
+WORKDIR /app/api
 
 FROM base AS development
 CMD ["npm", "run", "dev"]
@@ -78,11 +85,16 @@ RUN mkdir -p /usr/share/fonts/lato && \
     fc-cache -f
 WORKDIR /app
 ENV NODE_ENV=production
+# Workspace root + member manifests so npm can resolve the workspace graph for prod install.
 COPY --from=base /app/package.json ./
 COPY --from=base /app/package-lock.json* ./
-RUN npm install --omit=dev
-COPY --from=build /app/dist ./dist
-# Template and toolkit files
-COPY --from=base /app/templates ./templates
+COPY --from=base /app/core/typescript/package.json core/typescript/
+COPY --from=base /app/api/package.json api/
+COPY --from=base /app/ui/package.json ui/
+RUN npm install --omit=dev --workspaces --include-workspace-root
+COPY --from=build /app/api/dist api/dist
+# Template and toolkit files (live under the api workspace)
+COPY --from=base /app/api/templates api/templates
 RUN mkdir -p /data
+WORKDIR /app/api
 CMD ["node", "dist/index.js"]
