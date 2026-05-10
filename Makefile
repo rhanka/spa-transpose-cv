@@ -120,42 +120,15 @@ test-api: ## Run API unit tests
 
 .PHONY: smoke-tenant-e2e
 smoke-tenant-e2e: ## Run tenant E2E smoke (TENANT=_default|scalian)
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" INPUT_FILE="$(if $(strip $(INPUT_FILE)),$(INPUT_FILE),templates/references/cgi_source_example_fictional.docx)" SESSION_PASSWORD="$(if $(strip $(SESSION_PASSWORD)),$(SESSION_PASSWORD),smoke-pass)" API_BASE_URL="$(if $(strip $(API_BASE_URL)),$(API_BASE_URL),http://localhost:8686/api)" PROVIDER="$(PROVIDER)" TEMPLATE_VARIANT="$(TEMPLATE_VARIANT)" TARGET_COMPANY="$(TARGET_COMPANY)" TIMEOUT_MS="$(if $(strip $(TIMEOUT_MS)),$(TIMEOUT_MS),180000)" POLL_INTERVAL_MS="$(if $(strip $(POLL_INTERVAL_MS)),$(POLL_INTERVAL_MS),2000)" npx tsx scripts/smoke-tenant-e2e.ts'
+	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" INPUT_FILE="$(if $(strip $(INPUT_FILE)),$(INPUT_FILE),templates/references/cgi_source_example_fictional.docx)" SESSION_PASSWORD="$(if $(strip $(SESSION_PASSWORD)),$(SESSION_PASSWORD),smoke-pass)" API_BASE_URL="$(if $(strip $(API_BASE_URL)),$(API_BASE_URL),http://localhost:8686/api)" PROVIDER="$(PROVIDER)" TARGET_COMPANY="$(TARGET_COMPANY)" TIMEOUT_MS="$(if $(strip $(TIMEOUT_MS)),$(TIMEOUT_MS),180000)" POLL_INTERVAL_MS="$(if $(strip $(POLL_INTERVAL_MS)),$(POLL_INTERVAL_MS),2000)" npx tsx scripts/smoke-tenant-e2e.ts'
 
 .PHONY: analyze-template-docx
 analyze-template-docx: ## Analyze a supplier DOCX example into a TemplateContract (PROFILE=..., INPUT_FILE=..., OUTPUT_FILE=...)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'PROFILE="$(if $(strip $(PROFILE)),$(PROFILE),cgi)"; INPUT_FILE="$(if $(strip $(INPUT_FILE)),$(INPUT_FILE),templates/references/cgi_source_example_fictional.docx)"; OUTPUT_FILE="$(if $(strip $(OUTPUT_FILE)),$(OUTPUT_FILE),templates/references/cgi_source_analysis.json)"; npx tsx scripts/analyze-template-docx.ts "$$PROFILE" "$$INPUT_FILE" "$$OUTPUT_FILE"'
 
-.PHONY: create-cgi-source-example
-create-cgi-source-example: ## Rebuild the fictional CGI supplier example from the raw CGI CV
-	node --experimental-strip-types api/scripts/create-cgi-source-example.ts
-
-.PHONY: create-default-tenant-seed
-create-default-tenant-seed: ## Rebuild the default tenant seed from the Scalian source reference
-	node --experimental-strip-types api/scripts/create-default-tenant-seed.ts
-
-.PHONY: generate-template-previews
-generate-template-previews: ## Rebuild variant preview DOCX/PDF/PNG assets from the real DOCX engine
-	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api npx tsx scripts/generate-template-previews.ts
-	mkdir -p ui/static/template-previews
-	cp api/templates/references/template-previews/assets/*.png ui/static/template-previews/
-
-.PHONY: template-pilot-proof
-template-pilot-proof: ## Build pilot visual proof (VARIANT=professional-compact, REFERENCE_IMAGE=tmp/...png, OUTPUT_DIR=tmp/...)
-	@if [ -z "$(REFERENCE_IMAGE)" ]; then \
-		echo "Error: REFERENCE_IMAGE is required (e.g. make template-pilot-proof VARIANT=professional-compact REFERENCE_IMAGE=tmp/pilot-ref/celestial-reference-page.png)"; \
-		exit 1; \
-	fi
-	@$(MAKE) generate-template-previews
-	cd api && node --import tsx scripts/generate-template-pilot-proof.ts "$(if $(strip $(VARIANT)),$(VARIANT),professional-compact)" "$(REFERENCE_IMAGE)" "$(if $(strip $(OUTPUT_DIR)),$(OUTPUT_DIR),tmp/template-pilot-proof/$(if $(strip $(VARIANT)),$(VARIANT),professional-compact))"
-
-.PHONY: docx-style-diff
-docx-style-diff: ## Compare two DOCX files for style-only differences (SOURCE_DOCX=..., CANDIDATE_DOCX=...)
-	node --experimental-strip-types api/scripts/docx-style-diff.ts "$(SOURCE_DOCX)" "$(CANDIDATE_DOCX)" "$(if $(strip $(OUTPUT_JSON)),$(OUTPUT_JSON),tmp/docs/docx-style-diff/report.json)" "$(if $(strip $(RENDER_DIR)),$(RENDER_DIR),tmp/docs/docx-style-diff)" "$(if $(strip $(DIFF_LIMIT)),$(DIFF_LIMIT),20)"
-
 .PHONY: uat-tenant
-uat-tenant: ## Run tenant smoke flow once (TENANT=..., TEMPLATE_VARIANT=..., TARGET_COMPANY=...)
-	@$(MAKE) smoke-tenant-e2e TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" TEMPLATE_VARIANT="$(TEMPLATE_VARIANT)" TARGET_COMPANY="$(TARGET_COMPANY)"
+uat-tenant: ## Run tenant smoke flow once (TENANT=..., TARGET_COMPANY=...)
+	@$(MAKE) smoke-tenant-e2e TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" TARGET_COMPANY="$(TARGET_COMPANY)"
 
 .PHONY: uat-tenants
 uat-tenants: ## Run the tenant smoke flow for _default then scalian
