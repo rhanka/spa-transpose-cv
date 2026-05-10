@@ -104,21 +104,6 @@ export type TemplateJobStyle = z.infer<typeof templateJobStyleSchema>;
 export type TemplateRendering = z.infer<typeof templateRenderingSchema>;
 export type TemplateContract = z.infer<typeof templateContractSchema>;
 
-/**
- * Per-variant rendering hints (style + section labels). Built once at tenant
- * config hydration time and passed through to {@link applyVariantDefinition}
- * so the runtime never has to reach into a global catalog.
- */
-export interface VariantRenderingHints {
-  rendering: TemplateRendering;
-  styleOverrides: {
-    colors?: Record<string, string>;
-    fonts?: Record<string, string | number>;
-    spacing?: Record<string, string | number>;
-  };
-  sectionLabelOverrides?: Partial<Record<TemplateSectionKey, string>>;
-}
-
 export const legacyTemplateSeedSchema = z.object({
   headerFields: z.object({
     namePlaceholder: z.string().trim().min(1).optional(),
@@ -162,48 +147,6 @@ function toTemplateSections(sectionKeys?: TemplateSectionKey[]) {
     key,
     ...defaultSectionDefinitions[key],
   }));
-}
-
-function mergeRecordValues<T extends string | number>(
-  base: Record<string, T>,
-  overrides?: Record<string, T>,
-): Record<string, T> {
-  return {
-    ...base,
-    ...(overrides ?? {}),
-  };
-}
-
-/**
- * Apply per-variant rendering hints (style overrides, section label overrides,
- * inline rendering kinds) onto a contract. The hints are passed in by the
- * caller — this function does not look anything up. Pipeline-runtime callers
- * source the hints from the per-tenant manifest; loaders may source them from
- * a transitional shim (variant catalog) until tenant configs carry their own
- * `rendering` blocks on disk.
- */
-function applyVariantDefinition(
-  contract: TemplateContract,
-  variant: TemplateVariant,
-  hints: VariantRenderingHints,
-): TemplateContract {
-  return templateContractSchema.parse({
-    ...contract,
-    layout: {
-      ...contract.layout,
-      variant,
-    },
-    sections: contract.sections.map((section) => ({
-      ...section,
-      label: hints.sectionLabelOverrides?.[section.key] ?? section.label,
-    })),
-    styleTokens: {
-      colors: mergeRecordValues(contract.styleTokens.colors, hints.styleOverrides.colors),
-      fonts: mergeRecordValues(contract.styleTokens.fonts, hints.styleOverrides.fonts),
-      spacing: mergeRecordValues(contract.styleTokens.spacing, hints.styleOverrides.spacing),
-    },
-    rendering: { ...hints.rendering },
-  });
 }
 
 export function buildLegacyTemplateContract(options: {
@@ -267,29 +210,27 @@ export function buildLegacyTemplateContract(options: {
   return parsed;
 }
 
-function fillMissingRendering(raw: unknown, fallback: TemplateRendering): unknown {
-  if (raw && typeof raw === 'object' && !('rendering' in (raw as Record<string, unknown>))) {
-    return { ...(raw as Record<string, unknown>), rendering: { ...fallback } };
-  }
-  return raw;
-}
-
 export function ensureTemplateContract(options: {
   templateContractVersion: string;
   variant: string;
   theme?: LegacyThemeSeed;
   template?: LegacyTemplateSeed;
   templateContract?: unknown;
-  variantHints: VariantRenderingHints;
+  /**
+   * Default rendering block to use when the JSON contract is missing one (e.g.
+   * tenant configs predating the inline rendering block). The schema makes
+   * `rendering` mandatory, so a fallback is required for safe parsing.
+   */
+  defaultRendering: TemplateRendering;
 }): TemplateContract {
   const contract = options.templateContract
-    ? templateContractSchema.parse(fillMissingRendering(options.templateContract, options.variantHints.rendering))
+    ? templateContractSchema.parse(fillMissingRendering(options.templateContract, options.defaultRendering))
     : buildLegacyTemplateContract({
       templateContractVersion: options.templateContractVersion,
       variant: options.variant,
       theme: options.theme,
       template: options.template,
-      rendering: options.variantHints.rendering,
+      rendering: options.defaultRendering,
     });
 
   if (contract.version !== options.templateContractVersion) {
@@ -300,15 +241,14 @@ export function ensureTemplateContract(options: {
     throw new Error(`Template contract variant mismatch: config=${options.variant}, contract=${contract.layout.variant}`);
   }
 
-  return applyVariantDefinition(contract, templateVariantSchema.parse(options.variant), options.variantHints);
+  return contract;
 }
 
-export function cloneTemplateContractWithVariant(
-  contract: TemplateContract,
-  variant: TemplateVariant,
-  hints: VariantRenderingHints,
-): TemplateContract {
-  return applyVariantDefinition(contract, variant, hints);
+function fillMissingRendering(raw: unknown, fallback: TemplateRendering): unknown {
+  if (raw && typeof raw === 'object' && !('rendering' in (raw as Record<string, unknown>))) {
+    return { ...(raw as Record<string, unknown>), rendering: { ...fallback } };
+  }
+  return raw;
 }
 
 export function getRequiredSectionLabels(contract: TemplateContract): string[] {
