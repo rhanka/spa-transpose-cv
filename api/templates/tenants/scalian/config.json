@@ -69,21 +69,27 @@
     ],
     "styleTokens": {
       "colors": {
-        "accent": "7030A0",
-        "sectionBannerFill": "E6E6E6",
-        "sectionBannerText": "7030A0",
-        "headingText": "7030A0",
-        "bodyText": "000000"
+        "accent": "#0F2137",
+        "sectionBannerFill": "#E9EEF4",
+        "sectionBannerText": "#0F2137",
+        "headingText": "#0F2137",
+        "bodyText": "#1C2735",
+        "mutedText": "#607184"
       },
       "fonts": {
-        "heading": "Cambria",
-        "body": "Cambria"
+        "heading": "Liberation Sans",
+        "body": "Liberation Sans"
       },
       "spacing": {
-        "sectionBeforeTwip": 240,
-        "sectionAfterTwip": 240,
-        "lineTwip": 300
+        "sectionBeforeTwip": 120,
+        "sectionAfterTwip": 70,
+        "lineTwip": 240
       }
+    },
+    "rendering": {
+      "headerStyle": "brand-accent",
+      "sectionStyle": "left-accent",
+      "jobStyle": "compact-dense"
     },
     "output": {
       "filenamePattern": "Scalian_Profile_{name}.docx"
