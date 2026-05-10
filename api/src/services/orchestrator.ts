@@ -1,7 +1,12 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeFile, readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
+
+const execFileAsync = promisify(execFile);
 import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
 import { extractTextFromBuffer } from './text-extractor.js';
@@ -35,21 +40,29 @@ export interface SseEvent {
 /**
  * Convert DOCX to PDF via LibreOffice, extract page 1 text, verify
  * that WORK EXPERIENCE is NOT on page 1 (= skills/sectors fit on page 1).
+ *
+ * Saturation-safe: isolated LibreOffice profile under a mkdtemp workdir,
+ * always cleaned up via finally{rm}, errors propagated as structured
+ * validation findings rather than swallowed. A previous version of this
+ * function caused the container writable layer to drift to 414 GB by
+ * leaving zombie LO profiles in /root/.config/libreoffice.
  */
 async function validatePage1WithPdf(docxPath: string): Promise<string[]> {
-  const { execFile } = await import('node:child_process');
-  const { promisify } = await import('node:util');
-  const execFileAsync = promisify(execFile);
   const errors: string[] = [];
+  const workDir = await mkdtemp(join(tmpdir(), 'lo-page1-'));
+  const profileDir = join(workDir, 'profile');
 
   try {
-    const pdfDir = '/tmp';
     const baseName = docxPath.split('/').pop()!.replace('.docx', '');
     await execFileAsync('libreoffice', [
-      '--headless', '--convert-to', 'pdf', docxPath, '--outdir', pdfDir,
+      `-env:UserInstallation=file://${profileDir}`,
+      '--headless',
+      '--convert-to', 'pdf',
+      '--outdir', workDir,
+      docxPath,
     ], { timeout: 30_000 });
 
-    const pdfPath = join(pdfDir, `${baseName}.pdf`);
+    const pdfPath = join(workDir, `${baseName}.pdf`);
     const { stdout: page1 } = await execFileAsync('pdftotext', ['-f', '1', '-l', '1', pdfPath, '-'], {
       maxBuffer: 1024 * 1024,
     });
@@ -64,7 +77,11 @@ async function validatePage1WithPdf(docxPath: string): Promise<string[]> {
       errors.push('Page 1 overflow: SECTOR-SPECIFIC SKILLS not found on page 1 — skills descriptions are too long');
     }
   } catch (err) {
-    logger.warn({ docxPath, err: (err as Error).message }, 'PDF validation skipped (LibreOffice error)');
+    const message = (err as Error).message;
+    logger.error({ docxPath, err: message }, 'PDF validation failed (LibreOffice error)');
+    errors.push(`PDF validation failed: ${message}`);
+  } finally {
+    await rm(workDir, { recursive: true, force: true });
   }
 
   return errors;
