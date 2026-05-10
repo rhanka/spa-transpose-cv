@@ -28,3 +28,12 @@ export type {
   Slot,
   ValidationResult,
 } from './template/manifest.js';
+
+// DOCX helpers (Task 14)
+export * from './docx/tools.js';
+export * from './docx/reader.js';
+export * from './docx/font-embedding.js';
+
+// Logger (Task 14)
+export { defaultLogger } from './util/log.js';
+export type { CoreLogger } from './util/log.js';
