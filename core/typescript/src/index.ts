@@ -8,6 +8,7 @@ export type {
   Persistence,
   TemplateAssets,
   TransposeInput,
+  TransposePhase,
   DetectedFields,
   AlignmentReport,
   TransposedCv,
