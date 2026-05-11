@@ -9,15 +9,21 @@
  * api/-specific details (streaming, reasoning, provider config) into core.
  *
  * Mapping notes:
- *   core.LlmCompleteArgs.systemPrompt -> registry.LlmRequest.system
- *   core.LlmCompleteArgs.userPrompt   -> registry.LlmRequest.userMessage
- *   core.LlmCompleteArgs.maxTokens    -> registry.LlmRequest.maxTokens
- *                                       (registry requires it; default: 16000)
- *   core.LlmCompleteArgs.temperature  -> dropped (registry has no temperature
- *                                       knob today; concrete providers use
- *                                       their defaults)
- *   registry.LlmResponse.text         -> core.LlmCompleteResult.text
- *   registry.LlmResponse.usage        -> core.LlmCompleteResult.usage
+ *   core.LlmCompleteArgs.systemPrompt     -> registry.LlmRequest.system
+ *   core.LlmCompleteArgs.userPrompt       -> registry.LlmRequest.userMessage
+ *   core.LlmCompleteArgs.maxTokens        -> registry.LlmRequest.maxTokens
+ *                                            (registry requires it; default: 16000)
+ *   core.LlmCompleteArgs.temperature      -> dropped (registry has no temperature
+ *                                            knob today; concrete providers use
+ *                                            their defaults)
+ *   core.LlmCompleteArgs.enableReasoning  -> registry.LlmRequest.enableReasoning
+ *   core.LlmCompleteArgs.reasoningBudget  -> registry.LlmRequest.reasoningBudget
+ *   core.LlmCompleteArgs.onDelta          -> routes to provider.generateStream()
+ *                                            and bridges onThinking/onContent
+ *                                            callbacks into the unified delta
+ *                                            shape { kind, text }.
+ *   registry.LlmResponse.text             -> core.LlmCompleteResult.text
+ *   registry.LlmResponse.usage            -> core.LlmCompleteResult.usage
  *     input_tokens  -> inputTokens
  *     output_tokens -> outputTokens
  */
@@ -28,6 +34,7 @@ import type {
   LlmCompleteResult,
 } from '@cv-transpose/core';
 import { getActiveProvider } from './registry.js';
+import type { LlmRequest, LlmResponse } from './types.js';
 
 const DEFAULT_MAX_TOKENS = 16_000;
 
@@ -46,11 +53,25 @@ export function adaptRegistryToCoreProvider(
   return {
     async complete(args: LlmCompleteArgs): Promise<LlmCompleteResult> {
       const concrete = await getActiveProvider(opts.provider);
-      const r = await concrete.generate({
+      const req: LlmRequest = {
         system: args.systemPrompt,
         userMessage: args.userPrompt,
         maxTokens: args.maxTokens ?? DEFAULT_MAX_TOKENS,
-      });
+        enableReasoning: args.enableReasoning,
+        reasoningBudget: args.reasoningBudget,
+      };
+
+      let r: LlmResponse;
+      if (args.onDelta) {
+        const onDelta = args.onDelta;
+        r = await concrete.generateStream(req, {
+          onThinking: (text: string) => onDelta({ kind: 'thinking', text }),
+          onContent: (text: string) => onDelta({ kind: 'content', text }),
+        });
+      } else {
+        r = await concrete.generate(req);
+      }
+
       return {
         text: r.text,
         usage: {
