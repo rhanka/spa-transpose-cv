@@ -83,6 +83,12 @@ export * from './extract/text.js';
 // check. Used by the api orchestrator after building the DOCX.
 export * from './validate/page1.js';
 
+// DOCX structure validation (P1.5-bis Task 3) — checks that required section
+// labels are present in a rendered DOCX. Replaces the api orchestrator's
+// previous direct use of `validateDocxBuffer` from docx/reader.ts with a
+// clean core API that operates on in-memory bytes.
+export * from './validate/docx-structure.js';
+
 // Template renderer (Task 18b) — OOXML rendering driven by the template
 // contract's rendering hints. Consumed by transpose() in core (Task 21) and
 // re-exported through the api shim at services/template-xml.ts.
