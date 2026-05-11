@@ -199,10 +199,14 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
       languagesCount: 0,
     };
     let cvName = 'Candidate';
+    let sourceText = '';
+    let profile: CvData | null = null;
+    let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
     try {
       // 1. Extract raw text from the upload
       const rawText = await extractTextFromBuffer(Buffer.from(file.bytes), file.name);
+      sourceText = rawText;
 
       // 2. LLM → CvData
       const llmResp = await input.llm.complete({
@@ -211,6 +215,13 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
         maxTokens: 8192,
         temperature: 0.1,
       });
+      if (llmResp.usage) {
+        usage = {
+          inputTokens: llmResp.usage.inputTokens,
+          outputTokens: llmResp.usage.outputTokens,
+          totalTokens: llmResp.usage.inputTokens + llmResp.usage.outputTokens,
+        };
+      }
 
       let parsed: unknown;
       try {
@@ -225,7 +236,7 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
           `LLM output failed schema validation: ${cvDataResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
         );
       }
-      const profile = cvDataResult.data;
+      profile = cvDataResult.data;
       cvName = profile.name;
 
       detectedFields = {
@@ -266,12 +277,31 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
       warnings,
       detectedFields,
       page1SectionsFound: [],
+      missingRequiredSections: [],
+      retriesUsed: 0,
+    };
+
+    const safeProfile: CvData = profile ?? {
+      name: cvName,
+      title_line1: '',
+      title_line2: '',
+      years: '',
+      technicalSkills: [],
+      sectors: [],
+      domains: [],
+      experience: [],
+      languages: [],
+      education: [],
+      attention_cv: '',
     };
 
     results.push({
       sourceFileName: file.name,
       outputDocxName,
       outputDocx,
+      profile: safeProfile,
+      sourceText,
+      usage,
       alignmentReport,
       errors,
     });

@@ -3,6 +3,13 @@ export interface LlmCompleteArgs {
   userPrompt: string;
   maxTokens?: number;
   temperature?: number;
+  /** Enable extended thinking when the provider supports it. */
+  enableReasoning?: boolean;
+  /** Thinking-budget tokens. Honored only when enableReasoning is true. */
+  reasoningBudget?: number;
+  /** Optional streaming hook. When provided, the provider should call this with
+   *  each delta. The final return value still carries the full text + usage. */
+  onDelta?: (delta: { kind: 'thinking' | 'content'; text: string }) => void;
 }
 
 export interface LlmCompleteResult {
