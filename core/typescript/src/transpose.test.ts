@@ -109,6 +109,10 @@ describe('transpose()', () => {
       template: assets,
       persistence: 'ephemeral',
       llm: recordingLlm,
+      // Disable the validation-retry loop for this test so that usage / parsed
+      // keys callbacks reflect a single LLM call. Retry-loop behaviour has its
+      // own dedicated tests below.
+      extraction: { maxValidationRetries: 0 },
       streamCallbacks: {
         onPhaseChange: (_, phase) => phases.push(phase),
         onThinkingDelta: (_, t) => thinkingDeltas.push(t),
@@ -163,6 +167,9 @@ describe('transpose()', () => {
       template: assets,
       persistence: 'ephemeral',
       llm: stubLlm,
+      // Disable the validation-retry loop so this test stays focused on the
+      // shape of the success-path output (one LLM call, deterministic timing).
+      extraction: { maxValidationRetries: 0 },
     });
 
     const cv = r.results[0]!;
@@ -231,4 +238,103 @@ describe('transpose()', () => {
     // outputDocx may be empty on failure — just verify the shape.
     expect(cv.outputDocx).toBeInstanceOf(Uint8Array);
   }, 30_000);
+
+  it('does not retry the LLM when maxValidationRetries is 0', async () => {
+    let callCount = 0;
+    const countingLlm: LlmProvider = {
+      async complete() {
+        callCount++;
+        return {
+          text: JSON.stringify(expected),
+          usage: { inputTokens: 50, outputTokens: 100 },
+        };
+      },
+    };
+
+    const r = await transpose({
+      files: [
+        {
+          name: 'cv-001-junior-pm.pdf',
+          bytes: new Uint8Array(cv001),
+          mime: 'application/pdf',
+        },
+      ],
+      template: assets,
+      persistence: 'ephemeral',
+      llm: countingLlm,
+      extraction: { maxValidationRetries: 0 },
+    });
+
+    const cv = r.results[0]!;
+    if (cv.errors.length > 0) {
+      throw new Error('transpose returned errors: ' + cv.errors.join('; '));
+    }
+
+    // maxValidationRetries=0 forces a single LLM call regardless of validation.
+    expect(callCount).toBe(1);
+    expect(cv.alignmentReport.retriesUsed).toBe(0);
+
+    // Single-call usage is reported verbatim.
+    expect(cv.usage.inputTokens).toBe(50);
+    expect(cv.usage.outputTokens).toBe(100);
+    expect(cv.usage.totalTokens).toBe(150);
+  }, 30_000);
+
+  it('retries when first attempt produces a validation finding (warnings or missing sections)', async () => {
+    // The cv-001 fixture + scalian-test manifest is empirically known to
+    // produce a non-empty validation report on the first render (LibreOffice
+    // page-1 layout heuristic). With maxValidationRetries=1 we therefore
+    // expect EXACTLY 2 LLM calls and retriesUsed=1 — proof that the retry
+    // loop is wired through extract → render → validate.
+    //
+    // The fake LLM returns the same `expected` profile on both calls; we are
+    // not testing convergence here (the second attempt fails validation just
+    // like the first) — we are testing that a validation finding on attempt 1
+    // triggers a second extract+render+validate cycle.
+    let callCount = 0;
+    const retryPhaseSeen: TransposePhase[] = [];
+    const flakyLlm: LlmProvider = {
+      async complete() {
+        callCount++;
+        return {
+          text: JSON.stringify(expected),
+          usage: { inputTokens: 100, outputTokens: 200 },
+        };
+      },
+    };
+
+    const r = await transpose({
+      files: [
+        {
+          name: 'cv-001-junior-pm.pdf',
+          bytes: new Uint8Array(cv001),
+          mime: 'application/pdf',
+        },
+      ],
+      template: assets,
+      persistence: 'ephemeral',
+      llm: flakyLlm,
+      extraction: { maxValidationRetries: 1 },
+      streamCallbacks: {
+        onPhaseChange: (_, phase) => {
+          if (phase === 'retry') retryPhaseSeen.push(phase);
+        },
+      },
+    });
+
+    const cv = r.results[0]!;
+    if (cv.errors.length > 0) {
+      throw new Error('transpose returned errors: ' + cv.errors.join('; '));
+    }
+
+    // Retry was attempted.
+    expect(callCount).toBe(2);
+    expect(cv.alignmentReport.retriesUsed).toBe(1);
+    expect(retryPhaseSeen).toContain('retry');
+
+    // Usage is aggregated across all LLM calls.
+    expect(cv.usage.inputTokens).toBe(200);
+    expect(cv.usage.outputTokens).toBe(400);
+    expect(cv.usage.totalTokens).toBe(600);
+  }, 60_000);
 });

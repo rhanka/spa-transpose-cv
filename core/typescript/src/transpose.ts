@@ -7,10 +7,13 @@
  *   2. Call the injected {@link LlmProvider} to produce a structured CvData.
  *   3. Render a DOCX using the manifest-derived template contract.
  *   4. Validate page 1 (overflow / underflow heuristics via LibreOffice).
+ *   5. On validation feedback, optionally retry the extract+render+validate
+ *      loop with an amended user prompt (configurable via
+ *      `input.extraction.maxValidationRetries`, default 1).
  *
  * This function is intentionally side-effect free with respect to sessions,
- * SSE, encryption, retries, and quality reviews — those are concerns of the
- * api orchestrator (which will delegate to transpose() for the per-CV path).
+ * SSE, encryption, and quality reviews — those are concerns of the api
+ * orchestrator (which will delegate to transpose() for the per-CV path).
  *
  * Errors are captured per-input: a failure on one CV does not abort the
  * batch. Each {@link TransposedCv} carries its own `errors` array (populated
@@ -23,6 +26,7 @@ import { join } from 'node:path';
 
 import { extractTextFromBuffer } from './extract/text.js';
 import { validatePage1 } from './validate/page1.js';
+import { validateDocxStructure } from './validate/docx-structure.js';
 import {
   buildTemplateDocumentXml,
   getXmlHeader,
@@ -42,6 +46,8 @@ import type { LlmCompleteArgs } from './llm.js';
 import type {
   AlignmentReport,
   DetectedFields,
+  InputFile,
+  TemplateManifest,
   TransposeInput,
   TransposeOutput,
   TransposedCv,
@@ -213,43 +219,126 @@ async function renderDocxFromContract(params: {
 }
 
 /**
- * Public Contract 1 entry point. See module docstring for the pipeline.
+ * Build a zero-valued {@link AlignmentReport}. Used as the seed on the
+ * failure path (so callers always get a well-typed report) and inside
+ * {@link processSingleCv} before validation has run.
  */
-export async function transpose(input: TransposeInput): Promise<TransposeOutput> {
-  const contract = manifestToContract(input.template.manifest, input.template.brand);
-  const streamCallbacks = input.streamCallbacks;
-
-  const results: TransposedCv[] = [];
-
-  for (const file of input.files) {
-    const errors: string[] = [];
-    let warnings: string[] = [];
-    let outputDocx: Uint8Array = new Uint8Array();
-    let detectedFields: DetectedFields = {
+function makeEmptyAlignmentReport(): AlignmentReport {
+  return {
+    validationPassed: false,
+    warnings: [],
+    detectedFields: {
       experienceCount: 0,
       educationCount: 0,
       skillBuckets: 0,
       languagesCount: 0,
-    };
-    let cvName = 'Candidate';
-    let sourceText = '';
-    let profile: CvData | null = null;
-    let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    },
+    page1SectionsFound: [],
+    missingRequiredSections: [],
+    retriesUsed: 0,
+  };
+}
 
-    try {
-      // 1. Extract raw text from the upload
-      streamCallbacks?.onPhaseChange?.(file.name, 'extract-text');
-      const rawText = await extractTextFromBuffer(Buffer.from(file.bytes), file.name);
-      sourceText = rawText;
+/**
+ * Combined per-render validation: page-1 overflow/underflow (via LibreOffice)
+ * plus structural presence of required section labels (text-based, in-memory).
+ *
+ * Task 6 introduces this helper as the single validation entry point that the
+ * retry loop drives off of. Task 7 will tighten the structural rules and make
+ * `validationPassed` strictly mirror the union (warnings ∪ missingRequiredSections).
+ */
+async function runValidation(
+  docxBytes: Uint8Array,
+  contract: TemplateContract,
+  _manifest: TemplateManifest,
+  profile: CvData,
+): Promise<AlignmentReport> {
+  const experienceLabel = getPrimaryExperienceSectionLabel(contract);
+  const sectorLabel = getPrimarySectorSectionLabel(contract);
+  const requiredLabels = contract.sections
+    .filter((section) => section.required)
+    .map((section) => section.label);
 
-      // 2. LLM → CvData
+  const page1 = await validatePage1(docxBytes, {
+    experienceSectionLabel: experienceLabel,
+    sectorSectionLabel: sectorLabel,
+  });
+  const structure = await validateDocxStructure(docxBytes, requiredLabels);
+
+  const detectedFields: DetectedFields = {
+    name: profile.name,
+    titleLine1: profile.title_line1,
+    titleLine2: profile.title_line2,
+    yearsOfExperience: profile.years
+      ? Number.parseInt(profile.years, 10) || undefined
+      : undefined,
+    experienceCount: profile.experience.length,
+    educationCount: profile.education.length,
+    skillBuckets: profile.technicalSkills.length,
+    languagesCount: profile.languages.length,
+  };
+
+  return {
+    validationPassed: page1.warnings.length === 0 && structure.missing.length === 0,
+    warnings: page1.warnings,
+    detectedFields,
+    page1SectionsFound: structure.found,
+    missingRequiredSections: structure.missing,
+    retriesUsed: 0, // caller overwrites with the actual count after the loop
+  };
+}
+
+/**
+ * Per-CV pipeline: extract → (LLM → render → validate)* → result.
+ *
+ * The middle phase runs in a retry loop bounded by
+ * `input.extraction?.maxValidationRetries ?? 1`. When validation produces
+ * warnings or missing required sections, the user prompt is amended with a
+ * feedback paragraph and the LLM is re-invoked. Usage tokens are aggregated
+ * across attempts; only the most recent render's bytes and alignment report
+ * are returned.
+ *
+ * Errors are captured into the returned `TransposedCv.errors` (fail-soft),
+ * matching the batch-tolerant contract of {@link transpose}.
+ */
+async function processSingleCv(
+  file: InputFile,
+  input: TransposeInput,
+  contract: TemplateContract,
+  manifest: TemplateManifest,
+): Promise<TransposedCv> {
+  const streamCallbacks = input.streamCallbacks;
+  const errors: string[] = [];
+
+  let outputDocx: Uint8Array = new Uint8Array();
+  let profile: CvData | null = null;
+  let sourceText = '';
+  let usageTotal = { inputTokens: 0, outputTokens: 0 };
+  let alignmentReport: AlignmentReport = makeEmptyAlignmentReport();
+  let userPromptOverride = file.userPromptOverride;
+  let retriesUsed = 0;
+
+  const maxRetries = input.extraction?.maxValidationRetries ?? 1;
+
+  try {
+    // 1. Extract raw text from the upload (once, reused across retries).
+    streamCallbacks?.onPhaseChange?.(file.name, 'extract-text');
+    sourceText = await extractTextFromBuffer(Buffer.from(file.bytes), file.name);
+
+    // 2. Extract → render → validate, up to maxRetries+1 times.
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        streamCallbacks?.onPhaseChange?.(file.name, 'retry');
+      }
+
+      // 2a. LLM → CvData
       streamCallbacks?.onPhaseChange?.(file.name, 'extract-cv-llm');
       const llmResp = await input.llm.complete({
         systemPrompt: buildSystemPrompt(),
         userPrompt: buildUserPrompt({
-          cvText: rawText,
+          cvText: sourceText,
           sourceFileName: file.name,
-          userPromptOverride: file.userPromptOverride,
+          userPromptOverride,
         }),
         maxTokens: 8192,
         temperature: 0.1,
@@ -258,11 +347,8 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
         onDelta: streamCallbacks ? makeDeltaForwarder(file.name, streamCallbacks) : undefined,
       });
       if (llmResp.usage) {
-        usage = {
-          inputTokens: llmResp.usage.inputTokens,
-          outputTokens: llmResp.usage.outputTokens,
-          totalTokens: llmResp.usage.inputTokens + llmResp.usage.outputTokens,
-        };
+        usageTotal.inputTokens += llmResp.usage.inputTokens;
+        usageTotal.outputTokens += llmResp.usage.outputTokens;
       }
 
       let parsed: unknown;
@@ -279,21 +365,9 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
         );
       }
       profile = cvDataResult.data;
-      cvName = profile.name;
       streamCallbacks?.onParsedKeys?.(file.name, Object.keys(profile));
 
-      detectedFields = {
-        name: profile.name,
-        titleLine1: profile.title_line1,
-        titleLine2: profile.title_line2,
-        yearsOfExperience: profile.years ? Number.parseInt(profile.years, 10) || undefined : undefined,
-        experienceCount: profile.experience.length,
-        educationCount: profile.education.length,
-        skillBuckets: profile.technicalSkills.length,
-        languagesCount: profile.languages.length,
-      };
-
-      // 3. Render DOCX
+      // 2b. Render DOCX
       streamCallbacks?.onPhaseChange?.(file.name, 'render-docx');
       outputDocx = await renderDocxFromContract({
         baseDocx: input.template.baseDocx,
@@ -301,49 +375,78 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
         contract,
       });
 
-      // 4. Validate page 1 (LibreOffice-based; produces warnings, not errors)
+      // 2c. Validate (page1 overflow/underflow + required-section presence)
       streamCallbacks?.onPhaseChange?.(file.name, 'validate-page1');
-      const v = await validatePage1(outputDocx, {
-        experienceSectionLabel: getPrimaryExperienceSectionLabel(contract),
-        sectorSectionLabel: getPrimarySectorSectionLabel(contract),
-      });
-      warnings = v.warnings;
+      alignmentReport = await runValidation(outputDocx, contract, manifest, profile);
 
-      streamCallbacks?.onPhaseChange?.(file.name, 'done');
-    } catch (err) {
-      logger.error('transpose() failed for input', { file: file.name, err: (err as Error).message });
-      errors.push((err as Error).message);
+      const cleanRun =
+        alignmentReport.warnings.length === 0 &&
+        alignmentReport.missingRequiredSections.length === 0;
+      if (cleanRun) {
+        break; // success — no retry needed
+      }
+      if (attempt >= maxRetries) {
+        break; // out of retries
+      }
+
+      // 2d. Amend the user prompt with validation feedback for the next attempt.
+      retriesUsed++;
+      const feedbackParts = [
+        ...alignmentReport.warnings,
+        ...alignmentReport.missingRequiredSections.map((s) => `Missing required section "${s}"`),
+      ];
+      userPromptOverride = [
+        file.userPromptOverride ?? '',
+        `VALIDATION ERRORS: ${feedbackParts.join('; ')}.`,
+        'Shorten all skill descriptions to max 100 characters. Reduce sectors to max 4. Reduce domains to max 4.',
+      ]
+        .filter((s) => s.length > 0)
+        .join('\n\n');
     }
 
-    const outputDocxName = errors.length === 0
-      ? deriveOutputNameFromTemplateContract(contract, file.name, cvName)
-      : '';
-
-    const alignmentReport: AlignmentReport = {
-      validationPassed: errors.length === 0 && warnings.length === 0,
-      warnings,
-      detectedFields,
-      page1SectionsFound: [],
-      missingRequiredSections: [],
-      retriesUsed: 0,
-    };
-
-    // Failure-path fallback: use the type-valid empty constant (so the result
-    // always satisfies `cvDataSchema`). On the success path, `profile` is the
-    // parsed CvData.
-    const safeProfile: CvData = profile ?? EMPTY_PROFILE_FALLBACK;
-
-    results.push({
-      sourceFileName: file.name,
-      outputDocxName,
-      outputDocx,
-      profile: safeProfile,
-      sourceText,
-      usage,
-      alignmentReport,
-      errors,
-    });
+    alignmentReport.retriesUsed = retriesUsed;
+    streamCallbacks?.onPhaseChange?.(file.name, 'done');
+  } catch (err) {
+    logger.error('transpose() failed for input', { file: file.name, err: (err as Error).message });
+    errors.push((err as Error).message);
+    alignmentReport.retriesUsed = retriesUsed;
   }
 
+  // Failure-path fallback: use the type-valid empty constant (so the result
+  // always satisfies `cvDataSchema`). On the success path, `profile` is the
+  // parsed CvData from the most recent attempt.
+  const safeProfile: CvData = profile ?? EMPTY_PROFILE_FALLBACK;
+  const cvName = profile?.name ?? 'Candidate';
+
+  const outputDocxName = errors.length === 0
+    ? deriveOutputNameFromTemplateContract(contract, file.name, cvName)
+    : '';
+
+  return {
+    sourceFileName: file.name,
+    outputDocxName,
+    outputDocx,
+    profile: safeProfile,
+    sourceText,
+    usage: {
+      inputTokens: usageTotal.inputTokens,
+      outputTokens: usageTotal.outputTokens,
+      totalTokens: usageTotal.inputTokens + usageTotal.outputTokens,
+    },
+    alignmentReport,
+    errors,
+  };
+}
+
+/**
+ * Public Contract 1 entry point. See module docstring for the pipeline.
+ */
+export async function transpose(input: TransposeInput): Promise<TransposeOutput> {
+  const contract = manifestToContract(input.template.manifest, input.template.brand);
+
+  const results: TransposedCv[] = [];
+  for (const file of input.files) {
+    results.push(await processSingleCv(file, input, contract, input.template.manifest));
+  }
   return { results };
 }
