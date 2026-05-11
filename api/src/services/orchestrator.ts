@@ -1,28 +1,24 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import {
-  validatePage1,
-  extractTextFromBuffer,
-  validateDocxBuffer,
-  deriveOutputNameFromTemplateContract,
-  getPrimaryExperienceSectionLabel,
-  getPrimarySectorSectionLabel,
+  transpose,
   getRequiredSectionLabels,
-  validateCvDataAgainstTemplateContract,
-  buildTemplateDocumentXml,
-  getXmlHeader,
-  writeTemplateHeader,
-  unpackDocx,
-  packDocx,
+  validateDocxStructure,
   defaultLatoSource,
   embedLatoFonts,
+  type CvMime,
+  type CvData,
+  type TransposePhase,
 } from '@cv-transpose/core';
-import { getMeta, writeMeta, updateStatus, updateFileStatus, getSessionKey, type SessionMeta } from './session-manager.js';
+import { getMeta, writeMeta, getSessionKey, updateFileStatus, type SessionMeta } from './session-manager.js';
 import { decrypt, encrypt } from './crypto.js';
-import { extractCvDataWithRetry, type CvData, type StreamCallbacks, type TokenUsage } from './cv-agent.js';
+import { type TokenUsage } from './cv-agent.js';
 import { getActiveProvider, getProviderConfig } from './llm/index.js';
+import { adaptRegistryToCoreProvider } from './llm/adapt-to-core.js';
+import { tenantConfigToTemplateAssets } from './tenant-template-assets.js';
 import { DEFAULT_TENANT_SLUG, getTenantConfig, getTenantTemplatePath, type TenantConfig } from './tenant-config.js';
 
 // SSE emitter type — set by the route handler
@@ -50,24 +46,69 @@ function buildEffectivePrompt(meta: Pick<SessionMeta, 'prompt' | 'targetCompany'
   return promptParts.filter(Boolean).join('\n\n');
 }
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/–/g, '&#x2013;')
-    .replace(/'/g, '&#x2019;')
-    .replace(/'/g, '&#x2019;')
-    .replace(/é/g, '&#xE9;')
-    .replace(/É/g, '&#xC9;')
-    .replace(/è/g, '&#xE8;')
-    .replace(/ê/g, '&#xEA;')
-    .replace(/à/g, '&#xE0;')
-    .replace(/ç/g, '&#xE7;')
-    .replace(/ô/g, '&#xF4;')
-    .replace(/œ/g, '&#x0153;');
+/**
+ * Map a {@link TransposePhase} from core into the legacy SSE phase string the
+ * UI consumes. Multiple core phases collapse onto the same UI phase
+ * (`validate-page1`, `validate-structural`, `retry` → `validating`) because
+ * the UI doesn't differentiate them today.
+ */
+function mapCorePhase(phase: TransposePhase): SseEvent['phase'] {
+  switch (phase) {
+    case 'extract-text':
+      return 'extracting_text';
+    case 'extract-cv-llm':
+      return 'calling_claude';
+    case 'render-docx':
+      return 'building_docx';
+    case 'validate-page1':
+    case 'validate-structural':
+    case 'retry':
+      return 'validating';
+    case 'done':
+      return 'done';
+    default:
+      return 'extracting_text';
+  }
 }
 
+function detectMime(name: string): CvMime {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  // .doc and unknown extensions get the legacy MS-Word mime; extractTextFromBuffer
+  // sniffs the actual format and routes to soffice for non-pdf/non-docx inputs.
+  return 'application/msword';
+}
+
+/**
+ * Embed the Lato font family into the rendered DOCX so the downloaded file
+ * looks identical in MS Word on machines without Lato installed. core's
+ * `transpose()` returns the rendered bytes without this step (which is an
+ * orchestration concern, not a pipeline concern), so we materialise to a
+ * temp file, embed, and re-read.
+ */
+async function applyLatoFontEmbedding(docxBytes: Uint8Array): Promise<Uint8Array> {
+  const dir = await mkdtemp(join(tmpdir(), 'cv-lato-embed-'));
+  try {
+    const tmpPath = join(dir, 'out.docx');
+    await writeFile(tmpPath, Buffer.from(docxBytes));
+    try {
+      await embedLatoFonts(tmpPath, defaultLatoSource(process.cwd()));
+    } catch (err) {
+      logger.warn({ err }, 'Lato font embedding skipped');
+    }
+    const final = await readFile(tmpPath);
+    return new Uint8Array(final);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Process one CV by delegating the extract → LLM → render → validate pipeline
+ * to `core.transpose()`. The orchestrator keeps the session-bound concerns
+ * (decryption, output encryption, SSE bridging, retry-after-conductor).
+ */
 async function processOneCV(
   sessionId: string,
   fileIndex: number,
@@ -75,9 +116,9 @@ async function processOneCV(
   userPrompt: string,
   originalName: string,
   encryptedName: string,
+  tenantConfig: TenantConfig,
   emitSse?: SseEmitter,
   providerId?: string,
-  tenantConfig?: TenantConfig,
 ): Promise<{ cvData: CvData; outputName: string; sourceText: string; usage: TokenUsage } | null> {
   const sessionDir = join(env.DATA_DIR, sessionId);
   const startTime = Date.now();
@@ -85,161 +126,110 @@ async function processOneCV(
   await updateFileStatus(sessionId, fileIndex, 'processing');
 
   try {
-    // 1. Extract text
-    emitSse?.(fileIndex, { phase: 'extracting_text', elapsed_ms: Date.now() - startTime });
+    // 1. Decrypt uploaded bytes
     const encryptedData = await readFile(join(sessionDir, 'inputs', encryptedName));
     const rawData = decrypt(encryptedData, sessionKey);
-    const text = await extractTextFromBuffer(rawData, originalName);
-    logger.info({ sessionId, file: originalName, textLength: text.length }, 'Text extracted');
 
-    // 2. Call Claude with streaming
-    emitSse?.(fileIndex, { phase: 'calling_claude', elapsed_ms: Date.now() - startTime });
+    // 2. Load tenant's base DOCX and build the TemplateAssets bridge
+    const templateDocxPath = await getTenantTemplatePath(tenantConfig);
+    const baseDocxBuf = await readFile(templateDocxPath);
+    const templateAssets = tenantConfigToTemplateAssets(tenantConfig, new Uint8Array(baseDocxBuf));
 
-    const streamCallbacks: StreamCallbacks = {
-      onThinking: (delta) => emitSse?.(fileIndex, { phase: 'calling_claude', thinking_delta: delta, elapsed_ms: Date.now() - startTime }),
-      onContent: (delta) => {
-        // Optimistic parsing of keys as they stream in
-        const parsed: Record<string, unknown> = {};
-        const nameMatch = delta.match(/"name"\s*:\s*"([^"]+)"/);
-        if (nameMatch) parsed.name = nameMatch[1];
-        const titleMatch = delta.match(/"title"\s*:\s*"([^"]+)"/);
-        if (titleMatch) parsed.current_position = titleMatch[1];
-        if (Object.keys(parsed).length > 0) {
-          emitSse?.(fileIndex, { phase: 'calling_claude', content_delta: delta, parsed_keys: parsed, elapsed_ms: Date.now() - startTime });
-        }
+    // 3. Wire SSE bridging through core's streamCallbacks. Keep the
+    //    optimistic partial-key parsing the UI relies on (name, title)
+    //    so streaming deltas surface "parsed so far" cards exactly as
+    //    before this refactor.
+    const fileToIndex = (_name: string) => fileIndex;
+    const llmProvider = adaptRegistryToCoreProvider({ provider: providerId });
+
+    // 4. Run core.transpose() for a single CV
+    emitSse?.(fileIndex, { phase: 'extracting_text', elapsed_ms: Date.now() - startTime });
+    const out = await transpose({
+      files: [{
+        name: originalName,
+        bytes: new Uint8Array(rawData),
+        mime: detectMime(originalName),
+        userPromptOverride: userPrompt,
+      }],
+      template: templateAssets,
+      persistence: 'session',
+      llm: llmProvider,
+      extraction: {
+        enableReasoning: true,
+        reasoningBudget: 4096,
+        maxValidationRetries: 1,
       },
-    };
-
-    const { data: cvData, usage: agentUsage } = await extractCvDataWithRetry(text, userPrompt, originalName, streamCallbacks, providerId);
-    logger.info({ sessionId, file: originalName, name: cvData.name, tokens: agentUsage }, 'CV data extracted');
-
-    // 3. Build DOCX
-    emitSse?.(fileIndex, { phase: 'building_docx', elapsed_ms: Date.now() - startTime });
-    const activeTenantConfig = tenantConfig ?? await getTenantConfig({
-      explicitSlug: DEFAULT_TENANT_SLUG,
+      streamCallbacks: {
+        onPhaseChange: (_name, phase) => {
+          emitSse?.(fileToIndex(_name), {
+            phase: mapCorePhase(phase),
+            elapsed_ms: Date.now() - startTime,
+          });
+        },
+        onThinkingDelta: (_name, delta) => {
+          emitSse?.(fileToIndex(_name), {
+            phase: 'calling_claude',
+            thinking_delta: delta,
+            elapsed_ms: Date.now() - startTime,
+          });
+        },
+        onContentDelta: (_name, delta) => {
+          // Optimistic key parsing during streaming — surfaces partial CV
+          // identity to the UI before the full JSON has been received.
+          const parsed: Record<string, unknown> = {};
+          const nameMatch = delta.match(/"name"\s*:\s*"([^"]+)"/);
+          if (nameMatch) parsed.name = nameMatch[1];
+          const titleMatch = delta.match(/"title"\s*:\s*"([^"]+)"/);
+          if (titleMatch) parsed.current_position = titleMatch[1];
+          if (Object.keys(parsed).length > 0) {
+            emitSse?.(fileToIndex(_name), {
+              phase: 'calling_claude',
+              content_delta: delta,
+              parsed_keys: parsed,
+              elapsed_ms: Date.now() - startTime,
+            });
+          }
+        },
+      },
     });
-    const templateDocxPath = await getTenantTemplatePath(activeTenantConfig);
-    const outputName = deriveOutputNameFromTemplateContract(activeTenantConfig.templateContract, originalName, cvData.name);
-    await buildTemplateDocx(cvData, activeTenantConfig, sessionDir, fileIndex, templateDocxPath);
 
-    // 4. Validate DOCX (agent auto-relecture)
-    emitSse?.(fileIndex, { phase: 'validating', elapsed_ms: Date.now() - startTime });
-    const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
-    const outputData = await readFile(outputPath);
-    const headerErrors = validateCvDataAgainstTemplateContract(cvData, activeTenantConfig.templateContract);
-    const validation = await validateDocxBuffer(
-      outputData,
-      getRequiredSectionLabels(activeTenantConfig.templateContract),
-    );
-
-    // 4b. PDF validation: check page 1 doesn't overflow
-    const { warnings: pdfErrors } = await validatePage1(new Uint8Array(outputData), {
-      experienceSectionLabel: getPrimaryExperienceSectionLabel(activeTenantConfig.templateContract),
-      sectorSectionLabel: getPrimarySectorSectionLabel(activeTenantConfig.templateContract),
-    });
-    const allErrors = [...headerErrors, ...validation.errors, ...pdfErrors];
-
-    if (allErrors.length > 0) {
-      logger.warn({ sessionId, file: originalName, errors: allErrors }, 'DOCX validation failed');
-      emitSse?.(fileIndex, { phase: 'validating', thinking_delta: `Validation errors: ${allErrors.join(', ')}. Retrying with shorter descriptions...`, elapsed_ms: Date.now() - startTime });
-      const { data: retryData, usage: retryUsage } = await extractCvDataWithRetry(
-        text,
-        `${userPrompt}\n\nVALIDATION ERRORS: ${allErrors.join('; ')}. IMPORTANT: shorten all skill descriptions to max 100 characters. Reduce sectors to max 4, domains to max 4.`,
-        originalName,
-        streamCallbacks,
-        providerId,
-      );
-      agentUsage.input_tokens += retryUsage.input_tokens;
-      agentUsage.output_tokens += retryUsage.output_tokens;
-      await buildTemplateDocx(retryData, activeTenantConfig, sessionDir, fileIndex, templateDocxPath);
+    const cv = out.results[0];
+    if (cv.errors.length > 0) {
+      throw new Error(cv.errors.join('; '));
     }
 
-    // 5. Encrypt output
-    const finalDocx = await readFile(outputPath);
-    const encryptedOutput = encrypt(finalDocx, sessionKey);
+    // 5. Embed Lato fonts (orchestration concern, not a pipeline concern)
+    const finalDocxBytes = await applyLatoFontEmbedding(cv.outputDocx);
+
+    // 6. Encrypt + persist for 48h
+    const outputName = cv.outputDocxName;
+    const encryptedOutput = encrypt(Buffer.from(finalDocxBytes), sessionKey);
     await writeFile(join(sessionDir, 'outputs', `${outputName}.enc`), encryptedOutput);
 
-    // 6. Update meta
+    // 7. Update meta + emit done (the attention_trad + tokenInfo are added
+    //    later by the caller after the conductor pass).
     await updateFileStatus(sessionId, fileIndex, 'done', { outputName });
     emitSse?.(fileIndex, {
       phase: 'done',
       elapsed_ms: Date.now() - startTime,
-      attention_cv: cvData.attention_cv,
+      attention_cv: cv.profile.attention_cv,
     });
 
-    logger.info({ sessionId, file: originalName, output: outputName, ms: Date.now() - startTime, tokens: agentUsage }, 'CV processed');
-    return { cvData, outputName, sourceText: text, usage: agentUsage };
+    const usage: TokenUsage = {
+      input_tokens: cv.usage.inputTokens,
+      output_tokens: cv.usage.outputTokens,
+    };
 
+    logger.info(
+      { sessionId, file: originalName, output: outputName, ms: Date.now() - startTime, tokens: usage, retriesUsed: cv.alignmentReport.retriesUsed },
+      'CV processed',
+    );
+    return { cvData: cv.profile, outputName, sourceText: cv.sourceText, usage };
   } catch (err) {
     logger.error({ sessionId, file: originalName, err }, 'CV processing failed');
     await updateFileStatus(sessionId, fileIndex, 'error', { error: (err as Error).message });
     emitSse?.(fileIndex, { phase: 'error', error: (err as Error).message, elapsed_ms: Date.now() - startTime });
     return null;
-  }
-}
-
-async function buildTemplateDocx(
-  data: CvData,
-  tenantConfig: TenantConfig,
-  sessionDir: string,
-  fileIndex: number,
-  templateDocxPath: string,
-): Promise<void> {
-  const workDir = join(sessionDir, 'tmp', `work_${fileIndex}`);
-  await unpackDocx(templateDocxPath, workDir);
-
-  // Assemble document.xml
-  const xmlHeader = await getXmlHeader(join(workDir, 'word', 'document.xml'));
-  const doc = buildTemplateDocumentXml({
-    ...data,
-    name: escapeXml(data.name),
-    title_line1: escapeXml(data.title_line1),
-    title_line2: escapeXml(data.title_line2),
-    technicalSkills: data.technicalSkills.map((skill) => ({
-      label: escapeXml(skill.label),
-      description: escapeXml(skill.description),
-    })),
-    sectors: data.sectors.map((sector) => escapeXml(sector)),
-    domains: data.domains.map((domain) => escapeXml(domain)),
-    experience: data.experience.map((job) => ({
-      ...job,
-      company: escapeXml(job.company),
-      description: escapeXml(job.description),
-      dates: escapeXml(job.dates),
-      title: escapeXml(job.title),
-      tasks: job.tasks.map((task) => escapeXml(task)),
-      achievements: job.achievements.map((achievement) => escapeXml(achievement)),
-      techEnvironment: escapeXml(job.techEnvironment),
-    })),
-    languages: data.languages.map((language) => ({
-      label: escapeXml(language.label),
-      level: escapeXml(language.level),
-    })),
-    education: data.education.map((entry) => ({
-      year: escapeXml(entry.year),
-      description: escapeXml(entry.description),
-    })),
-  }, tenantConfig.templateContract, xmlHeader);
-  await writeFile(join(workDir, 'word', 'document.xml'), doc);
-
-  await writeTemplateHeader(join(workDir, 'word', 'header2.xml'), {
-    name: escapeXml(data.name),
-    title_line1: escapeXml(data.title_line1),
-    title_line2: escapeXml(data.title_line2),
-    years: data.years,
-  }, tenantConfig.templateContract);
-
-  // Pack
-  const outputPath = join(sessionDir, 'tmp', `output_${fileIndex}.docx`);
-  await packDocx(workDir, outputPath, templateDocxPath);
-
-  // Embed the Lato font family so the downloaded DOCX looks identical in MS
-  // Word on a machine where Lato is not installed. packDocx strips any stale
-  // fonts from the base template, so we always start from a clean slate here.
-  try {
-    await embedLatoFonts(outputPath, defaultLatoSource(process.cwd()));
-  } catch (err) {
-    logger.warn({ err }, 'Lato font embedding skipped');
   }
 }
 
@@ -267,12 +257,16 @@ async function conductorValidate(
     const { extractTextFromDocxBuffer } = await import('@cv-transpose/core');
     const outputText = await extractTextFromDocxBuffer(docxData);
 
-    // Structural validation
-    const validation = await validateDocxBuffer(
-      docxData,
+    // Structural validation (re-run against the persisted output for the QA
+    // prompt context — core's transpose() already ran this internally, but
+    // the conductor surfaces any residual mismatch alongside its own findings).
+    const structure = await validateDocxStructure(
+      new Uint8Array(docxData),
       getRequiredSectionLabels(tenantConfig.templateContract),
     );
-    const structErrors = validation.valid ? [] : validation.errors;
+    const structErrors = structure.missing.length === 0
+      ? []
+      : [`Missing required sections: ${structure.missing.join(', ')}`];
 
     // QA analyst call for translation quality (uses active LLM provider)
     emitSse?.(fileIndex, { phase: 'validating', thinking_delta: 'Conductor: analyse qualité traduction...', elapsed_ms: 0 });
@@ -367,9 +361,9 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
         effectivePrompt,
         f.originalName,
         f.encryptedName,
+        tenantConfig,
         emitSse,
         sessionProvider,
-        tenantConfig,
       );
 
       if (result) {
@@ -395,9 +389,17 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
         if (attention_trad.toLowerCase().includes('error to fix')) {
           logger.info({ sessionId, file: f.originalName, feedback: attention_trad }, 'Conductor found errors, relaunching agent');
           emitSse?.(idx, { phase: 'validating', thinking_delta: `Conductor: errors detected, retrying...` });
-          const retryResult = await processOneCV(sessionId, idx, sessionKey,
+          const retryResult = await processOneCV(
+            sessionId,
+            idx,
+            sessionKey,
             `${effectivePrompt}\n\nCONDUCTOR QA FEEDBACK — fix these errors:\n${attention_trad}`,
-            f.originalName, f.encryptedName, emitSse, sessionProvider, tenantConfig);
+            f.originalName,
+            f.encryptedName,
+            tenantConfig,
+            emitSse,
+            sessionProvider,
+          );
           if (retryResult) {
             totalUsage.input_tokens += retryResult.usage.input_tokens;
             totalUsage.output_tokens += retryResult.usage.output_tokens;
