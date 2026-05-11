@@ -37,6 +37,8 @@ import {
 } from './template/contract.js';
 import { cvDataSchema, type CvData } from './cv/profile.js';
 import { defaultLogger as logger } from './util/log.js';
+import { buildSystemPrompt, buildUserPrompt } from './transpose-prompt.js';
+import type { LlmCompleteArgs } from './llm.js';
 import type {
   AlignmentReport,
   DetectedFields,
@@ -46,15 +48,22 @@ import type {
 } from './types.js';
 import type { TemplateContract } from './template/contract.js';
 
-// The extraction prompt lives in the spec tree so that all language ports
-// share the same canonical text. Read it lazily on first use so loading the
-// module never touches the filesystem.
-let cachedExtractPrompt: string | null = null;
-async function loadExtractPrompt(): Promise<string> {
-  if (cachedExtractPrompt !== null) return cachedExtractPrompt;
-  const url = new URL('../../../core/spec/prompts/extract-cv.md', import.meta.url);
-  cachedExtractPrompt = await readFile(url, 'utf-8');
-  return cachedExtractPrompt;
+/**
+ * Build a streaming-delta forwarder that routes the provider's deltas to the
+ * file-scoped streamCallbacks. Created per file so the file name is captured
+ * in the closure.
+ */
+function makeDeltaForwarder(
+  fileName: string,
+  cb: NonNullable<TransposeInput['streamCallbacks']>,
+): NonNullable<LlmCompleteArgs['onDelta']> {
+  return (delta) => {
+    if (delta.kind === 'thinking') {
+      cb.onThinkingDelta?.(fileName, delta.text);
+    } else {
+      cb.onContentDelta?.(fileName, delta.text);
+    }
+  };
 }
 
 /**
@@ -184,7 +193,7 @@ async function renderDocxFromContract(params: {
  */
 export async function transpose(input: TransposeInput): Promise<TransposeOutput> {
   const contract = manifestToContract(input.template.manifest, input.template.brand);
-  const extractPrompt = await loadExtractPrompt();
+  const streamCallbacks = input.streamCallbacks;
 
   const results: TransposedCv[] = [];
 
@@ -205,15 +214,24 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
 
     try {
       // 1. Extract raw text from the upload
+      streamCallbacks?.onPhaseChange?.(file.name, 'extract-text');
       const rawText = await extractTextFromBuffer(Buffer.from(file.bytes), file.name);
       sourceText = rawText;
 
       // 2. LLM → CvData
+      streamCallbacks?.onPhaseChange?.(file.name, 'extract-cv-llm');
       const llmResp = await input.llm.complete({
-        systemPrompt: extractPrompt,
-        userPrompt: rawText,
+        systemPrompt: buildSystemPrompt(),
+        userPrompt: buildUserPrompt({
+          cvText: rawText,
+          sourceFileName: file.name,
+          userPromptOverride: file.userPromptOverride,
+        }),
         maxTokens: 8192,
         temperature: 0.1,
+        enableReasoning: input.extraction?.enableReasoning ?? true,
+        reasoningBudget: input.extraction?.reasoningBudget,
+        onDelta: streamCallbacks ? makeDeltaForwarder(file.name, streamCallbacks) : undefined,
       });
       if (llmResp.usage) {
         usage = {
@@ -238,6 +256,7 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
       }
       profile = cvDataResult.data;
       cvName = profile.name;
+      streamCallbacks?.onParsedKeys?.(file.name, Object.keys(profile));
 
       detectedFields = {
         name: profile.name,
@@ -251,6 +270,7 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
       };
 
       // 3. Render DOCX
+      streamCallbacks?.onPhaseChange?.(file.name, 'render-docx');
       outputDocx = await renderDocxFromContract({
         baseDocx: input.template.baseDocx,
         data: profile,
@@ -258,11 +278,14 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
       });
 
       // 4. Validate page 1 (LibreOffice-based; produces warnings, not errors)
+      streamCallbacks?.onPhaseChange?.(file.name, 'validate-page1');
       const v = await validatePage1(outputDocx, {
         experienceSectionLabel: getPrimaryExperienceSectionLabel(contract),
         sectorSectionLabel: getPrimarySectorSectionLabel(contract),
       });
       warnings = v.warnings;
+
+      streamCallbacks?.onPhaseChange?.(file.name, 'done');
     } catch (err) {
       logger.error('transpose() failed for input', { file: file.name, err: (err as Error).message });
       errors.push((err as Error).message);
