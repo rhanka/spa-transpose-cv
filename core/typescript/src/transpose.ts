@@ -99,6 +99,30 @@ async function withTempDir<T>(prefix: string, fn: (dir: string) => Promise<T>): 
   }
 }
 
+/**
+ * Type-valid empty {@link CvData} placeholder used on the failure path so a
+ * `TransposedCv` always carries a `profile` of the right shape (no
+ * `{} as CvData` casts).
+ *
+ * The schema enforces `name.min(1)`, so we use a sentinel string rather than
+ * `''`. All array fields are empty, and free-form strings default to `''`.
+ * `cvDataSchema.parse(EMPTY_PROFILE_FALLBACK)` must succeed — this is locked
+ * by the transpose failure-path test.
+ */
+const EMPTY_PROFILE_FALLBACK: CvData = {
+  name: 'Candidate',
+  title_line1: '',
+  title_line2: '',
+  years: '',
+  technicalSkills: [],
+  sectors: [],
+  domains: [],
+  experience: [],
+  languages: [],
+  education: [],
+  attention_cv: '',
+};
+
 function escapeCvData(data: CvData): CvData {
   return {
     ...data,
@@ -304,19 +328,10 @@ export async function transpose(input: TransposeInput): Promise<TransposeOutput>
       retriesUsed: 0,
     };
 
-    const safeProfile: CvData = profile ?? {
-      name: cvName,
-      title_line1: '',
-      title_line2: '',
-      years: '',
-      technicalSkills: [],
-      sectors: [],
-      domains: [],
-      experience: [],
-      languages: [],
-      education: [],
-      attention_cv: '',
-    };
+    // Failure-path fallback: use the type-valid empty constant (so the result
+    // always satisfies `cvDataSchema`). On the success path, `profile` is the
+    // parsed CvData.
+    const safeProfile: CvData = profile ?? EMPTY_PROFILE_FALLBACK;
 
     results.push({
       sourceFileName: file.name,
