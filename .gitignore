@@ -9,6 +9,7 @@ tmp/
 api/node_modules/
 ui/node_modules/
 .DS_Store
+.worktrees/
 api/templates/claims/
 api/templates/references/template-previews/
 outputs/doc/cgi_neutral_template_draft.docx
