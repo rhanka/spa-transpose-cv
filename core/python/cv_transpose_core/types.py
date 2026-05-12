@@ -61,7 +61,17 @@ class LlmCompleteResult:
 
 
 class LlmProvider(Protocol):
-    async def complete(self, args: LlmCompleteArgs) -> LlmCompleteResult | dict[str, Any]:
+    async def complete(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        enable_reasoning: bool | None = None,
+        reasoning_budget: int | None = None,
+        on_delta: Callable[[dict[str, str]], None] | None = None,
+    ) -> LlmCompleteResult | dict[str, Any]:
         ...
 
 

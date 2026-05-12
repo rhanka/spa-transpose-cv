@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .contract import derive_output_name_from_contract, manifest_to_contract
+from .docx import validate_base_docx
 from .extract import extract_text_from_bytes
 from .profile import EMPTY_PROFILE_FALLBACK, validate_cv_data
 from .prompts import build_system_prompt, build_user_prompt
@@ -12,7 +13,6 @@ from .render import render_docx
 from .types import (
     AlignmentReport,
     DetectedFields,
-    LlmCompleteArgs,
     LlmCompleteResult,
     TransposeInput,
     TransposedCv,
@@ -102,20 +102,21 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
             if attempt > 0:
                 _emit_phase(input_, file.name, "retry")
             _emit_phase(input_, file.name, "extract-cv-llm")
-            args = LlmCompleteArgs(
-                system_prompt=build_system_prompt(),
-                user_prompt=build_user_prompt(
-                    cv_text=source_text,
-                    source_file_name=file.name,
-                    user_prompt_override=user_prompt_override,
-                ),
-                max_tokens=8192,
-                temperature=0.1,
-                enable_reasoning=True if input_.extraction is None or input_.extraction.enable_reasoning is None else input_.extraction.enable_reasoning,
-                reasoning_budget=input_.extraction.reasoning_budget if input_.extraction else None,
-                on_delta=_on_delta(input_, file.name),
+            llm_result = _coerce_llm_result(
+                await input_.llm.complete(
+                    system_prompt=build_system_prompt(),
+                    user_prompt=build_user_prompt(
+                        cv_text=source_text,
+                        source_file_name=file.name,
+                        user_prompt_override=user_prompt_override,
+                    ),
+                    max_tokens=8192,
+                    temperature=0.1,
+                    enable_reasoning=True if input_.extraction is None or input_.extraction.enable_reasoning is None else input_.extraction.enable_reasoning,
+                    reasoning_budget=input_.extraction.reasoning_budget if input_.extraction else None,
+                    on_delta=_on_delta(input_, file.name),
+                )
             )
-            llm_result = _coerce_llm_result(await input_.llm.complete(args))
             if llm_result.usage:
                 usage_in += int(llm_result.usage.get("inputTokens", llm_result.usage.get("input_tokens", 0)))
                 usage_out += int(llm_result.usage.get("outputTokens", llm_result.usage.get("output_tokens", 0)))
@@ -171,6 +172,7 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
 
 async def transpose(input_: TransposeInput) -> TransposeOutput:
     contract = manifest_to_contract(input_.template.manifest, input_.template.brand)
+    validate_base_docx(input_.template.base_docx)
     results = []
     for file in input_.files:
         results.append(await _process_one(file, input_, contract))

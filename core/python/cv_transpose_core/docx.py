@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile
 import xml.etree.ElementTree as ET
 
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -28,6 +28,13 @@ def extract_paragraphs_from_docx_bytes(data: bytes) -> list[str]:
         xml = zf.read("word/document.xml")
     root = ET.fromstring(xml)
     return extract_paragraphs_from_xml_root(root)
+
+
+def validate_base_docx(data: bytes) -> None:
+    try:
+        extract_paragraphs_from_docx_bytes(data)
+    except (BadZipFile, KeyError, ET.ParseError, OSError) as exc:
+        raise ValueError("base_docx_unreadable") from exc
 
 
 def replace_docx_entries(base_docx: bytes, replacements: dict[str, bytes]) -> bytes:
