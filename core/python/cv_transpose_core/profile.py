@@ -89,7 +89,7 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
         for achievement_idx, achievement in enumerate(achievements):
             if not isinstance(achievement, str):
                 raise CvDataError(f"experience.{idx}.achievements.{achievement_idx}: expected string")
-            normalized_achievements.append(achievement)
+            normalized_achievements.append(achievement.strip())
         normalized_experience.append(
             {
                 "company": _require_str(job, "company", allow_empty=False, trim=True),
@@ -98,7 +98,7 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
                 "title": _require_str(job, "title", allow_empty=False, trim=True),
                 "tasks": normalized_tasks,
                 "achievements": normalized_achievements,
-                "techEnvironment": _require_str(job, "techEnvironment"),
+                "techEnvironment": _require_str(job, "techEnvironment", trim=True),
             }
         )
 

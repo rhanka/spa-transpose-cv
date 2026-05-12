@@ -168,5 +168,5 @@ def test_cv_data_validation_trims_zod_trimmed_fields_and_preserves_raw_fields(ex
     assert profile["title_line2"] == "  Mobile Apps  "
     assert profile["years"] == "  4 years  "
     assert profile["attention_cv"] == "  Available now  "
-    assert profile["experience"][0]["achievements"][0] == "  Grew adoption  "
-    assert profile["experience"][0]["techEnvironment"] == "  Jira, Figma  "
+    assert profile["experience"][0]["achievements"][0] == "Grew adoption"
+    assert profile["experience"][0]["techEnvironment"] == "Jira, Figma"
