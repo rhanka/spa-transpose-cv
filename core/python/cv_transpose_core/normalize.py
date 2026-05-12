@@ -13,23 +13,40 @@ NON_DETERMINISTIC_ATTR_SUFFIXES = (
     "rsidP",
     "rsidTr",
     "editId",
+    "docId",
 )
+
+PKG_NAMESPACE = "http://schemas.microsoft.com/office/2006/xmlPackage"
 
 
 def _local_name(name: str) -> str:
     return name.rsplit("}", 1)[-1] if "}" in name else name
 
 
+def _namespace(name: str) -> str:
+    return name[1:].split("}", 1)[0] if name.startswith("{") and "}" in name else ""
+
+
+def _is_normalized_xml_part(name: str) -> bool:
+    return name.endswith(".xml") or name.endswith(".rels")
+
+
+def _should_remove_attr(el: etree._Element, attr: str, value: str) -> bool:
+    local = _local_name(attr)
+    if local in NON_DETERMINISTIC_ATTR_SUFFIXES:
+        return True
+    if _local_name(el.tag) == "docPr" and local == "id":
+        return True
+    return _namespace(attr) == PKG_NAMESPACE and local.endswith("Id") and value.isdigit()
+
+
 def _normalize_tree(raw: bytes) -> str:
-    parser = etree.XMLParser(remove_blank_text=True, recover=True)
+    parser = etree.XMLParser(remove_blank_text=True, resolve_entities=False, no_network=True)
     root = etree.fromstring(raw, parser=parser)
     for el in root.iter():
         for attr in list(el.attrib):
-            local = _local_name(attr)
             value = el.attrib[attr]
-            if local in NON_DETERMINISTIC_ATTR_SUFFIXES:
-                del el.attrib[attr]
-            elif local.endswith("Id") and value.isdigit():
+            if _should_remove_attr(el, attr, value):
                 del el.attrib[attr]
         if _local_name(el.tag) in {"created", "modified", "lastModifiedBy"}:
             el.text = ""
@@ -45,8 +62,10 @@ def normalize_docx(data: bytes) -> dict[str, dict[str, str]]:
     binary_hashes: dict[str, str] = {}
     with ZipFile(BytesIO(data)) as zf:
         for name in sorted(zf.namelist()):
+            if name.endswith("/"):
+                continue
             raw = zf.read(name)
-            if name.endswith(".xml"):
+            if _is_normalized_xml_part(name):
                 xml[name] = _normalize_tree(raw)
             else:
                 binary_hashes[name] = sha256(raw).hexdigest()
