@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import pytest
 
 CV_DATA_KEYS = [
@@ -115,3 +117,56 @@ def test_cv_data_validation_returns_fresh_nested_containers(expected_profile):
     assert len(profile["experience"][0]["achievements"]) == 2
     assert profile["languages"][0]["level"] == "Native"
     assert profile["education"][0]["description"] == "MS Computer Science, Tech University (fictional)."
+
+
+def test_cv_data_validation_trims_zod_trimmed_fields_and_preserves_raw_fields(expected_profile):
+    from cv_transpose_core.profile import validate_cv_data
+
+    raw = deepcopy(expected_profile)
+    raw["name"] = "  Jane Smith  "
+    raw["title_line1"] = "  Product Manager  "
+    raw["title_line2"] = "  Mobile Apps  "
+    raw["years"] = "  4 years  "
+    raw["attention_cv"] = "  Available now  "
+    raw["technicalSkills"][0]["label"] = "  Product  "
+    raw["technicalSkills"][0]["description"] = "  Roadmaps and discovery  "
+    raw["sectors"][0] = "  Consumer Mobile  "
+    raw["domains"][0] = "  Product Management  "
+    raw["experience"][0]["company"] = "  Acme  "
+    raw["experience"][0]["description"] = "  Product team  "
+    raw["experience"][0]["dates"] = "  2021-2024  "
+    raw["experience"][0]["title"] = "  PM  "
+    raw["experience"][0]["tasks"][0] = "  Ran discovery  "
+    raw["experience"][0]["achievements"][0] = "  Grew adoption  "
+    raw["experience"][0]["techEnvironment"] = "  Jira, Figma  "
+    raw["languages"][0]["label"] = "  English  "
+    raw["languages"][0]["level"] = "  Native  "
+    raw["education"][0]["year"] = "  2020  "
+    raw["education"][0]["description"] = "  MS Computer Science  "
+
+    profile = validate_cv_data(raw)
+
+    assert profile["name"] == "Jane Smith"
+    assert profile["technicalSkills"][0] == {
+        "label": "Product",
+        "description": "Roadmaps and discovery",
+    }
+    assert profile["sectors"][0] == "Consumer Mobile"
+    assert profile["domains"][0] == "Product Management"
+    assert profile["experience"][0]["company"] == "Acme"
+    assert profile["experience"][0]["description"] == "Product team"
+    assert profile["experience"][0]["dates"] == "2021-2024"
+    assert profile["experience"][0]["title"] == "PM"
+    assert profile["experience"][0]["tasks"][0] == "Ran discovery"
+    assert profile["languages"][0] == {"label": "English", "level": "Native"}
+    assert profile["education"][0] == {
+        "year": "2020",
+        "description": "MS Computer Science",
+    }
+
+    assert profile["title_line1"] == "  Product Manager  "
+    assert profile["title_line2"] == "  Mobile Apps  "
+    assert profile["years"] == "  4 years  "
+    assert profile["attention_cv"] == "  Available now  "
+    assert profile["experience"][0]["achievements"][0] == "  Grew adoption  "
+    assert profile["experience"][0]["techEnvironment"] == "  Jira, Figma  "

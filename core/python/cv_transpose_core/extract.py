@@ -8,6 +8,9 @@ from pypdf import PdfReader
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 DOCX_DOCUMENT_XML_MAX_BYTES = 5 * 1024 * 1024
+MAX_PDF_BYTES = 10 * 1024 * 1024
+MAX_PDF_PAGES = 25
+MAX_EXTRACTED_TEXT_CHARS = 200_000
 
 
 class UnsupportedMimeError(ValueError):
@@ -52,10 +55,28 @@ def _extract_docx_text(data: bytes) -> str:
 
 
 def _extract_pdf_text(data: bytes) -> str:
+    if len(data) > MAX_PDF_BYTES:
+        raise TextExtractionError("pdf_too_large")
+
     reader = PdfReader(BytesIO(data))
     if reader.is_encrypted:
         raise TextExtractionError("encrypted_pdf")
-    text = "\n".join(page.extract_text() or "" for page in reader.pages)
+
+    if len(reader.pages) > MAX_PDF_PAGES:
+        raise TextExtractionError("pdf_too_many_pages")
+
+    parts: list[str] = []
+    total_chars = 0
+    for page in reader.pages:
+        page_text = page.extract_text() or ""
+        total_chars += len(page_text)
+        if parts:
+            total_chars += 1
+        if total_chars > MAX_EXTRACTED_TEXT_CHARS:
+            raise TextExtractionError("pdf_text_too_large")
+        parts.append(page_text)
+
+    text = "\n".join(parts)
     if not text.strip():
         raise TextExtractionError("empty_pdf_text")
     return text
