@@ -1,0 +1,95 @@
+from __future__ import annotations
+
+from html import escape
+from typing import Any
+
+from .docx import replace_docx_entries
+
+DOCUMENT_PREFIX = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
+  <w:body>
+"""
+DOCUMENT_SUFFIX = """
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="450" w:footer="450" w:gutter="0"/></w:sectPr>
+  </w:body>
+</w:document>
+"""
+
+
+def _p(text: str, *, bold: bool = False) -> str:
+    b = "<w:b/><w:bCs/>" if bold else ""
+    return (
+        "    <w:p>"
+        f"<w:r><w:rPr>{b}</w:rPr><w:t>{escape(text)}</w:t></w:r>"
+        "</w:p>"
+    )
+
+
+def _section(label: str) -> str:
+    return _p(label, bold=True)
+
+
+def _render_profile(profile: dict[str, Any], contract: dict[str, Any]) -> str:
+    parts: list[str] = [
+        _p(profile["name"], bold=True),
+        _p(profile.get("title_line1", "")),
+        _p(profile.get("title_line2", "")),
+        _p(str(profile.get("years", ""))),
+    ]
+    labels = {section["key"]: section["label"] for section in contract["sections"]}
+
+    if "technicalSkills" in labels:
+        parts.append(_section(labels["technicalSkills"]))
+        for skill in profile.get("technicalSkills", []):
+            parts.append(_p(f'{skill["label"]}: {skill["description"]}'))
+
+    if "sectorSkills" in labels:
+        parts.append(_section(labels["sectorSkills"]))
+        for sector in profile.get("sectors", []):
+            parts.append(_p(sector))
+        for domain in profile.get("domains", []):
+            parts.append(_p(domain))
+
+    if "experience" in labels:
+        parts.append(_section(labels["experience"]))
+        for job in profile.get("experience", []):
+            parts.append(_p(job["company"], bold=True))
+            parts.append(_p(job["title"]))
+            parts.append(_p(job["dates"]))
+            parts.append(_p(job["description"]))
+            for task in job.get("tasks", []):
+                parts.append(_p(task))
+            if job.get("techEnvironment"):
+                parts.append(_p(job["techEnvironment"]))
+
+    if "languages" in labels:
+        parts.append(_section(labels["languages"]))
+        for language in profile.get("languages", []):
+            parts.append(_p(f'{language["label"]}: {language["level"]}'))
+
+    if "education" in labels:
+        parts.append(_section(labels["education"]))
+        for education in profile.get("education", []):
+            parts.append(_p(f'{education["year"]}: {education["description"]}'))
+
+    return DOCUMENT_PREFIX + "\n".join(parts) + DOCUMENT_SUFFIX
+
+
+def _header_xml(profile: dict[str, Any]) -> bytes:
+    xml = DOCUMENT_PREFIX + "\n".join(
+        [
+            _p(profile["name"], bold=True),
+            _p(profile.get("title_line1", "")),
+            _p(profile.get("title_line2", "")),
+            _p(str(profile.get("years", ""))),
+        ]
+    ) + DOCUMENT_SUFFIX
+    return xml.encode("utf-8")
+
+
+def render_docx(base_docx: bytes, profile: dict[str, Any], contract: dict[str, Any]) -> bytes:
+    document = _render_profile(profile, contract).encode("utf-8")
+    replacements = {"word/document.xml": document}
+    replacements["word/header2.xml"] = _header_xml(profile)
+    return replace_docx_entries(base_docx, replacements)
