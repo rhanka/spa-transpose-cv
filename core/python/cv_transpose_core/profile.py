@@ -22,13 +22,13 @@ EMPTY_PROFILE_FALLBACK: dict[str, Any] = {
 }
 
 
-def _require_str(obj: dict[str, Any], key: str, allow_empty: bool = True) -> str:
+def _require_str(obj: dict[str, Any], key: str, allow_empty: bool = True, trim: bool = False) -> str:
     value = obj.get(key)
     if not isinstance(value, str):
         raise CvDataError(f"{key}: expected string")
     if not allow_empty and value.strip() == "":
         raise CvDataError(f"{key}: expected non-empty string")
-    return value
+    return value.strip() if trim else value
 
 
 def _require_list(obj: dict[str, Any], key: str) -> list[Any]:
@@ -42,7 +42,7 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise CvDataError("profile: expected object")
 
-    name = _require_str(raw, "name", allow_empty=False)
+    name = _require_str(raw, "name", allow_empty=False, trim=True)
     title_line1 = _require_str(raw, "title_line1")
     title_line2 = _require_str(raw, "title_line2")
     years = _require_str(raw, "years")
@@ -60,8 +60,8 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
             raise CvDataError(f"technicalSkills.{idx}: expected object")
         normalized_skills.append(
             {
-                "label": _require_str(skill, "label", allow_empty=False),
-                "description": _require_str(skill, "description", allow_empty=False),
+                "label": _require_str(skill, "label", allow_empty=False, trim=True),
+                "description": _require_str(skill, "description", allow_empty=False, trim=True),
             }
         )
 
@@ -72,7 +72,7 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
         for idx, item in enumerate(items):
             if not isinstance(item, str) or item.strip() == "":
                 raise CvDataError(f"{key}.{idx}: expected non-empty string")
-            normalized_items.append(item)
+            normalized_items.append(item.strip())
 
     normalized_experience: list[dict[str, Any]] = []
     for idx, job in enumerate(experience):
@@ -85,17 +85,17 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
         for task_idx, task in enumerate(tasks):
             if not isinstance(task, str) or task.strip() == "":
                 raise CvDataError(f"experience.{idx}.tasks.{task_idx}: expected non-empty string")
-            normalized_tasks.append(task)
+            normalized_tasks.append(task.strip())
         for achievement_idx, achievement in enumerate(achievements):
             if not isinstance(achievement, str):
                 raise CvDataError(f"experience.{idx}.achievements.{achievement_idx}: expected string")
             normalized_achievements.append(achievement)
         normalized_experience.append(
             {
-                "company": _require_str(job, "company", allow_empty=False),
-                "description": _require_str(job, "description", allow_empty=False),
-                "dates": _require_str(job, "dates", allow_empty=False),
-                "title": _require_str(job, "title", allow_empty=False),
+                "company": _require_str(job, "company", allow_empty=False, trim=True),
+                "description": _require_str(job, "description", allow_empty=False, trim=True),
+                "dates": _require_str(job, "dates", allow_empty=False, trim=True),
+                "title": _require_str(job, "title", allow_empty=False, trim=True),
                 "tasks": normalized_tasks,
                 "achievements": normalized_achievements,
                 "techEnvironment": _require_str(job, "techEnvironment"),
@@ -108,8 +108,8 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
             raise CvDataError(f"languages.{idx}: expected object")
         normalized_languages.append(
             {
-                "label": _require_str(language, "label", allow_empty=False),
-                "level": _require_str(language, "level", allow_empty=False),
+                "label": _require_str(language, "label", allow_empty=False, trim=True),
+                "level": _require_str(language, "level", allow_empty=False, trim=True),
             }
         )
 
@@ -119,8 +119,8 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
             raise CvDataError(f"education.{idx}: expected object")
         normalized_education.append(
             {
-                "year": _require_str(education_item, "year", allow_empty=False),
-                "description": _require_str(education_item, "description", allow_empty=False),
+                "year": _require_str(education_item, "year", allow_empty=False, trim=True),
+                "description": _require_str(education_item, "description", allow_empty=False, trim=True),
             }
         )
 

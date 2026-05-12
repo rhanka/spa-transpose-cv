@@ -36,6 +36,15 @@ JOB_STYLES = {
     "classic-consulting",
     "compact-dense",
 }
+RENDERING_KEYS = {
+    "headerStyle",
+    "sectionStyle",
+    "jobStyle",
+    "colors",
+    "fonts",
+    "spacing",
+    "sectionLabelOverrides",
+}
 
 
 def _require_obj(raw: Any, path: str) -> dict[str, Any]:
@@ -60,10 +69,20 @@ def _validate_rendering_token_value(value: Any, path: str) -> None:
         raise ManifestError(f"{path}: expected non-empty string or number")
 
 
+def _validate_string_map(raw: Any, path: str) -> None:
+    values = _require_obj(raw, path)
+    for key, value in values.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise ManifestError(f"{path}: expected string keys and string values")
+
+
 def _validate_rendering(raw: Any) -> None:
     if raw is None:
         return
     rendering = _require_obj(raw, "rendering")
+    for key in rendering:
+        if key not in RENDERING_KEYS:
+            raise ManifestError(f"rendering.{key}: unknown property")
     _validate_enum(rendering, "headerStyle", HEADER_STYLES, "rendering")
     _validate_enum(rendering, "sectionStyle", SECTION_STYLES, "rendering")
     _validate_enum(rendering, "jobStyle", JOB_STYLES, "rendering")
@@ -82,6 +101,9 @@ def _validate_rendering(raw: Any) -> None:
         tokens = _require_obj(tokens, f"rendering.{group}")
         for key, value in tokens.items():
             _validate_rendering_token_value(value, f"rendering.{group}.{key}")
+
+    if "sectionLabelOverrides" in rendering:
+        _validate_string_map(rendering["sectionLabelOverrides"], "rendering.sectionLabelOverrides")
 
 
 def validate_template_manifest(raw: Any) -> dict[str, Any]:
@@ -110,7 +132,23 @@ def validate_template_manifest(raw: Any) -> dict[str, Any]:
         for key in ["id", "label"]:
             if not isinstance(item.get(key), str) or item[key].strip() == "":
                 raise ManifestError(f"sections.{idx}.{key}: expected non-empty string")
+        if len(item["label"]) > 80:
+            raise ManifestError(f"sections.{idx}.label: expected string with max length 80")
         if item.get("kind") not in SECTION_KINDS:
             raise ManifestError(f"sections.{idx}.kind: invalid")
+        if "anchorParagraphIndex" in item:
+            anchor_paragraph_index = item["anchorParagraphIndex"]
+            if (
+                isinstance(anchor_paragraph_index, bool)
+                or not isinstance(anchor_paragraph_index, int)
+                or anchor_paragraph_index < 0
+            ):
+                raise ManifestError(f"sections.{idx}.anchorParagraphIndex: expected non-negative integer")
+        if "maxItems" in item:
+            max_items = item["maxItems"]
+            if isinstance(max_items, bool) or not isinstance(max_items, int) or max_items < 1:
+                raise ManifestError(f"sections.{idx}.maxItems: expected positive integer")
+        if "itemTemplateRef" in item and not isinstance(item["itemTemplateRef"], str):
+            raise ManifestError(f"sections.{idx}.itemTemplateRef: expected string")
     _validate_rendering(manifest.get("rendering"))
     return manifest

@@ -65,6 +65,58 @@ def test_extract_pdf_rejects_blank_extracted_text(monkeypatch):
         extract_text_from_bytes(b"%PDF fake", "blank.pdf", "application/pdf")
 
 
+def test_extract_pdf_rejects_oversized_pdf_before_reader(monkeypatch):
+    def fail_reader(stream):
+        raise AssertionError("PdfReader should not be called for oversized PDFs")
+
+    monkeypatch.setattr(extract, "MAX_PDF_BYTES", 4)
+    monkeypatch.setattr(extract, "PdfReader", fail_reader)
+
+    with pytest.raises(TextExtractionError, match="pdf_too_large"):
+        extract_text_from_bytes(b"%PDF fake", "large.pdf", "application/pdf")
+
+
+def test_extract_pdf_rejects_too_many_pages(monkeypatch):
+    class FakePage:
+        def extract_text(self):
+            return "text"
+
+    class FakeReader:
+        is_encrypted = False
+        pages = [FakePage(), FakePage()]
+
+        def __init__(self, stream):
+            pass
+
+    monkeypatch.setattr(extract, "MAX_PDF_PAGES", 1)
+    monkeypatch.setattr(extract, "PdfReader", FakeReader)
+
+    with pytest.raises(TextExtractionError, match="pdf_too_many_pages"):
+        extract_text_from_bytes(b"%PDF fake", "many.pdf", "application/pdf")
+
+
+def test_extract_pdf_rejects_too_much_extracted_text(monkeypatch):
+    class FakePage:
+        def __init__(self, text):
+            self._text = text
+
+        def extract_text(self):
+            return self._text
+
+    class FakeReader:
+        is_encrypted = False
+        pages = [FakePage("abc"), FakePage("def")]
+
+        def __init__(self, stream):
+            pass
+
+    monkeypatch.setattr(extract, "MAX_EXTRACTED_TEXT_CHARS", 5)
+    monkeypatch.setattr(extract, "PdfReader", FakeReader)
+
+    with pytest.raises(TextExtractionError, match="pdf_text_too_large"):
+        extract_text_from_bytes(b"%PDF fake", "text.pdf", "application/pdf")
+
+
 def test_extract_docx_rejects_malformed_zip():
     with pytest.raises(TextExtractionError, match="malformed_docx"):
         extract_text_from_bytes(b"not a zip", "bad.docx", DOCX_MIME)
