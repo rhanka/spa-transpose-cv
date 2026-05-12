@@ -118,6 +118,10 @@ typecheck: typecheck-api typecheck-ui ## Run all type checks
 test-api: ## Run API unit tests
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'files=$$(find src \( -name "*.test.ts" -o -name "*.spec.ts" \) | sort); if [ -z "$$files" ]; then echo "No API tests found"; exit 0; fi; node --import tsx --test $$files'
 
+.PHONY: test-core-python
+test-core-python: ## Run Python core unit tests in Docker
+	docker run --rm -v "$$(pwd):/app" -w /app python:3.12-slim sh -lc 'python -m pip install --disable-pip-version-check -e core/python[test] && python -m pytest core/python/tests'
+
 .PHONY: smoke-tenant-e2e
 smoke-tenant-e2e: ## Run tenant E2E smoke (TENANT=_default|scalian)
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'TENANT="$(if $(strip $(TENANT)),$(TENANT),_default)" INPUT_FILE="$(if $(strip $(INPUT_FILE)),$(INPUT_FILE),templates/references/cgi_source_example_fictional.docx)" SESSION_PASSWORD="$(if $(strip $(SESSION_PASSWORD)),$(SESSION_PASSWORD),smoke-pass)" API_BASE_URL="$(if $(strip $(API_BASE_URL)),$(API_BASE_URL),http://localhost:8686/api)" PROVIDER="$(PROVIDER)" TARGET_COMPANY="$(TARGET_COMPANY)" TIMEOUT_MS="$(if $(strip $(TIMEOUT_MS)),$(TIMEOUT_MS),180000)" POLL_INTERVAL_MS="$(if $(strip $(POLL_INTERVAL_MS)),$(POLL_INTERVAL_MS),2000)" npx tsx scripts/smoke-tenant-e2e.ts'
