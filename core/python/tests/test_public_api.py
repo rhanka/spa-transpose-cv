@@ -13,6 +13,9 @@ def test_public_api_exports_transpose_contract_types():
         "AlignmentReport",
         "TransposedCv",
         "TransposeOutput",
+        "CvMime",
+        "Persistence",
+        "TransposePhase",
     ]:
         assert hasattr(core, name)
 
