@@ -1,7 +1,13 @@
+from importlib.resources import files
+
 from cv_transpose_core.prompts import build_system_prompt, build_user_prompt
 
 
-def test_system_prompt_is_loaded_from_shared_spec():
+def test_packaged_prompt_resource_exists_and_system_prompt_reads_it():
+    resource = files("cv_transpose_core").joinpath("spec/prompts/extract-cv.md")
+
+    assert resource.is_file()
+    assert "You are an expert CV analyst" in resource.read_text()
     assert len(build_system_prompt()) > 200
     assert "CV" in build_system_prompt()
 

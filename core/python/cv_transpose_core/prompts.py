@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from importlib.resources import files
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -11,7 +12,11 @@ def _repo_root() -> Path:
 
 @lru_cache(maxsize=1)
 def _prompt_parts() -> tuple[str, str]:
-    md = (_repo_root() / "core/spec/prompts/extract-cv.md").read_text()
+    resource = files("cv_transpose_core").joinpath("spec/prompts/extract-cv.md")
+    if resource.is_file():
+        md = resource.read_text(encoding="utf-8")
+    else:
+        md = (_repo_root() / "core/spec/prompts/extract-cv.md").read_text(encoding="utf-8")
     body = re.sub(r"^---[\s\S]*?\n---\n", "", md)
     system_match = re.search(r"# System prompt\s*\n([\s\S]*?)(?=\n# |$)", body)
     if system_match is None:

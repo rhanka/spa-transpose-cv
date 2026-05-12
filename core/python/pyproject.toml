@@ -20,3 +20,6 @@ test = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cv_transpose_core*"]
+
+[tool.setuptools.package-data]
+cv_transpose_core = ["spec/prompts/*.md"]
