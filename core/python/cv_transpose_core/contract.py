@@ -103,10 +103,14 @@ def _sanitize_file_token(value: str) -> str:
     return token
 
 
+def _first_token_like_ts_split(value: str) -> str:
+    return re.split(r"\s+", value)[0]
+
+
 def derive_output_name_from_contract(contract: dict[str, Any], original_name: str, cv_name: str) -> str:
     match = re.search(r"_(\d{4,})[\s.]", original_name)
     candidate_id = match.group(1) if match else ""
-    first_name = _sanitize_file_token(cv_name.split()[0] if cv_name.split() else "Candidate") or "Candidate"
+    first_name = _sanitize_file_token(_first_token_like_ts_split(cv_name)) or "Candidate"
     full_name = _sanitize_file_token(cv_name) or first_name
     candidate_label = f"Candidate_{candidate_id}" if candidate_id else full_name
     resolved = (
