@@ -4,8 +4,6 @@ build/
 .svelte-kit/
 .env
 *.log
-__pycache__/
-*.egg-info/
 tmp/
 /data/
 api/node_modules/

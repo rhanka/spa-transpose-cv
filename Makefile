@@ -120,7 +120,7 @@ test-api: ## Run API unit tests
 
 .PHONY: test-core-python
 test-core-python: ## Run Python core unit tests in Docker
-	docker run --rm -v "$$(pwd):/app" -w /app python:3.12-slim sh -lc 'python -m pip install --disable-pip-version-check -e core/python[test] && python -m pytest core/python/tests'
+	docker run --rm --user "$$(id -u):$$(id -g)" -v "$$(pwd):/app" -w /app python:3.12-slim sh -lc 'HOME=/tmp PIP_CACHE_DIR=/tmp/pip-cache python -m pip install --disable-pip-version-check '"'"'lxml>=5.2,<6'"'"' '"'"'pypdf>=4.2,<6'"'"' '"'"'pytest>=8.2,<9'"'"' && HOME=/tmp PYTHONPATH=/app/core/python PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider core/python/tests'
 
 .PHONY: smoke-tenant-e2e
 smoke-tenant-e2e: ## Run tenant E2E smoke (TENANT=_default|scalian)
