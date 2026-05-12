@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from html import escape
+from io import BytesIO
 from typing import Any
+from zipfile import ZipFile
 
 from .docx import replace_docx_entries
 
+WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W14_NS = "http://schemas.microsoft.com/office/word/2010/wordml"
 DOCUMENT_PREFIX = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
   xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
@@ -15,13 +19,33 @@ DOCUMENT_SUFFIX = """
   </w:body>
 </w:document>
 """
+HEADER_PREFIX = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="{WORD_NS}" xmlns:w14="{W14_NS}">
+"""
+HEADER_SUFFIX = """
+</w:hdr>
+"""
+
+
+def _is_xml_10_char(ch: str) -> bool:
+    codepoint = ord(ch)
+    return (
+        codepoint in {0x9, 0xA, 0xD}
+        or 0x20 <= codepoint <= 0xD7FF
+        or 0xE000 <= codepoint <= 0xFFFD
+        or 0x10000 <= codepoint <= 0x10FFFF
+    )
+
+
+def _escape_xml_text(text: str) -> str:
+    return escape("".join(ch for ch in str(text) if _is_xml_10_char(ch)))
 
 
 def _p(text: str, *, bold: bool = False) -> str:
     b = "<w:b/><w:bCs/>" if bold else ""
     return (
         "    <w:p>"
-        f"<w:r><w:rPr>{b}</w:rPr><w:t>{escape(text)}</w:t></w:r>"
+        f"<w:r><w:rPr>{b}</w:rPr><w:t>{_escape_xml_text(text)}</w:t></w:r>"
         "</w:p>"
     )
 
@@ -77,19 +101,24 @@ def _render_profile(profile: dict[str, Any], contract: dict[str, Any]) -> str:
 
 
 def _header_xml(profile: dict[str, Any]) -> bytes:
-    xml = DOCUMENT_PREFIX + "\n".join(
+    xml = HEADER_PREFIX + "\n".join(
         [
             _p(profile["name"], bold=True),
             _p(profile.get("title_line1", "")),
             _p(profile.get("title_line2", "")),
             _p(str(profile.get("years", ""))),
         ]
-    ) + DOCUMENT_SUFFIX
+    ) + HEADER_SUFFIX
     return xml.encode("utf-8")
 
 
 def render_docx(base_docx: bytes, profile: dict[str, Any], contract: dict[str, Any]) -> bytes:
     document = _render_profile(profile, contract).encode("utf-8")
     replacements = {"word/document.xml": document}
-    replacements["word/header2.xml"] = _header_xml(profile)
+    with ZipFile(BytesIO(base_docx)) as zf:
+        names = set(zf.namelist())
+    if "word/header2.xml" in names:
+        replacements["word/header2.xml"] = _header_xml(profile)
+    elif "word/header1.xml" in names:
+        replacements["word/header1.xml"] = _header_xml(profile)
     return replace_docx_entries(base_docx, replacements)

@@ -12,11 +12,22 @@ def extract_text_from_docx_bytes(data: bytes) -> str:
     with ZipFile(BytesIO(data)) as zf:
         xml = zf.read("word/document.xml")
     root = ET.fromstring(xml)
+    return "\n".join(extract_paragraphs_from_xml_root(root))
+
+
+def extract_paragraphs_from_xml_root(root: ET.Element) -> list[str]:
     paragraphs: list[str] = []
     for para in root.findall(".//w:p", NS):
         texts = [node.text or "" for node in para.findall(".//w:t", NS)]
         paragraphs.append("".join(texts))
-    return "\n".join(paragraphs)
+    return paragraphs
+
+
+def extract_paragraphs_from_docx_bytes(data: bytes) -> list[str]:
+    with ZipFile(BytesIO(data)) as zf:
+        xml = zf.read("word/document.xml")
+    root = ET.fromstring(xml)
+    return extract_paragraphs_from_xml_root(root)
 
 
 def replace_docx_entries(base_docx: bytes, replacements: dict[str, bytes]) -> bytes:
