@@ -18,8 +18,8 @@ class FakeLlm:
         self.profile = profile
         self.calls = []
 
-    async def complete(self, args):
-        self.calls.append(args)
+    async def complete(self, **kwargs):
+        self.calls.append(kwargs)
         return LlmCompleteResult(text=json.dumps(self.profile), usage={"inputTokens": 10, "outputTokens": 20})
 
 
@@ -56,14 +56,17 @@ async def test_transpose_returns_enriched_result(repo_root, expected_profile):
     assert item.output_docx[:4] == b"PK\x03\x04"
     assert item.output_docx_name == "Scalian_Profile_Jane_Smith.docx"
     assert item.usage.total_tokens == 30
-    assert "TARGET: Acme" in llm.calls[0].user_prompt
-    assert "cv-001-junior-pm.pdf" in llm.calls[0].user_prompt
+    assert "TARGET: Acme" in llm.calls[0]["user_prompt"]
+    assert "cv-001-junior-pm.pdf" in llm.calls[0]["user_prompt"]
+    assert llm.calls[0]["system_prompt"]
+    assert llm.calls[0]["max_tokens"] == 8192
+    assert llm.calls[0]["temperature"] == 0.1
 
 
 @pytest.mark.asyncio
 async def test_transpose_captures_malformed_llm_json(repo_root, expected_profile):
     class BadLlm:
-        async def complete(self, args):
+        async def complete(self, **kwargs):
             return {"text": "not json", "usage": {"inputTokens": 1, "outputTokens": 2}}
 
     manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
@@ -92,10 +95,10 @@ async def test_transpose_captures_malformed_llm_json(repo_root, expected_profile
 @pytest.mark.asyncio
 async def test_transpose_emits_stream_callbacks(repo_root, expected_profile):
     class StreamingLlm:
-        async def complete(self, args):
-            assert args.on_delta is not None
-            args.on_delta({"kind": "thinking", "text": "considering"})
-            args.on_delta({"kind": "content", "text": "profile json"})
+        async def complete(self, **kwargs):
+            assert kwargs["on_delta"] is not None
+            kwargs["on_delta"]({"kind": "thinking", "text": "considering"})
+            kwargs["on_delta"]({"kind": "content", "text": "profile json"})
             return LlmCompleteResult(text=json.dumps(expected_profile), usage={"inputTokens": 1, "outputTokens": 2})
 
     phases = []
@@ -143,7 +146,7 @@ async def test_transpose_emits_stream_callbacks(repo_root, expected_profile):
 @pytest.mark.asyncio
 async def test_failed_transpose_profiles_have_isolated_fallback_lists(repo_root):
     class BadLlm:
-        async def complete(self, args):
+        async def complete(self, **kwargs):
             return {"text": "not json", "usage": {"inputTokens": 1, "outputTokens": 2}}
 
     manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
@@ -169,3 +172,34 @@ async def test_failed_transpose_profiles_have_isolated_fallback_lists(repo_root)
     result.results[0].profile["experience"].append({"company": "Mutated"})
 
     assert result.results[1].profile["experience"] == []
+
+
+@pytest.mark.asyncio
+async def test_transpose_raises_for_unreadable_base_docx_before_llm(repo_root, expected_profile):
+    class RecordingLlm:
+        def __init__(self):
+            self.called = False
+
+        async def complete(self, **kwargs):
+            self.called = True
+            return LlmCompleteResult(text=json.dumps(expected_profile), usage=None)
+
+    manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
+    cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
+    llm = RecordingLlm()
+
+    with pytest.raises(ValueError, match="base_docx"):
+        await transpose(
+            TransposeInput(
+                files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
+                template=TemplateAssets(
+                    manifest=manifest,
+                    base_docx=b"not a docx",
+                    brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+                ),
+                persistence="ephemeral",
+                llm=llm,
+            )
+        )
+
+    assert llm.called is False

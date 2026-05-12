@@ -11,7 +11,7 @@ class FixtureLlm:
     def __init__(self, profile):
         self.profile = profile
 
-    async def complete(self, args):
+    async def complete(self, **kwargs):
         return LlmCompleteResult(text=json.dumps(self.profile))
 
 
