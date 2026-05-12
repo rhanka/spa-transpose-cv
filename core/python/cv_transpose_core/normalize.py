@@ -14,6 +14,7 @@ NON_DETERMINISTIC_ATTR_SUFFIXES = (
     "rsidTr",
     "editId",
     "docId",
+    "paraId",
 )
 
 PKG_NAMESPACE = "http://schemas.microsoft.com/office/2006/xmlPackage"
