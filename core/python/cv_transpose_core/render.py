@@ -722,7 +722,7 @@ def render_docx(base_docx: bytes, profile: dict[str, Any], contract: dict[str, A
         if contract.get("layout", {}).get("variant") == "brand-accent":
             if "word/header2.xml" in names:
                 replacements["word/header2.xml"] = _empty_story_xml(zf.read("word/header2.xml"), "w:hdr")
-            elif "word/header1.xml" in names:
+            if "word/header1.xml" in names:
                 replacements["word/header1.xml"] = _empty_story_xml(zf.read("word/header1.xml"), "w:hdr")
             return replace_docx_entries(base_docx, replacements)
     if "word/header2.xml" in names:

@@ -40,7 +40,7 @@ async def test_python_output_matches_ts_golden_core_ooxml(repo_root, expected_pr
     py = normalize_docx(item.output_docx)
     ts = normalize_docx(golden)
 
-    for entry in ["word/document.xml", "word/header2.xml"]:
+    for entry in ["word/document.xml", "word/header1.xml", "word/header2.xml"]:
         assert entry in py["xml"]
         assert entry in ts["xml"]
         assert py["xml"][entry] == ts["xml"][entry]
