@@ -42,52 +42,98 @@ def validate_cv_data(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise CvDataError("profile: expected object")
 
-    profile = dict(raw)
-    _require_str(profile, "name", allow_empty=False)
-    _require_str(profile, "title_line1")
-    _require_str(profile, "title_line2")
-    _require_str(profile, "years")
-    _require_str(profile, "attention_cv")
+    name = _require_str(raw, "name", allow_empty=False)
+    title_line1 = _require_str(raw, "title_line1")
+    title_line2 = _require_str(raw, "title_line2")
+    years = _require_str(raw, "years")
+    attention_cv = _require_str(raw, "attention_cv")
+    technical_skills = _require_list(raw, "technicalSkills")
+    sectors = _require_list(raw, "sectors")
+    domains = _require_list(raw, "domains")
+    experience = _require_list(raw, "experience")
+    languages = _require_list(raw, "languages")
+    education = _require_list(raw, "education")
 
-    for key in ["technicalSkills", "sectors", "domains", "experience", "languages", "education"]:
-        _require_list(profile, key)
-
-    for idx, skill in enumerate(profile["technicalSkills"]):
+    normalized_skills: list[dict[str, str]] = []
+    for idx, skill in enumerate(technical_skills):
         if not isinstance(skill, dict):
             raise CvDataError(f"technicalSkills.{idx}: expected object")
-        _require_str(skill, "label", allow_empty=False)
-        _require_str(skill, "description", allow_empty=False)
+        normalized_skills.append(
+            {
+                "label": _require_str(skill, "label", allow_empty=False),
+                "description": _require_str(skill, "description", allow_empty=False),
+            }
+        )
 
-    for key in ["sectors", "domains"]:
-        for idx, item in enumerate(profile[key]):
+    normalized_sectors: list[str] = []
+    normalized_domains: list[str] = []
+    for key, items in [("sectors", sectors), ("domains", domains)]:
+        normalized_items = normalized_sectors if key == "sectors" else normalized_domains
+        for idx, item in enumerate(items):
             if not isinstance(item, str) or item.strip() == "":
                 raise CvDataError(f"{key}.{idx}: expected non-empty string")
+            normalized_items.append(item)
 
-    for idx, job in enumerate(profile["experience"]):
+    normalized_experience: list[dict[str, Any]] = []
+    for idx, job in enumerate(experience):
         if not isinstance(job, dict):
             raise CvDataError(f"experience.{idx}: expected object")
-        for key in ["company", "description", "dates", "title"]:
-            _require_str(job, key, allow_empty=False)
-        _require_str(job, "techEnvironment")
         tasks = _require_list(job, "tasks")
         achievements = _require_list(job, "achievements")
+        normalized_tasks: list[str] = []
+        normalized_achievements: list[str] = []
         for task_idx, task in enumerate(tasks):
             if not isinstance(task, str) or task.strip() == "":
                 raise CvDataError(f"experience.{idx}.tasks.{task_idx}: expected non-empty string")
+            normalized_tasks.append(task)
         for achievement_idx, achievement in enumerate(achievements):
             if not isinstance(achievement, str):
                 raise CvDataError(f"experience.{idx}.achievements.{achievement_idx}: expected string")
+            normalized_achievements.append(achievement)
+        normalized_experience.append(
+            {
+                "company": _require_str(job, "company", allow_empty=False),
+                "description": _require_str(job, "description", allow_empty=False),
+                "dates": _require_str(job, "dates", allow_empty=False),
+                "title": _require_str(job, "title", allow_empty=False),
+                "tasks": normalized_tasks,
+                "achievements": normalized_achievements,
+                "techEnvironment": _require_str(job, "techEnvironment"),
+            }
+        )
 
-    for idx, language in enumerate(profile["languages"]):
+    normalized_languages: list[dict[str, str]] = []
+    for idx, language in enumerate(languages):
         if not isinstance(language, dict):
             raise CvDataError(f"languages.{idx}: expected object")
-        _require_str(language, "label", allow_empty=False)
-        _require_str(language, "level", allow_empty=False)
+        normalized_languages.append(
+            {
+                "label": _require_str(language, "label", allow_empty=False),
+                "level": _require_str(language, "level", allow_empty=False),
+            }
+        )
 
-    for idx, education in enumerate(profile["education"]):
-        if not isinstance(education, dict):
+    normalized_education: list[dict[str, str]] = []
+    for idx, education_item in enumerate(education):
+        if not isinstance(education_item, dict):
             raise CvDataError(f"education.{idx}: expected object")
-        _require_str(education, "year", allow_empty=False)
-        _require_str(education, "description", allow_empty=False)
+        normalized_education.append(
+            {
+                "year": _require_str(education_item, "year", allow_empty=False),
+                "description": _require_str(education_item, "description", allow_empty=False),
+            }
+        )
 
-    return profile
+    return {
+        "name": name,
+        "title_line1": title_line1,
+        "title_line2": title_line2,
+        "years": years,
+        "technicalSkills": normalized_skills,
+        "sectors": normalized_sectors,
+        "domains": normalized_domains,
+        "experience": normalized_experience,
+        "languages": normalized_languages,
+        "education": normalized_education,
+        "attention_cv": attention_cv,
+    }
