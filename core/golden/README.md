@@ -29,6 +29,5 @@ regenerate via the script if you need to update them.
 The current `transpose()` renderer is not byte-deterministic (DOCX
 contains some IDs / timestamps that vary between runs). The equivalence
 test therefore falls back to a structural check (size within 5% + valid
-ZIP magic) when byte-equality fails. The `normalize_docx` helper that
-would let us strict-compare goldens is in scope of P1.2 (Python port +
-equivalence tests).
+ZIP magic) when byte-equality fails. Python normalization/equivalence
+exists for the P1.2-scoped Scalian fixture path.
