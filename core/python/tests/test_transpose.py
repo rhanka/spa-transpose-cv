@@ -5,6 +5,7 @@ import pytest
 from cv_transpose_core import (
     BrandTokens,
     InputFile,
+    StreamCallbacks,
     TemplateAssets,
     TransposeInput,
     transpose,
@@ -86,3 +87,85 @@ async def test_transpose_captures_malformed_llm_json(repo_root, expected_profile
     assert item.errors
     assert item.profile["name"] == "Candidate"
     assert item.usage.total_tokens == 3
+
+
+@pytest.mark.asyncio
+async def test_transpose_emits_stream_callbacks(repo_root, expected_profile):
+    class StreamingLlm:
+        async def complete(self, args):
+            assert args.on_delta is not None
+            args.on_delta({"kind": "thinking", "text": "considering"})
+            args.on_delta({"kind": "content", "text": "profile json"})
+            return LlmCompleteResult(text=json.dumps(expected_profile), usage={"inputTokens": 1, "outputTokens": 2})
+
+    phases = []
+    thinking = []
+    content = []
+    parsed_keys = []
+    manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
+    base_docx = (repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes()
+    cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
+
+    result = await transpose(
+        TransposeInput(
+            files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
+            template=TemplateAssets(
+                manifest=manifest,
+                base_docx=base_docx,
+                brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+            ),
+            persistence="ephemeral",
+            llm=StreamingLlm(),
+            stream_callbacks=StreamCallbacks(
+                on_phase_change=lambda file_name, phase: phases.append((file_name, phase)),
+                on_thinking_delta=lambda file_name, text: thinking.append((file_name, text)),
+                on_content_delta=lambda file_name, text: content.append((file_name, text)),
+                on_parsed_keys=lambda file_name, keys: parsed_keys.append((file_name, keys)),
+            ),
+        )
+    )
+
+    assert result.results[0].errors == []
+    assert phases == [
+        ("cv-001-junior-pm.pdf", "extract-text"),
+        ("cv-001-junior-pm.pdf", "extract-cv-llm"),
+        ("cv-001-junior-pm.pdf", "render-docx"),
+        ("cv-001-junior-pm.pdf", "validate-page1"),
+        ("cv-001-junior-pm.pdf", "done"),
+    ]
+    assert thinking == [("cv-001-junior-pm.pdf", "considering")]
+    assert content == [("cv-001-junior-pm.pdf", "profile json")]
+    assert parsed_keys
+    assert "name" in parsed_keys[0][1]
+    assert "experience" in parsed_keys[0][1]
+
+
+@pytest.mark.asyncio
+async def test_failed_transpose_profiles_have_isolated_fallback_lists(repo_root):
+    class BadLlm:
+        async def complete(self, args):
+            return {"text": "not json", "usage": {"inputTokens": 1, "outputTokens": 2}}
+
+    manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
+    base_docx = (repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes()
+    cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
+
+    result = await transpose(
+        TransposeInput(
+            files=[
+                InputFile(name="first.pdf", bytes_=cv, mime="application/pdf"),
+                InputFile(name="second.pdf", bytes_=cv, mime="application/pdf"),
+            ],
+            template=TemplateAssets(
+                manifest=manifest,
+                base_docx=base_docx,
+                brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+            ),
+            persistence="ephemeral",
+            llm=BadLlm(),
+        )
+    )
+
+    result.results[0].profile["experience"].append({"company": "Mutated"})
+
+    assert result.results[1].profile["experience"] == []

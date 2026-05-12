@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from typing import Any
 
@@ -19,6 +20,30 @@ from .types import (
     Usage,
 )
 from .validate import validate_docx_structure
+
+
+def _fallback_profile() -> dict[str, Any]:
+    return deepcopy(EMPTY_PROFILE_FALLBACK)
+
+
+def _emit_phase(input_: TransposeInput, file_name: str, phase: str) -> None:
+    if input_.stream_callbacks and input_.stream_callbacks.on_phase_change:
+        input_.stream_callbacks.on_phase_change(file_name, phase)
+
+
+def _on_delta(input_: TransposeInput, file_name: str):
+    if input_.stream_callbacks is None:
+        return None
+
+    def route_delta(delta: dict[str, str]) -> None:
+        kind = delta.get("kind")
+        text = delta.get("text", "")
+        if kind == "thinking" and input_.stream_callbacks and input_.stream_callbacks.on_thinking_delta:
+            input_.stream_callbacks.on_thinking_delta(file_name, text)
+        if kind == "content" and input_.stream_callbacks and input_.stream_callbacks.on_content_delta:
+            input_.stream_callbacks.on_content_delta(file_name, text)
+
+    return route_delta
 
 
 def _empty_report() -> AlignmentReport:
@@ -71,10 +96,12 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
     user_prompt_override = file.user_prompt_override
 
     try:
+        _emit_phase(input_, file.name, "extract-text")
         source_text = extract_text_from_bytes(file.bytes_, file.name, file.mime)
         for attempt in range(max_retries + 1):
-            if attempt > 0 and input_.stream_callbacks and input_.stream_callbacks.on_phase_change:
-                input_.stream_callbacks.on_phase_change(file.name, "retry")
+            if attempt > 0:
+                _emit_phase(input_, file.name, "retry")
+            _emit_phase(input_, file.name, "extract-cv-llm")
             args = LlmCompleteArgs(
                 system_prompt=build_system_prompt(),
                 user_prompt=build_user_prompt(
@@ -86,6 +113,7 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
                 temperature=0.1,
                 enable_reasoning=True if input_.extraction is None or input_.extraction.enable_reasoning is None else input_.extraction.enable_reasoning,
                 reasoning_budget=input_.extraction.reasoning_budget if input_.extraction else None,
+                on_delta=_on_delta(input_, file.name),
             )
             llm_result = _coerce_llm_result(await input_.llm.complete(args))
             if llm_result.usage:
@@ -93,8 +121,12 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
                 usage_out += int(llm_result.usage.get("outputTokens", llm_result.usage.get("output_tokens", 0)))
             parsed = json.loads(llm_result.text)
             profile = validate_cv_data(parsed)
+            if input_.stream_callbacks and input_.stream_callbacks.on_parsed_keys:
+                input_.stream_callbacks.on_parsed_keys(file.name, list(profile.keys()))
+            _emit_phase(input_, file.name, "render-docx")
             output_docx = render_docx(input_.template.base_docx, profile, contract)
             required = [section["label"] for section in contract["sections"] if section["required"]]
+            _emit_phase(input_, file.name, "validate-page1")
             structure = validate_docx_structure(output_docx, required)
             report = AlignmentReport(
                 validation_passed=len(structure["missing"]) == 0,
@@ -118,11 +150,12 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
                 if part
             )
         report.retries_used = retries_used
+        _emit_phase(input_, file.name, "done")
     except Exception as exc:
         errors.append(str(exc))
         report.retries_used = retries_used
 
-    safe_profile = profile or dict(EMPTY_PROFILE_FALLBACK)
+    safe_profile = profile or _fallback_profile()
     output_name = derive_output_name_from_contract(contract, file.name, safe_profile["name"]) if not errors else ""
     return TransposedCv(
         source_file_name=file.name,
