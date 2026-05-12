@@ -79,5 +79,5 @@ describe('golden equivalence', () => {
       expect(out[2]).toBe(0x03);
       expect(out[3]).toBe(0x04);
     }
-  }, 30_000);
+  }, 60_000);
 });

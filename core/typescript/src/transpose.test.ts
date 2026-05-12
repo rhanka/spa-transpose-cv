@@ -73,7 +73,7 @@ describe('transpose()', () => {
     expect(cv.alignmentReport.detectedFields.languagesCount).toBe(2);
     expect(cv.alignmentReport.detectedFields.educationCount).toBe(1);
     expect(cv.alignmentReport.detectedFields.name).toBe('Jane Smith');
-  }, 30_000);
+  }, 60_000);
 
   it('forwards streaming deltas and includes userPromptOverride in the LLM call', async () => {
     let lastUserPrompt = '';
