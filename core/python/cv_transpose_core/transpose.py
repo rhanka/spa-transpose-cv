@@ -1,5 +1,144 @@
-from .types import TransposeInput, TransposeOutput
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from .contract import derive_output_name_from_contract, manifest_to_contract
+from .extract import extract_text_from_bytes
+from .profile import EMPTY_PROFILE_FALLBACK, validate_cv_data
+from .prompts import build_system_prompt, build_user_prompt
+from .render import render_docx
+from .types import (
+    AlignmentReport,
+    DetectedFields,
+    LlmCompleteArgs,
+    LlmCompleteResult,
+    TransposeInput,
+    TransposedCv,
+    TransposeOutput,
+    Usage,
+)
+from .validate import validate_docx_structure
+
+
+def _empty_report() -> AlignmentReport:
+    return AlignmentReport(
+        validation_passed=False,
+        warnings=[],
+        detected_fields=DetectedFields(experience_count=0, education_count=0, skill_buckets=0, languages_count=0),
+        page1_sections_found=[],
+        missing_required_sections=[],
+        retries_used=0,
+    )
+
+
+def _detected_fields(profile: dict[str, Any]) -> DetectedFields:
+    years = None
+    try:
+        years = int(str(profile.get("years") or ""))
+    except ValueError:
+        years = None
+    return DetectedFields(
+        name=profile.get("name"),
+        title_line1=profile.get("title_line1"),
+        title_line2=profile.get("title_line2"),
+        years_of_experience=years,
+        experience_count=len(profile.get("experience", [])),
+        education_count=len(profile.get("education", [])),
+        skill_buckets=len(profile.get("technicalSkills", [])),
+        languages_count=len(profile.get("languages", [])),
+    )
+
+
+def _coerce_llm_result(raw: LlmCompleteResult | dict[str, Any]) -> LlmCompleteResult:
+    if isinstance(raw, LlmCompleteResult):
+        return raw
+    return LlmCompleteResult(text=raw["text"], usage=raw.get("usage"))
+
+
+async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -> TransposedCv:
+    errors: list[str] = []
+    source_text = ""
+    profile: dict[str, Any] | None = None
+    output_docx = b""
+    report = _empty_report()
+    usage_in = 0
+    usage_out = 0
+    retries_used = 0
+    max_retries = input_.extraction.max_validation_retries if input_.extraction else None
+    if max_retries is None:
+        max_retries = 1
+    user_prompt_override = file.user_prompt_override
+
+    try:
+        source_text = extract_text_from_bytes(file.bytes_, file.name, file.mime)
+        for attempt in range(max_retries + 1):
+            if attempt > 0 and input_.stream_callbacks and input_.stream_callbacks.on_phase_change:
+                input_.stream_callbacks.on_phase_change(file.name, "retry")
+            args = LlmCompleteArgs(
+                system_prompt=build_system_prompt(),
+                user_prompt=build_user_prompt(
+                    cv_text=source_text,
+                    source_file_name=file.name,
+                    user_prompt_override=user_prompt_override,
+                ),
+                max_tokens=8192,
+                temperature=0.1,
+                enable_reasoning=True if input_.extraction is None or input_.extraction.enable_reasoning is None else input_.extraction.enable_reasoning,
+                reasoning_budget=input_.extraction.reasoning_budget if input_.extraction else None,
+            )
+            llm_result = _coerce_llm_result(await input_.llm.complete(args))
+            if llm_result.usage:
+                usage_in += int(llm_result.usage.get("inputTokens", llm_result.usage.get("input_tokens", 0)))
+                usage_out += int(llm_result.usage.get("outputTokens", llm_result.usage.get("output_tokens", 0)))
+            parsed = json.loads(llm_result.text)
+            profile = validate_cv_data(parsed)
+            output_docx = render_docx(input_.template.base_docx, profile, contract)
+            required = [section["label"] for section in contract["sections"] if section["required"]]
+            structure = validate_docx_structure(output_docx, required)
+            report = AlignmentReport(
+                validation_passed=len(structure["missing"]) == 0,
+                warnings=[],
+                detected_fields=_detected_fields(profile),
+                page1_sections_found=structure["found"],
+                missing_required_sections=structure["missing"],
+                retries_used=retries_used,
+            )
+            if report.validation_passed or attempt >= max_retries:
+                break
+            retries_used += 1
+            feedback = "; ".join([f'Missing required section "{s}"' for s in report.missing_required_sections])
+            user_prompt_override = "\n\n".join(
+                part
+                for part in [
+                    file.user_prompt_override or "",
+                    f"VALIDATION ERRORS: {feedback}.",
+                    "Shorten all skill descriptions to max 100 characters. Reduce sectors to max 4. Reduce domains to max 4.",
+                ]
+                if part
+            )
+        report.retries_used = retries_used
+    except Exception as exc:
+        errors.append(str(exc))
+        report.retries_used = retries_used
+
+    safe_profile = profile or dict(EMPTY_PROFILE_FALLBACK)
+    output_name = derive_output_name_from_contract(contract, file.name, safe_profile["name"]) if not errors else ""
+    return TransposedCv(
+        source_file_name=file.name,
+        output_docx_name=output_name,
+        output_docx=output_docx,
+        profile=safe_profile,
+        source_text=source_text,
+        usage=Usage(input_tokens=usage_in, output_tokens=usage_out, total_tokens=usage_in + usage_out),
+        alignment_report=report,
+        errors=errors,
+    )
 
 
 async def transpose(input_: TransposeInput) -> TransposeOutput:
-    raise NotImplementedError("transpose() is implemented in Task 8")
+    contract = manifest_to_contract(input_.template.manifest, input_.template.brand)
+    results = []
+    for file in input_.files:
+        results.append(await _process_one(file, input_, contract))
+    return TransposeOutput(results=results)
