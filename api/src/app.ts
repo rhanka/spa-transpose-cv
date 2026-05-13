@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { env } from './config/env.js';
@@ -10,6 +10,37 @@ import { tenantRoutes } from './routes/tenants.js';
 import { adminRoutes } from './routes/admin.js';
 
 export const app = new Hono();
+
+const legacyTenantHosts = new Map<string, string>([
+  ['scalian-cv.sent-tech.ca', 'scalian'],
+]);
+
+function getRequestHostname(c: Context): string {
+  const forwardedHost = c.req.header('x-forwarded-host')?.split(',')[0]?.trim();
+  const host = forwardedHost || c.req.header('host') || new URL(c.req.url).host;
+  return host.split(':')[0].toLowerCase();
+}
+
+function tenantPath(pathname: string, tenant: string): string {
+  if (pathname === '/') {
+    return `/${tenant}/`;
+  }
+  if (pathname === `/${tenant}` || pathname.startsWith(`/${tenant}/`)) {
+    return pathname;
+  }
+  return `/${tenant}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
+}
+
+app.use('*', async (c, next) => {
+  const tenant = legacyTenantHosts.get(getRequestHostname(c));
+  if (!tenant) {
+    await next();
+    return;
+  }
+
+  const url = new URL(c.req.url);
+  return c.redirect(`https://cv.sent-tech.ca${tenantPath(url.pathname, tenant)}${url.search}`, 301);
+});
 
 // Security headers
 app.use(secureHeaders({
