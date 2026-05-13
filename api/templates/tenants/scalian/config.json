@@ -6,7 +6,7 @@
   "themeKey": "tenants/scalian/theme.css",
   "templateKey": "tenants/scalian/template.docx",
   "templateContractVersion": "v1",
-  "variant": "brand-accent",
+  "variant": "ats-core",
   "active": true,
   "theme": {
     "primaryColor": "#4B2882",
@@ -46,7 +46,7 @@
     "version": "v1",
     "layout": {
       "family": "single-column",
-      "variant": "brand-accent"
+      "variant": "ats-core"
     },
     "header": {
       "fields": [
@@ -69,27 +69,27 @@
     ],
     "styleTokens": {
       "colors": {
-        "accent": "#0F2137",
-        "sectionBannerFill": "#E9EEF4",
-        "sectionBannerText": "#0F2137",
-        "headingText": "#0F2137",
-        "bodyText": "#1C2735",
-        "mutedText": "#607184"
+        "accent": "#7030A0",
+        "sectionBannerFill": "#E6E6E6",
+        "sectionBannerText": "#7030A0",
+        "headingText": "#7030A0",
+        "bodyText": "#000000",
+        "mutedText": "#7030A0"
       },
       "fonts": {
-        "heading": "Liberation Sans",
-        "body": "Liberation Sans"
+        "heading": "Cambria",
+        "body": "Cambria"
       },
       "spacing": {
-        "sectionBeforeTwip": 120,
-        "sectionAfterTwip": 70,
-        "lineTwip": 240
+        "sectionBeforeTwip": 240,
+        "sectionAfterTwip": 240,
+        "lineTwip": 300
       }
     },
     "rendering": {
-      "headerStyle": "brand-accent",
-      "sectionStyle": "left-accent",
-      "jobStyle": "compact-dense"
+      "headerStyle": "ats-minimal",
+      "sectionStyle": "classic-band",
+      "jobStyle": "classic-consulting"
     },
     "output": {
       "filenamePattern": "Scalian_Profile_{name}.docx"

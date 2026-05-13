@@ -11,6 +11,7 @@ import {
   embedLatoFonts,
   type CvMime,
   type CvData,
+  type TemplateRenderer,
   type TransposePhase,
 } from '@cv-transpose/core';
 import { getMeta, writeMeta, getSessionKey, updateFileStatus, type SessionMeta } from './session-manager.js';
@@ -80,6 +81,13 @@ function detectMime(name: string): CvMime {
   return 'application/msword';
 }
 
+function resolveRenderer(tenantSlug: string, override?: TemplateRenderer): TemplateRenderer {
+  if (override) {
+    return override;
+  }
+  return tenantSlug === 'scalian' ? 'legacy-scalian' : 'generic';
+}
+
 /**
  * Embed the Lato font family into the rendered DOCX so the downloaded file
  * looks identical in MS Word on machines without Lato installed. core's
@@ -117,6 +125,7 @@ async function processOneCV(
   originalName: string,
   encryptedName: string,
   tenantConfig: TenantConfig,
+  renderer: TemplateRenderer,
   emitSse?: SseEmitter,
   providerId?: string,
 ): Promise<{ cvData: CvData; outputName: string; sourceText: string; usage: TokenUsage } | null> {
@@ -151,7 +160,7 @@ async function processOneCV(
         mime: detectMime(originalName),
         userPromptOverride: userPrompt,
       }],
-      template: templateAssets,
+      template: { ...templateAssets, renderer },
       persistence: 'session',
       llm: llmProvider,
       extraction: {
@@ -221,7 +230,7 @@ async function processOneCV(
     };
 
     logger.info(
-      { sessionId, file: originalName, output: outputName, ms: Date.now() - startTime, tokens: usage, retriesUsed: cv.alignmentReport.retriesUsed },
+      { sessionId, file: originalName, output: outputName, renderer, ms: Date.now() - startTime, tokens: usage, retriesUsed: cv.alignmentReport.retriesUsed },
       'CV processed',
     );
     return { cvData: cv.profile, outputName, sourceText: cv.sourceText, usage };
@@ -322,6 +331,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
   if (!sessionKey) throw new Error(`No key in cache for session ${sessionId}`);
 
   const tenantConfig = await getTenantConfig({ explicitSlug: meta.tenant });
+  const renderer = resolveRenderer(tenantConfig.slug, meta.renderer);
   const effectivePrompt = buildEffectivePrompt(meta);
 
   const concurrency = env.MAX_CONCURRENT_AGENTS;
@@ -344,6 +354,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
     fileCount: meta.files.length,
     concurrency,
     provider: sessionProvider || env.LLM_PROVIDER,
+    renderer,
   }, 'Launching parallel CV processing');
 
   // Results for batch summary
@@ -362,6 +373,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
         f.originalName,
         f.encryptedName,
         tenantConfig,
+        renderer,
         emitSse,
         sessionProvider,
       );
@@ -397,6 +409,7 @@ export async function runOrchestrator(sessionId: string, emitSse?: SseEmitter): 
             f.originalName,
             f.encryptedName,
             tenantConfig,
+            renderer,
             emitSse,
             sessionProvider,
           );

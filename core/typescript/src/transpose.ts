@@ -32,6 +32,10 @@ import {
   getXmlHeader,
   writeTemplateHeader,
 } from './template/render.js';
+import {
+  buildLegacyScalianDocumentXml,
+  buildLegacyScalianHeaderXml,
+} from './template/scalian-legacy.js';
 import { unpackDocx, packDocx } from './docx/tools.js';
 import { manifestToContract } from './template/bridge.js';
 import {
@@ -48,6 +52,7 @@ import type {
   DetectedFields,
   InputFile,
   TemplateManifest,
+  TemplateRenderer,
   TransposeInput,
   TransposeOutput,
   TransposedCv,
@@ -162,10 +167,21 @@ function escapeCvData(data: CvData): CvData {
   };
 }
 
+function parseLlmJson(text: string): unknown {
+  const trimmed = text.trim();
+  const withoutFence = trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  return JSON.parse(withoutFence);
+}
+
 async function renderDocxFromContract(params: {
   baseDocx: Uint8Array;
   data: CvData;
   contract: TemplateContract;
+  renderer?: TemplateRenderer;
 }): Promise<Uint8Array> {
   return withTempDir('cv-transpose-render-', async (workDir) => {
     // unpackDocx / packDocx are filesystem-based today (Python parity), so
@@ -184,7 +200,9 @@ async function renderDocxFromContract(params: {
     const documentXmlPath = join(unpackDir, 'word', 'document.xml');
     const xmlHeader = await getXmlHeader(documentXmlPath);
     const escaped = escapeCvData(params.data);
-    const documentXml = buildTemplateDocumentXml(escaped, params.contract, xmlHeader);
+    const documentXml = params.renderer === 'legacy-scalian'
+      ? buildLegacyScalianDocumentXml(escaped, params.contract, xmlHeader)
+      : buildTemplateDocumentXml(escaped, params.contract, xmlHeader);
     await writeFile(documentXmlPath, documentXml, 'utf-8');
 
     // Some DOCX templates (Word 2016+) put the title block in header2.xml;
@@ -194,12 +212,22 @@ async function renderDocxFromContract(params: {
     for (const headerName of ['header2.xml', 'header1.xml']) {
       const headerPath = join(unpackDir, 'word', headerName);
       try {
-        await writeTemplateHeader(headerPath, {
-          name: escaped.name,
-          title_line1: escaped.title_line1,
-          title_line2: escaped.title_line2,
-          years: escaped.years,
-        }, params.contract);
+        if (params.renderer === 'legacy-scalian') {
+          const headerXml = await readFile(headerPath, 'utf-8');
+          await writeFile(headerPath, buildLegacyScalianHeaderXml(headerXml, {
+            name: escaped.name,
+            title_line1: escaped.title_line1,
+            title_line2: escaped.title_line2,
+            years: escaped.years,
+          }), 'utf-8');
+        } else {
+          await writeTemplateHeader(headerPath, {
+            name: escaped.name,
+            title_line1: escaped.title_line1,
+            title_line2: escaped.title_line2,
+            years: escaped.years,
+          }, params.contract);
+        }
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
           throw err;
@@ -353,7 +381,7 @@ async function processSingleCv(
 
       let parsed: unknown;
       try {
-        parsed = JSON.parse(llmResp.text);
+        parsed = parseLlmJson(llmResp.text);
       } catch (err) {
         throw new Error(`LLM did not return valid JSON: ${(err as Error).message}`);
       }
@@ -373,6 +401,7 @@ async function processSingleCv(
         baseDocx: input.template.baseDocx,
         data: profile,
         contract,
+        renderer: input.template.renderer ?? 'generic',
       });
 
       // 2c. Validate (page1 overflow/underflow + required-section presence)
