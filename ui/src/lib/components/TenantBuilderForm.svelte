@@ -112,10 +112,10 @@
 <section class="builder-shell card p-8">
   <div class="builder-header">
     <div>
-      <h2 class="builder-title">Créer un espace CV pour une société</h2>
+      <h2 class="builder-title">Créer un espace CV pour votre société</h2>
       <p class="builder-copy">
-        Construisez une page personnalisée à l'image de votre entreprise. Passez de 1h30 à 15 min
-        pour vos nouvelles recrues.
+        De 1h30 à 15 min par CV. Uploadez un lot, ajoutez un prompt d'orientation, et laissez l'IA
+        transformer chaque profil en parallèle.
       </p>
     </div>
   </div>
