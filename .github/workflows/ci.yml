@@ -67,7 +67,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: cd api && npm install && npx tsc --noEmit
+      - run: npm install
+      - run: npm --workspace api run typecheck
 
   # ── Build & typecheck UI ─────────────────────────────────────────
   build-ui:
