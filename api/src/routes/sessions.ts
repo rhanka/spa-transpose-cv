@@ -69,13 +69,21 @@ function ensureSessionTenantAccess(
 // POST /api/sessions — create session
 sessionRoutes.post('/', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const parsed = z.object({ password: z.string().min(1) }).safeParse(body);
+  const parsed = z.object({
+    password: z.string().min(1),
+    renderer: z.enum(['generic', 'legacy-scalian']).optional(),
+  }).safeParse(body);
   if (!parsed.success) return c.json({ error: 'Password is required' }, 400);
 
   try {
     const tenant = await resolveExistingTenant(c);
-    const meta = await createSession(parsed.data.password, tenant.slug);
-    return c.json({ sessionId: meta.id, expiresAt: meta.expiresAt, tenant: meta.tenant }, 201);
+    const meta = await createSession(parsed.data.password, tenant.slug, parsed.data.renderer);
+    return c.json({
+      sessionId: meta.id,
+      expiresAt: meta.expiresAt,
+      tenant: meta.tenant,
+      renderer: meta.renderer,
+    }, 201);
   } catch (error) {
     return handleTenantError(c, error);
   }

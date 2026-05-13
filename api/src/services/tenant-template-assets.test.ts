@@ -97,19 +97,18 @@ test('tenantConfigToTemplateAssets derives brand tokens from templateContract.st
 
   const assets = tenantConfigToTemplateAssets(tenantConfig, DUMMY_DOCX_BYTES);
 
-  // Scalian's contract sets headingText=#0F2137, mutedText=#607184,
-  // accent=#0F2137 — the bridge surfaces those as the brand tokens core
-  // consumes.
-  assert.equal(assets.brand.primary, '#0F2137');
-  assert.equal(assets.brand.secondary, '#607184');
-  assert.equal(assets.brand.accent, '#0F2137');
-  assert.equal(assets.brand.fontFamily, 'Liberation Sans');
+  // Scalian's runtime default now points at the legacy renderer, but the
+  // generic UAT path still receives Scalian-like tokens through the manifest.
+  assert.equal(assets.brand.primary, '#7030A0');
+  assert.equal(assets.brand.secondary, '#7030A0');
+  assert.equal(assets.brand.accent, '#7030A0');
+  assert.equal(assets.brand.fontFamily, 'Cambria');
 
   // Rendering hints are forwarded too: this matters for the OOXML renderer
   // downstream of transpose().
-  assert.equal(assets.manifest.rendering?.headerStyle, 'brand-accent');
-  assert.equal(assets.manifest.rendering?.sectionStyle, 'left-accent');
-  assert.equal(assets.manifest.rendering?.jobStyle, 'compact-dense');
-  assert.equal(assets.manifest.rendering?.colors?.accent, '#0F2137');
-  assert.equal(assets.manifest.rendering?.fonts?.heading, 'Liberation Sans');
+  assert.equal(assets.manifest.rendering?.headerStyle, 'ats-minimal');
+  assert.equal(assets.manifest.rendering?.sectionStyle, 'classic-band');
+  assert.equal(assets.manifest.rendering?.jobStyle, 'classic-consulting');
+  assert.equal(assets.manifest.rendering?.colors?.accent, '#7030A0');
+  assert.equal(assets.manifest.rendering?.fonts?.heading, 'Cambria');
 });

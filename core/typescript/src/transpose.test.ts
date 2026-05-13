@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import JSZip from 'jszip';
 import { transpose } from './transpose.js';
 import { cvDataSchema } from './cv/profile.js';
 import type {
@@ -42,6 +43,13 @@ const assets: TemplateAssets = {
     fontFamily: 'Lato',
   },
 };
+
+async function readDocumentXml(docx: Uint8Array): Promise<string> {
+  const zip = await JSZip.loadAsync(Buffer.from(docx));
+  const file = zip.file('word/document.xml');
+  if (!file) throw new Error('word/document.xml not found');
+  return file.async('string');
+}
 
 describe('transpose()', () => {
   it('produces a non-empty DOCX for cv-001 with stub LLM', async () => {
@@ -190,6 +198,56 @@ describe('transpose()', () => {
     expect(cv.usage.outputTokens).toBe(0);
     expect(cv.usage.totalTokens).toBe(0);
     expect(cv.usage.totalTokens).toBeGreaterThanOrEqual(0);
+  }, 30_000);
+
+  it('accepts LLM JSON wrapped in a markdown code fence', async () => {
+    const fencedLlm: LlmProvider = {
+      async complete() {
+        return { text: `\`\`\`json\n${JSON.stringify(expected)}\n\`\`\`` };
+      },
+    };
+
+    const r = await transpose({
+      files: [
+        {
+          name: 'cv-001-junior-pm.pdf',
+          bytes: new Uint8Array(cv001),
+          mime: 'application/pdf',
+        },
+      ],
+      template: assets,
+      persistence: 'ephemeral',
+      llm: fencedLlm,
+      extraction: { maxValidationRetries: 0 },
+    });
+
+    const cv = r.results[0]!;
+    expect(cv.errors).toEqual([]);
+    expect(cv.profile.name).toBe(expected.name);
+  }, 30_000);
+
+  it('can render Scalian through the legacy renderer hook', async () => {
+    const r = await transpose({
+      files: [
+        {
+          name: 'cv-001-junior-pm.pdf',
+          bytes: new Uint8Array(cv001),
+          mime: 'application/pdf',
+        },
+      ],
+      template: { ...assets, renderer: 'legacy-scalian' },
+      persistence: 'ephemeral',
+      llm: stubLlm,
+      extraction: { maxValidationRetries: 0 },
+    });
+
+    const cv = r.results[0]!;
+    expect(cv.errors).toEqual([]);
+
+    const documentXml = await readDocumentXml(cv.outputDocx);
+    expect(documentXml).toContain('w:fill="E6E6E6"');
+    expect(documentXml).toContain('w:color w:val="7030A0"');
+    expect(documentXml).toContain('<w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr>');
   }, 30_000);
 
   it('on LLM returning malformed JSON, populates errors and uses fallback profile', async () => {

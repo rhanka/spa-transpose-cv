@@ -48,7 +48,11 @@ export interface TemplateAssets {
   manifest: TemplateManifest;
   baseDocx: Uint8Array;
   brand: BrandTokens;
+  /** Renderer override used for controlled UAT / tenant-specific compatibility. */
+  renderer?: TemplateRenderer;
 }
+
+export type TemplateRenderer = 'generic' | 'legacy-scalian';
 
 import type { LlmProvider } from './llm.js';
 import type { CvData } from './cv/profile.js';

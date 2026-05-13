@@ -58,6 +58,8 @@ export interface AdminTenantCreateResponse {
   companyUrl: string;
 }
 
+export type TemplateRenderer = 'generic' | 'legacy-scalian';
+
 function getSessionApiBase(tenantSlug = DEFAULT_TENANT_SLUG): string {
   return tenantSlug === DEFAULT_TENANT_SLUG
     ? `${API_BASE}/sessions`
@@ -119,11 +121,17 @@ export async function createTenantViaAdmin(params: {
   return res.json();
 }
 
-export async function createSession(password: string, tenantSlug = DEFAULT_TENANT_SLUG): Promise<{ sessionId: string; expiresAt: string; tenant: string }> {
+export async function createSession(
+  password: string,
+  tenantSlug = DEFAULT_TENANT_SLUG,
+  options?: { renderer?: TemplateRenderer },
+): Promise<{ sessionId: string; expiresAt: string; tenant: string; renderer?: TemplateRenderer }> {
+  const body: Record<string, string> = { password };
+  if (options?.renderer) body.renderer = options.renderer;
   const res = await fetch(getSessionApiBase(tenantSlug), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await readApiError(res, `Création de la session impossible (${res.status})`));
   return res.json();

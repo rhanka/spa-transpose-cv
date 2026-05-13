@@ -7,6 +7,7 @@ export type {
   BrandTokens,
   Persistence,
   TemplateAssets,
+  TemplateRenderer,
   TransposeInput,
   TransposePhase,
   DetectedFields,

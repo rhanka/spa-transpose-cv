@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { generateSessionId, generateSalt, deriveKey, encrypt, decrypt } from './crypto.js';
 import { logger } from '../config/logger.js';
 import { DEFAULT_TENANT_SLUG, normalizeTenantSlug } from './tenant-config.js';
+import type { TemplateRenderer } from '@cv-transpose/core';
 
 export type SessionStatus = 'created' | 'uploading' | 'ready' | 'processing' | 'done' | 'error';
 
@@ -21,6 +22,7 @@ export interface SessionMeta {
   createdAt: string;
   salt: string;
   prompt: string;
+  renderer?: TemplateRenderer;
   provider?: string;
   targetCompany?: string;
   status: SessionStatus;
@@ -34,8 +36,9 @@ const keyCache = new Map<string, Buffer>();
 // Mutex per session to prevent meta.json race conditions
 const metaLocks = new Map<string, Promise<void>>();
 
-type StoredSessionMeta = Omit<SessionMeta, 'tenant'> & {
+type StoredSessionMeta = Omit<SessionMeta, 'tenant' | 'renderer'> & {
   tenant?: string;
+  renderer?: string;
 };
 
 async function withMetaLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -67,14 +70,23 @@ function normalizeSessionTenant(input?: string): string {
   }
 }
 
+function normalizeSessionRenderer(input?: string): TemplateRenderer | undefined {
+  return input === 'generic' || input === 'legacy-scalian' ? input : undefined;
+}
+
 function hydrateSessionMeta(meta: StoredSessionMeta): SessionMeta {
   return {
     ...meta,
     tenant: normalizeSessionTenant(meta.tenant),
+    renderer: normalizeSessionRenderer(meta.renderer),
   };
 }
 
-export async function createSession(password: string, tenant = DEFAULT_TENANT_SLUG): Promise<SessionMeta> {
+export async function createSession(
+  password: string,
+  tenant = DEFAULT_TENANT_SLUG,
+  renderer?: TemplateRenderer,
+): Promise<SessionMeta> {
   const id = generateSessionId();
   const salt = generateSalt();
   const key = deriveKey(password, salt);
@@ -92,6 +104,7 @@ export async function createSession(password: string, tenant = DEFAULT_TENANT_SL
     createdAt: new Date().toISOString(),
     salt,
     prompt: '',
+    renderer: normalizeSessionRenderer(renderer),
     status: 'created',
     files: [],
     expiresAt,

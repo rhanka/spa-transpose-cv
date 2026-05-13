@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { createSession, uploadFiles, markReady, startProcessing } from '$lib/api';
+  import type { TemplateRenderer } from '$lib/api';
   import TenantBuilderForm from '$lib/components/TenantBuilderForm.svelte';
   import { sessionId, sessionPassword } from '$lib/stores/session';
   import { tenantConfig, tenantSlug } from '$lib/stores/tenant';
@@ -17,10 +18,15 @@
   let error = $state('');
   let dragOver = $state(false);
 
+  function getRendererOverride(value: string | null): TemplateRenderer | undefined {
+    return value === 'generic' || value === 'legacy-scalian' ? value : undefined;
+  }
+
   const currentTenantSlug = $derived($page.params.tenant ?? $tenantSlug);
   const currentTenantName = $derived($tenantConfig?.displayName ?? 'Sent Tech');
   const isDefaultTenant = $derived(currentTenantSlug === DEFAULT_TENANT_SLUG);
   const isScalianTenant = $derived(currentTenantSlug === 'scalian');
+  const rendererOverride = $derived(getRendererOverride($page.url.searchParams.get('renderer')));
   const conversionTagline = "De 1h30 à 15 min par CV. Uploadez un lot, ajoutez un prompt d'orientation, et laissez l'IA transformer chaque profil en parallèle.";
   const pageTitle = $derived(
     isDefaultTenant && pageMode === 'builder'
@@ -76,7 +82,9 @@
     loading = true;
     error = '';
     try {
-      const { sessionId: sid } = await createSession(password, currentTenantSlug);
+      const { sessionId: sid } = await createSession(password, currentTenantSlug, {
+        renderer: rendererOverride,
+      });
       await uploadFiles(sid, password, files, currentTenantSlug);
       await markReady(
         sid,
