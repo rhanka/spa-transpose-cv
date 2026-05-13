@@ -13,10 +13,31 @@
 
 import { readFileSync } from 'node:fs';
 
-const EXTRACT_MD = readFileSync(
-  new URL('../../../core/spec/prompts/extract-cv.md', import.meta.url),
-  'utf8',
-);
+function readExtractPrompt(): string {
+  const candidates = [
+    // Source workspace: /app/core/typescript/src/transpose-prompt.ts
+    new URL('../../../core/spec/prompts/extract-cv.md', import.meta.url),
+    // Bundled API: /app/api/dist/index.js with /app/core/spec copied into the image.
+    new URL('../../core/spec/prompts/extract-cv.md', import.meta.url),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return readFileSync(candidate, 'utf8');
+    } catch (error) {
+      const code = typeof error === 'object' && error !== null && 'code' in error
+        ? (error as { code?: unknown }).code
+        : undefined;
+      if (code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error('Unable to load core/spec/prompts/extract-cv.md');
+}
+
+const EXTRACT_MD = readExtractPrompt();
 
 interface PromptParts {
   system: string;

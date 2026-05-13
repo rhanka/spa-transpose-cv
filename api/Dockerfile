@@ -93,6 +93,8 @@ COPY --from=base /app/api/package.json api/
 COPY --from=base /app/ui/package.json ui/
 RUN npm install --omit=dev --workspaces --include-workspace-root
 COPY --from=build /app/api/dist api/dist
+# Runtime prompt assets loaded by @cv-transpose/core after API bundling.
+COPY --from=base /app/core/spec core/spec
 # Template and toolkit files (live under the api workspace)
 COPY --from=base /app/api/templates api/templates
 RUN mkdir -p /data

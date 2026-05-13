@@ -216,7 +216,7 @@ SCW_API_CONTAINER_ID ?= 10379fdb-ef44-4ceb-8630-5a22cc30827b
 .PHONY: deploy-api
 deploy-api: check-scw ## Update API container with new image (rollout)
 	@echo "Updating $(API_IMAGE_NAME) to $(API_VERSION)..."
-	scw container container update $(SCW_API_CONTAINER_ID) registry-image="$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)" http-option=enabled region=fr-par
+	scw container container update $(SCW_API_CONTAINER_ID) registry-image="$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)" http-option=enabled health-check.http.path=/api/health health-check.failure-threshold=30 health-check.interval=10s region=fr-par --wait
 	@echo "Deployment initiated."
 
 .PHONY: deploy
