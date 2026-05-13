@@ -20,19 +20,25 @@
   const currentTenantSlug = $derived($page.params.tenant ?? $tenantSlug);
   const currentTenantName = $derived($tenantConfig?.displayName ?? 'Sent Tech');
   const isDefaultTenant = $derived(currentTenantSlug === DEFAULT_TENANT_SLUG);
+  const isScalianTenant = $derived(currentTenantSlug === 'scalian');
+  const conversionTagline = "De 1h30 à 15 min par CV. Uploadez un lot, ajoutez un prompt d'orientation, et laissez l'IA transformer chaque profil en parallèle.";
   const pageTitle = $derived(
     isDefaultTenant && pageMode === 'builder'
-      ? 'Créez un espace CV pour une société'
+      ? 'Créez un espace CV pour votre société'
       : isDefaultTenant
         ? 'Remettez votre CV en forme'
-        : `Mettez vos CV au format ${currentTenantName}`,
+        : isScalianTenant
+          ? 'Convertissez vos CVs au format Scalian'
+          : `Mettez vos CV au format ${currentTenantName}`,
   );
   const pageCopy = $derived(
     isDefaultTenant && pageMode === 'builder'
-      ? "Construisez une page personnalisée à l'image de votre entreprise. Passez de 1h30 à 15 min pour vos nouvelles recrues."
+      ? conversionTagline
       : isDefaultTenant
         ? 'Déposez un ou plusieurs CV, ajoutez vos consignes, puis laissez le service préparer une version propre et cohérente au format société.'
-        : `Déposez un ou plusieurs CV, ajoutez vos consignes, puis laissez le service les remettre au format ${currentTenantName}.`,
+        : isScalianTenant
+          ? conversionTagline
+          : `Déposez un ou plusieurs CV, ajoutez vos consignes, puis laissez le service les remettre au format ${currentTenantName}.`,
   );
   const heroSectionPadding = $derived(isDefaultTenant ? 'padding: 8.5rem 0 4rem;' : 'padding: 5rem 0 4rem;');
 
