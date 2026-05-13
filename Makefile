@@ -238,13 +238,13 @@ wait-for-api: check-scw ## Wait for API container to be ready
 # -----------------------------------------------------------------------------
 
 SCW_API_CONTAINER_ID ?= $(shell scw container container list 2>/dev/null | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}')
-SCW_API_DOMAIN       = transposecv8smikinq-transpose-cv-api.functions.fnc.fr-par.scw.cloud
+SCW_API_DOMAIN       = transposecv5ntjukr9-transpose-cv-api.functions.fnc.fr-par.scw.cloud
 CUSTOM_API_DOMAIN    = cv-api.sent-tech.ca
 CUSTOM_UI_DOMAIN     = cv.sent-tech.ca
 LEGACY_UI_DOMAIN     = scalian-cv.sent-tech.ca
 
 .PHONY: dns-setup
-dns-setup: dns-api dns-ui dns-ui-legacy scw-custom-domain ## Setup canonical DNS records + legacy UI alias
+dns-setup: dns-api dns-ui dns-ui-legacy scw-custom-domain scw-custom-domain-legacy ## Setup canonical DNS records + legacy UI redirect
 
 .PHONY: dns-api
 dns-api: ## Create CNAME cv-api.sent-tech.ca → SCW (Cloudflare)
@@ -259,7 +259,7 @@ dns-api: ## Create CNAME cv-api.sent-tech.ca → SCW (Cloudflare)
 		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
 
 .PHONY: dns-ui
-dns-ui: ## Create CNAME cv.sent-tech.ca → rhanka.github.io (Cloudflare)
+dns-ui: ## Create CNAME cv.sent-tech.ca → rhanka.github.io (Cloudflare CDN)
 	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
 		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
 	fi
@@ -267,11 +267,11 @@ dns-ui: ## Create CNAME cv.sent-tech.ca → rhanka.github.io (Cloudflare)
 	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
 		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
 		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"cv","content":"rhanka.github.io","ttl":1,"proxied":false}' \
+		--data '{"type":"CNAME","name":"cv","content":"rhanka.github.io","ttl":1,"proxied":true}' \
 		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
 
 .PHONY: dns-ui-legacy
-dns-ui-legacy: ## Create legacy CNAME scalian-cv.sent-tech.ca → cv.sent-tech.ca
+dns-ui-legacy: ## Create legacy CNAME scalian-cv.sent-tech.ca → SCW API redirect
 	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
 		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
 	fi
@@ -279,13 +279,18 @@ dns-ui-legacy: ## Create legacy CNAME scalian-cv.sent-tech.ca → cv.sent-tech.c
 	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
 		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
 		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"scalian-cv","content":"$(CUSTOM_UI_DOMAIN)","ttl":1,"proxied":false}' \
+		--data '{"type":"CNAME","name":"scalian-cv","content":"$(SCW_API_DOMAIN)","ttl":1,"proxied":false}' \
 		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
 
 .PHONY: scw-custom-domain
 scw-custom-domain: check-scw ## Register custom domain on SCW API container
 	@echo "Registering $(CUSTOM_API_DOMAIN) on SCW container $(SCW_API_CONTAINER_ID)..."
 	@scw container domain create container-id=$(SCW_API_CONTAINER_ID) hostname=$(CUSTOM_API_DOMAIN)
+
+.PHONY: scw-custom-domain-legacy
+scw-custom-domain-legacy: check-scw ## Register legacy redirect domain on SCW API container
+	@echo "Registering $(LEGACY_UI_DOMAIN) on SCW container $(SCW_API_CONTAINER_ID)..."
+	@scw container domain create container-id=$(SCW_API_CONTAINER_ID) hostname=$(LEGACY_UI_DOMAIN)
 
 # -----------------------------------------------------------------------------
 # Utilities
