@@ -28,6 +28,7 @@ export class CohereProvider implements LlmProvider {
     const response = await this.client.v2.chat({
       model: this.config.modelId,
       maxTokens: this.clampTokens(req.maxTokens),
+      responseFormat: req.responseFormat === 'json' ? { type: 'json_object' } : undefined,
       messages: [
         { role: 'system', content: req.system },
         { role: 'user', content: req.userMessage },
@@ -49,6 +50,7 @@ export class CohereProvider implements LlmProvider {
     const stream = await this.client.v2.chatStream({
       model: this.config.modelId,
       maxTokens: this.clampTokens(req.maxTokens),
+      responseFormat: req.responseFormat === 'json' ? { type: 'json_object' } : undefined,
       messages: [
         { role: 'system', content: req.system },
         { role: 'user', content: req.userMessage },

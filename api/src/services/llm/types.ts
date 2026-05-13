@@ -8,6 +8,8 @@ export interface LlmRequest {
   enableReasoning?: boolean;
   /** Token budget for reasoning (provider-specific mapping) */
   reasoningBudget?: number;
+  /** Prefer provider-native structured JSON output when supported. */
+  responseFormat?: 'json';
 }
 
 export interface LlmResponse {

@@ -34,6 +34,12 @@ export class MistralProvider implements LlmProvider {
     if (req.enableReasoning) {
       body.reasoning_effort = 'high';
     }
+    if (req.responseFormat === 'json') {
+      // Mistral chat completions supports JSON-object mode through
+      // response_format; keep the prompt constraint too because JSON mode does
+      // not validate our domain schema.
+      body.response_format = { type: 'json_object' };
+    }
     return body;
   }
 

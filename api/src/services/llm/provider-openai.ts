@@ -29,6 +29,9 @@ export class OpenAIProvider implements LlmProvider {
     if (req.enableReasoning) {
       params.reasoning = { effort: 'medium', summary: 'detailed' };
     }
+    if (req.responseFormat === 'json') {
+      params.text = { format: { type: 'json_object' } };
+    }
 
     const response = await (this.client as unknown as { responses: { create: (p: unknown) => Promise<Record<string, unknown>> } })
       .responses.create(params);
@@ -75,6 +78,9 @@ export class OpenAIProvider implements LlmProvider {
     };
     if (req.enableReasoning) {
       params.reasoning = { effort: 'medium', summary: 'detailed' };
+    }
+    if (req.responseFormat === 'json') {
+      params.text = { format: { type: 'json_object' } };
     }
 
     const stream = await (this.client as unknown as { responses: { create: (p: unknown) => Promise<AsyncIterable<Record<string, unknown>>> } })
