@@ -87,12 +87,14 @@ test('adapter routes to generate() when onDelta is undefined and maps usage', as
     systemPrompt: 'sys',
     userPrompt: 'usr',
     maxTokens: 1234,
+    responseFormat: 'json',
   });
 
   assert.equal(captured.mode, 'generate');
   assert.equal(captured.req?.system, 'sys');
   assert.equal(captured.req?.userMessage, 'usr');
   assert.equal(captured.req?.maxTokens, 1234);
+  assert.equal(captured.req?.responseFormat, 'json');
   assert.equal(result.text, 'non-streamed-final-text');
   assert.deepEqual(result.usage, { inputTokens: 11, outputTokens: 22 });
 });

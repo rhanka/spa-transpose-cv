@@ -59,6 +59,11 @@ import type {
 } from './types.js';
 import type { TemplateContract } from './template/contract.js';
 
+const DEFAULT_EXTRACTION_MAX_TOKENS = 16_000;
+const LARGE_CV_EXTRACTION_MAX_TOKENS = 32_000;
+const LARGE_CV_TEXT_CHAR_THRESHOLD = 30_000;
+const DEFAULT_PARSE_RETRIES = 1;
+
 /**
  * Build a streaming-delta forwarder that routes the provider's deltas to the
  * file-scoped streamCallbacks. Created per file so the file name is captured
@@ -175,6 +180,42 @@ function parseLlmJson(text: string): unknown {
     .trim();
 
   return JSON.parse(withoutFence);
+}
+
+function resolveExtractionMaxTokens(sourceText: string, configured?: number): number {
+  if (configured && Number.isFinite(configured) && configured > 0) {
+    return Math.floor(configured);
+  }
+  return sourceText.length > LARGE_CV_TEXT_CHAR_THRESHOLD
+    ? LARGE_CV_EXTRACTION_MAX_TOKENS
+    : DEFAULT_EXTRACTION_MAX_TOKENS;
+}
+
+function parseCvDataFromLlm(text: string): CvData {
+  let parsed: unknown;
+  try {
+    parsed = parseLlmJson(text);
+  } catch (err) {
+    throw new Error(`LLM did not return valid JSON: ${(err as Error).message}`);
+  }
+
+  const cvDataResult = cvDataSchema.safeParse(parsed);
+  if (!cvDataResult.success) {
+    throw new Error(
+      `LLM output failed schema validation: ${cvDataResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
+    );
+  }
+  return cvDataResult.data;
+}
+
+function buildParseRetryPrompt(basePrompt: string | undefined, error: string): string {
+  return [
+    basePrompt ?? '',
+    `PREVIOUS LLM OUTPUT WAS NOT VALID JSON: ${error}.`,
+    'Return ONLY one complete valid JSON object matching the requested schema. Do not include markdown, comments, analysis, or trailing text.',
+  ]
+    .filter((s) => s.length > 0)
+    .join('\n\n');
 }
 
 async function renderDocxFromContract(params: {
@@ -319,12 +360,13 @@ async function runValidation(
 /**
  * Per-CV pipeline: extract → (LLM → render → validate)* → result.
  *
- * The middle phase runs in a retry loop bounded by
+ * The middle phase runs in a validation retry loop bounded by
  * `input.extraction?.maxValidationRetries ?? 1`. When validation produces
  * warnings or missing required sections, the user prompt is amended with a
  * feedback paragraph and the LLM is re-invoked. Usage tokens are aggregated
  * across attempts; only the most recent render's bytes and alignment report
- * are returned.
+ * are returned. Parse/schema failures have their own one-shot retry before
+ * rendering, mirroring the legacy monotenant extraction harness.
  *
  * Errors are captured into the returned `TransposedCv.errors` (fail-soft),
  * matching the batch-tolerant contract of {@link transpose}.
@@ -347,11 +389,13 @@ async function processSingleCv(
   let retriesUsed = 0;
 
   const maxRetries = input.extraction?.maxValidationRetries ?? 1;
+  const maxParseRetries = input.extraction?.maxParseRetries ?? DEFAULT_PARSE_RETRIES;
 
   try {
     // 1. Extract raw text from the upload (once, reused across retries).
     streamCallbacks?.onPhaseChange?.(file.name, 'extract-text');
     sourceText = await extractTextFromBuffer(Buffer.from(file.bytes), file.name);
+    const extractionMaxTokens = resolveExtractionMaxTokens(sourceText, input.extraction?.maxTokens);
 
     // 2. Extract → render → validate, up to maxRetries+1 times.
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -360,39 +404,47 @@ async function processSingleCv(
       }
 
       // 2a. LLM → CvData
-      streamCallbacks?.onPhaseChange?.(file.name, 'extract-cv-llm');
-      const llmResp = await input.llm.complete({
-        systemPrompt: buildSystemPrompt(),
-        userPrompt: buildUserPrompt({
-          cvText: sourceText,
-          sourceFileName: file.name,
-          userPromptOverride,
-        }),
-        maxTokens: 8192,
-        temperature: 0.1,
-        enableReasoning: input.extraction?.enableReasoning ?? true,
-        reasoningBudget: input.extraction?.reasoningBudget,
-        onDelta: streamCallbacks ? makeDeltaForwarder(file.name, streamCallbacks) : undefined,
-      });
-      if (llmResp.usage) {
-        usageTotal.inputTokens += llmResp.usage.inputTokens;
-        usageTotal.outputTokens += llmResp.usage.outputTokens;
-      }
+      let parsePromptOverride = userPromptOverride;
+      let parsedProfile: CvData | null = null;
+      for (let parseAttempt = 0; parseAttempt <= maxParseRetries; parseAttempt++) {
+        if (parseAttempt > 0) {
+          streamCallbacks?.onPhaseChange?.(file.name, 'retry');
+        }
 
-      let parsed: unknown;
-      try {
-        parsed = parseLlmJson(llmResp.text);
-      } catch (err) {
-        throw new Error(`LLM did not return valid JSON: ${(err as Error).message}`);
-      }
+        streamCallbacks?.onPhaseChange?.(file.name, 'extract-cv-llm');
+        const llmResp = await input.llm.complete({
+          systemPrompt: buildSystemPrompt(),
+          userPrompt: buildUserPrompt({
+            cvText: sourceText,
+            sourceFileName: file.name,
+            userPromptOverride: parsePromptOverride,
+          }),
+          maxTokens: extractionMaxTokens,
+          temperature: 0.1,
+          enableReasoning: input.extraction?.enableReasoning ?? true,
+          reasoningBudget: input.extraction?.reasoningBudget,
+          responseFormat: 'json',
+          onDelta: streamCallbacks ? makeDeltaForwarder(file.name, streamCallbacks) : undefined,
+        });
+        if (llmResp.usage) {
+          usageTotal.inputTokens += llmResp.usage.inputTokens;
+          usageTotal.outputTokens += llmResp.usage.outputTokens;
+        }
 
-      const cvDataResult = cvDataSchema.safeParse(parsed);
-      if (!cvDataResult.success) {
-        throw new Error(
-          `LLM output failed schema validation: ${cvDataResult.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
-        );
+        try {
+          parsedProfile = parseCvDataFromLlm(llmResp.text);
+          break;
+        } catch (err) {
+          if (parseAttempt >= maxParseRetries) {
+            throw err;
+          }
+          parsePromptOverride = buildParseRetryPrompt(userPromptOverride, (err as Error).message);
+        }
       }
-      profile = cvDataResult.data;
+      if (!parsedProfile) {
+        throw new Error('LLM extraction failed without a parsed profile');
+      }
+      profile = parsedProfile;
       streamCallbacks?.onParsedKeys?.(file.name, Object.keys(profile));
 
       // 2b. Render DOCX

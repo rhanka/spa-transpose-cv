@@ -68,6 +68,10 @@ export interface TransposeInput {
     reasoningBudget?: number;
     /** Enable extended thinking when the provider supports it. Default true. */
     enableReasoning?: boolean;
+    /** Max output tokens for extraction. Default: 16k, or 32k for long CV text. */
+    maxTokens?: number;
+    /** Max retries for parse/schema failures before render. Default 1. */
+    maxParseRetries?: number;
     /** Max retries on validation feedback. 0 disables retry. Default 1. */
     maxValidationRetries?: number;
   };

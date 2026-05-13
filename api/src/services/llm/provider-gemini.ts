@@ -34,6 +34,9 @@ export class GeminiProvider implements LlmProvider {
         includeThoughts: true,
       };
     }
+    if (req.responseFormat === 'json') {
+      (body.generationConfig as Record<string, unknown>).responseMimeType = 'application/json';
+    }
     return body;
   }
 

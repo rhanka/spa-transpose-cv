@@ -18,6 +18,7 @@
  *                                            their defaults)
  *   core.LlmCompleteArgs.enableReasoning  -> registry.LlmRequest.enableReasoning
  *   core.LlmCompleteArgs.reasoningBudget  -> registry.LlmRequest.reasoningBudget
+ *   core.LlmCompleteArgs.responseFormat   -> registry.LlmRequest.responseFormat
  *   core.LlmCompleteArgs.onDelta          -> routes to provider.generateStream()
  *                                            and bridges onThinking/onContent
  *                                            callbacks into the unified delta
@@ -59,6 +60,7 @@ export function adaptRegistryToCoreProvider(
         maxTokens: args.maxTokens ?? DEFAULT_MAX_TOKENS,
         enableReasoning: args.enableReasoning,
         reasoningBudget: args.reasoningBudget,
+        responseFormat: args.responseFormat,
       };
 
       let r: LlmResponse;

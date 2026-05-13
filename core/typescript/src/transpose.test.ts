@@ -51,6 +51,24 @@ async function readDocumentXml(docx: Uint8Array): Promise<string> {
   return file.async('string');
 }
 
+async function makeDocxWithPlainText(text: string): Promise<Uint8Array> {
+  const zip = await JSZip.loadAsync(Buffer.from(baseDocx));
+  const paragraphs = text
+    .split('\n')
+    .map((line) => `<w:p><w:r><w:t xml:space="preserve">${line}</w:t></w:r></w:p>`)
+    .join('');
+
+  zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${paragraphs}
+    <w:sectPr/>
+  </w:body>
+</w:document>`);
+
+  return new Uint8Array(await zip.generateAsync({ type: 'nodebuffer' }));
+}
+
 describe('transpose()', () => {
   it('produces a non-empty DOCX for cv-001 with stub LLM', async () => {
     const r = await transpose({
@@ -226,6 +244,91 @@ describe('transpose()', () => {
     expect(cv.profile.name).toBe(expected.name);
   }, 30_000);
 
+  it('retries once when the first LLM response is not parseable JSON', async () => {
+    let callCount = 0;
+    const prompts: string[] = [];
+    const maxTokensSeen: Array<number | undefined> = [];
+    const responseFormatsSeen: Array<string | undefined> = [];
+    const parseRetryLlm: LlmProvider = {
+      async complete(args) {
+        callCount++;
+        prompts.push(args.userPrompt);
+        maxTokensSeen.push(args.maxTokens);
+        responseFormatsSeen.push(args.responseFormat);
+
+        if (callCount === 1) {
+          return {
+            text: 'Let me now construct the final JSON.\n{"name":"Jane Smith"',
+            usage: { inputTokens: 10, outputTokens: 20 },
+          };
+        }
+
+        return {
+          text: JSON.stringify(expected),
+          usage: { inputTokens: 11, outputTokens: 21 },
+        };
+      },
+    };
+
+    const r = await transpose({
+      files: [
+        {
+          name: 'cv-001-junior-pm.pdf',
+          bytes: new Uint8Array(cv001),
+          mime: 'application/pdf',
+        },
+      ],
+      template: assets,
+      persistence: 'ephemeral',
+      llm: parseRetryLlm,
+      extraction: { maxValidationRetries: 0 },
+    });
+
+    const cv = r.results[0]!;
+    expect(cv.errors).toEqual([]);
+    expect(cv.profile.name).toBe(expected.name);
+    expect(callCount).toBe(2);
+    expect(prompts[1]).toContain('PREVIOUS LLM OUTPUT WAS NOT VALID JSON');
+    expect(maxTokensSeen).toEqual([16_000, 16_000]);
+    expect(responseFormatsSeen).toEqual(['json', 'json']);
+    expect(cv.usage.inputTokens).toBe(21);
+    expect(cv.usage.outputTokens).toBe(41);
+  }, 30_000);
+
+  it('uses a 32k extraction output budget for long CV text', async () => {
+    let maxTokensSeen: number | undefined;
+    const longCvText = Array.from({ length: 900 }, (_, i) => (
+      `Experience ${i}: cloud transformation, programme delivery, architecture governance, data platforms, security, and operations.`
+    )).join('\n');
+    const longDocx = await makeDocxWithPlainText(longCvText);
+
+    const recordingLlm: LlmProvider = {
+      async complete(args) {
+        maxTokensSeen = args.maxTokens;
+        return { text: JSON.stringify(expected) };
+      },
+    };
+
+    const r = await transpose({
+      files: [
+        {
+          name: 'long-cv.docx',
+          bytes: longDocx,
+          mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        },
+      ],
+      template: assets,
+      persistence: 'ephemeral',
+      llm: recordingLlm,
+      extraction: { maxValidationRetries: 0 },
+    });
+
+    const cv = r.results[0]!;
+    expect(cv.errors).toEqual([]);
+    expect(cv.sourceText.length).toBeGreaterThan(30_000);
+    expect(maxTokensSeen).toBe(32_000);
+  }, 30_000);
+
   it('can render Scalian through the legacy renderer hook', async () => {
     const r = await transpose({
       files: [
@@ -251,8 +354,10 @@ describe('transpose()', () => {
   }, 30_000);
 
   it('on LLM returning malformed JSON, populates errors and uses fallback profile', async () => {
+    let callCount = 0;
     const badLlm: LlmProvider = {
       async complete() {
+        callCount++;
         return {
           text: 'this is not JSON',
           usage: { inputTokens: 10, outputTokens: 5 },
@@ -277,6 +382,7 @@ describe('transpose()', () => {
 
     // Failure was captured per-input (not thrown out of transpose).
     expect(cv.errors.length).toBeGreaterThan(0);
+    expect(callCount).toBe(2);
 
     // profile is the type-valid empty fallback — it must still satisfy the
     // schema (no `{} as CvData` casts in the implementation).
@@ -288,10 +394,10 @@ describe('transpose()', () => {
     expect(typeof cv.sourceText).toBe('string');
     expect(cv.sourceText.length).toBeGreaterThan(50);
 
-    // usage propagates even when the LLM response was malformed.
-    expect(cv.usage.inputTokens).toBe(10);
-    expect(cv.usage.outputTokens).toBe(5);
-    expect(cv.usage.totalTokens).toBe(15);
+    // usage propagates and is aggregated across the parse retry.
+    expect(cv.usage.inputTokens).toBe(20);
+    expect(cv.usage.outputTokens).toBe(10);
+    expect(cv.usage.totalTokens).toBe(30);
 
     // outputDocx may be empty on failure — just verify the shape.
     expect(cv.outputDocx).toBeInstanceOf(Uint8Array);
