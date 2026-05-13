@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [master]
+    tags:
+      - 'release-v*'
   pull_request:
     branches: [master]
 
@@ -11,57 +13,33 @@ env:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      api: ${{ steps.filter.outputs.api }}
-      ui: ${{ steps.filter.outputs.ui }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            api:
-              - 'api/**'
-              - 'Makefile'
-              - 'docker-compose.yml'
-              - '.github/workflows/ci.yml'
-            ui:
-              - 'ui/**'
-              - '.github/workflows/ci.yml'
-
   # ── Build & typecheck API ────────────────────────────────────────
   build-api:
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.api == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build API image
         run: make build-api
       - name: Save API image
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'release-v')
         run: |
           IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep transpose-cv-api | head -1)
           docker save $IMAGE -o api-image.tar
       - uses: actions/upload-artifact@v4
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'release-v')
         with:
           name: api-image
           path: api-image.tar
 
   typecheck-api:
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.api == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,8 +51,6 @@ jobs:
   # ── Build & typecheck UI ─────────────────────────────────────────
   build-ui:
     runs-on: ubuntu-latest
-    needs: [changes]
-    if: needs.changes.outputs.ui == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -89,14 +65,15 @@ jobs:
           VITE_API_BASE_URL: https://cv-api.sent-tech.ca/api
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'release-v')
         with:
           path: ui/build
 
   # ── Publish API to SCW registry ──────────────────────────────────
   publish-api:
     runs-on: ubuntu-latest
-    needs: [changes, build-api, typecheck-api]
-    if: needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/master'
+    needs: [build-api, typecheck-api]
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'release-v')
     env:
       DOCKER_USERNAME: nologin
       DOCKER_PASSWORD: ${{ secrets.SCW_SECRET_KEY }}
@@ -115,8 +92,8 @@ jobs:
   # ── Deploy API (rollout SCW container) ───────────────────────────
   deploy-api:
     runs-on: ubuntu-latest
-    needs: [changes, publish-api]
-    if: needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/master'
+    needs: [publish-api]
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'release-v')
     steps:
       - uses: actions/checkout@v4
       - uses: scaleway/action-scw@v0
@@ -131,28 +108,13 @@ jobs:
       - name: Deploy API (rollout)
         run: make deploy-api
 
-  # ── Deploy UI to GitHub Pages ────────────────────────────────────
-  # If BOTH api+ui changed: UI deploys AFTER API succeeds
-  # If ONLY ui changed: UI deploys immediately after build
-  deploy-ui-after-api:
+  # ── Deploy UI to GitHub Pages ───────────────────────────────────
+  # Production deploys are release-tag only. Pushes to master and PRs only
+  # build/typecheck, so UAT can happen before creating a release tag.
+  deploy-ui-release:
     runs-on: ubuntu-latest
-    needs: [changes, build-ui, deploy-api]
-    if: needs.changes.outputs.ui == 'true' && needs.changes.outputs.api == 'true' && github.ref == 'refs/heads/master'
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-  deploy-ui-only:
-    runs-on: ubuntu-latest
-    needs: [changes, build-ui]
-    if: needs.changes.outputs.ui == 'true' && needs.changes.outputs.api != 'true' && github.ref == 'refs/heads/master'
+    needs: [build-ui, deploy-api]
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'release-v')
     permissions:
       pages: write
       id-token: write
