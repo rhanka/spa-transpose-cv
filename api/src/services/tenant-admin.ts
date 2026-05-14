@@ -6,7 +6,13 @@ import { forceClaimAsRootAdmin, createRootAdminSession, getClaimStatus, verifyCl
 import { scrapeBrandTheme } from './brand-scraper-agent.js';
 import { extractTextFromDocxBuffer } from '@cv-transpose/core';
 import { analyzeTemplateDocx, type TemplateAnalysisProfile } from './template-analysis-agent.js';
-import { clearTenantConfigCache, readStorageObjectText, writeStorageObjectBuffer, writeStorageObjectText } from './tenant-config.js';
+import {
+  clearTenantConfigCache,
+  deriveDirectTenantKey,
+  readStorageObjectText,
+  writeStorageObjectBuffer,
+  writeStorageObjectText,
+} from './tenant-config.js';
 
 interface TenantRegistryRecord {
   version: 'v1';
@@ -15,6 +21,7 @@ interface TenantRegistryRecord {
     displayName: string;
     active: boolean;
     configKey: string;
+    tenantKey?: string;
   }>;
 }
 
@@ -71,6 +78,7 @@ async function upsertRegistryEntry(entry: {
   displayName: string;
   active: boolean;
   configKey: string;
+  tenantKey: string;
 }): Promise<void> {
   let registry: TenantRegistryRecord = {
     version: 'v1',
@@ -158,9 +166,15 @@ export async function createTenantFromAdminFlow(input: {
     const active = Boolean(rootAdminPassword);
     const routeBase = `/${slug}/`;
     const tenantKeyPrefix = `tenants/${slug}`;
+    const tenantKey = deriveDirectTenantKey(slug);
 
     const config = {
       slug,
+      tenantKey,
+      identity: {
+        provider: 'direct',
+        subject: slug,
+      },
       displayName,
       routeBase,
       brandUrl: brand.finalUrl,
@@ -194,6 +208,7 @@ export async function createTenantFromAdminFlow(input: {
       displayName,
       active,
       configKey: `${tenantKeyPrefix}/config.json`,
+      tenantKey,
     });
     clearTenantConfigCache();
 

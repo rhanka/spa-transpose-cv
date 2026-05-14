@@ -6,6 +6,7 @@ import { logger } from './config/logger.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { healthRoutes } from './routes/health.js';
 import { modelRoutes } from './routes/models.js';
+import { tenantAssetRoutes } from './routes/tenant-assets.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { adminRoutes } from './routes/admin.js';
 
@@ -73,6 +74,7 @@ app.use(async (c, next) => {
 // Routes
 app.route('/api/health', healthRoutes);
 app.route('/api/models', modelRoutes);
+app.route('/api/v1/tenants', tenantAssetRoutes);
 app.route('/api/tenants', tenantRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/tenants/:slug/sessions', sessionRoutes);

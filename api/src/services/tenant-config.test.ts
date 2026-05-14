@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
+process.env.TENANT_STORAGE_BACKEND = 'local';
+
+const {
   DEFAULT_TENANT_SLUG,
+  clearTenantConfigCache,
+  getTenantConfigByTenantKey,
   TenantConfigError,
+  normalizeTenantKey,
   normalizeTenantSlug,
   resolveTenantSlug,
-} from './tenant-config.js';
+} = await import('./tenant-config.js');
 
 test('normalizeTenantSlug falls back to the default tenant and lowercases valid slugs', () => {
   assert.equal(normalizeTenantSlug(), DEFAULT_TENANT_SLUG);
@@ -45,4 +50,26 @@ test('resolveTenantSlug prefers explicit route slug over header and default fall
     resolveTenantSlug({}),
     DEFAULT_TENANT_SLUG,
   );
+});
+
+test('normalizeTenantKey lowercases and validates supported prefixes', () => {
+  assert.equal(normalizeTenantKey('DIRECT:Scalian'), 'direct:scalian');
+  assert.equal(normalizeTenantKey('ms:abc-def-uuid'), 'ms:abc-def-uuid');
+  assert.equal(normalizeTenantKey('gws:Example.COM'), 'gws:example.com');
+
+  assert.throws(
+    () => normalizeTenantKey('bad:scalian'),
+    (error: unknown) =>
+      error instanceof TenantConfigError &&
+      error.code === 'invalid_tenant_key' &&
+      error.statusCode === 400,
+  );
+});
+
+test('getTenantConfigByTenantKey resolves the seeded direct tenant', async () => {
+  clearTenantConfigCache();
+  const config = await getTenantConfigByTenantKey('direct:scalian');
+
+  assert.equal(config.slug, 'scalian');
+  assert.equal(config.tenantKey, 'direct:scalian');
 });

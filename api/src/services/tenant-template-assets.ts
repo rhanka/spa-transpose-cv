@@ -114,10 +114,7 @@ function buildHeaderSlots(headlineMax: number, subheadlineMax: number): Template
  * The returned manifest is guaranteed to pass `validateTemplateManifest` —
  * the test suite enforces this invariant.
  */
-export function tenantConfigToTemplateAssets(
-  tenantConfig: TenantConfig,
-  baseDocx: Uint8Array,
-): TemplateAssets {
+export function tenantConfigToTemplateManifest(tenantConfig: TenantConfig): TemplateManifest {
   const contract = tenantConfig.templateContract;
 
   const header = buildHeaderSlots(
@@ -133,9 +130,9 @@ export function tenantConfigToTemplateAssets(
 
   const sanitizedColors = sanitizeColors(contract.styleTokens.colors);
 
-  const manifest: TemplateManifest = {
+  return {
     version: '1.0',
-    tenantKey: `direct:${tenantConfig.slug}`,
+    tenantKey: tenantConfig.tenantKey ?? `direct:${tenantConfig.slug}`,
     naming: contract.output.filenamePattern,
     header,
     sections,
@@ -149,11 +146,14 @@ export function tenantConfigToTemplateAssets(
     },
     validationRulesRef: 'default',
   };
+}
 
+export function tenantConfigToBrandTokens(tenantConfig: TenantConfig): BrandTokens {
+  const contract = tenantConfig.templateContract;
   const colors = contract.styleTokens.colors ?? {};
   const fontHeading = contract.styleTokens.fonts?.heading;
   const fontBody = contract.styleTokens.fonts?.body;
-  const brand: BrandTokens = {
+  return {
     primary: colors.headingText ?? colors.accent ?? '#111827',
     secondary: colors.mutedText ?? colors.bodyText ?? '#5B6470',
     accent: colors.accent ?? '#1F2937',
@@ -163,6 +163,15 @@ export function tenantConfigToTemplateAssets(
         ? fontHeading
         : 'Liberation Sans Narrow',
   };
+}
 
-  return { manifest, baseDocx, brand };
+export function tenantConfigToTemplateAssets(
+  tenantConfig: TenantConfig,
+  baseDocx: Uint8Array,
+): TemplateAssets {
+  return {
+    manifest: tenantConfigToTemplateManifest(tenantConfig),
+    baseDocx,
+    brand: tenantConfigToBrandTokens(tenantConfig),
+  };
 }
