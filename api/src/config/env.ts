@@ -17,6 +17,9 @@ const envBoolean = z.union([z.boolean(), z.string()]).transform((value) => {
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  BUILD_VERSION: z.string().default('dev'),
+  BUILD_COMMIT: z.string().default('unknown'),
+  BUILD_REF: z.string().default('local'),
   API_PORT: z.coerce.number().default(8686),
   LLM_PROVIDER: z.enum(['anthropic', 'openai', 'mistral', 'gemini', 'cohere']).default('mistral'),
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -51,3 +54,9 @@ const envSchema = z.object({
 
 export const env = envSchema.parse(process.env);
 export type Env = z.infer<typeof envSchema>;
+
+export const buildInfo = {
+  version: env.BUILD_VERSION,
+  commit: env.BUILD_COMMIT,
+  ref: env.BUILD_REF,
+};

@@ -5,8 +5,15 @@ services:
       context: .
       dockerfile: api/Dockerfile
       target: ${TARGET:-development}
+      args:
+        BUILD_VERSION: ${BUILD_VERSION:-dev}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_REF: ${BUILD_REF:-local}
     environment:
       - NODE_ENV=${TARGET:-development}
+      - BUILD_VERSION=${BUILD_VERSION:-dev}
+      - BUILD_COMMIT=${BUILD_COMMIT:-unknown}
+      - BUILD_REF=${BUILD_REF:-local}
       - LLM_PROVIDER=${LLM_PROVIDER:-mistral}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
