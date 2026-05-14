@@ -94,3 +94,7 @@ async def handle_gemini_request(
         return _encode_tool_result(result)
     except TenantNotConfiguredError:
         return _build_tenant_not_configured_response(tenant_key, settings.onboarding_url)
+
+
+def handle_jwks_request(*, env: Mapping[str, str]) -> dict[str, object]:
+    return load_runtime_settings(GEMINI_ENV_PREFIX, env).build_signer().jwks()

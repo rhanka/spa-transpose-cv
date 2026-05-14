@@ -2,6 +2,9 @@
   "name": "transposeCvs",
   "description": "Transform attached CV files into enterprise-formatted DOCX outputs.",
   "entrypoint": "runtime.handle_transpose_cvs",
+  "jwksEntrypoint": "runtime.handle_jwks_request",
+  "inputSchemaRef": "schemas/transposeCvs.request.schema.json",
+  "outputSchemaRef": "schemas/transposeCvs.response.schema.json",
   "input": {
     "type": "object",
     "required": ["files", "context"],
