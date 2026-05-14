@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["tenantKey", "adaptiveCard", "attachments"],
+  "properties": {
+    "tenantKey": { "type": "string" },
+    "adaptiveCard": { "type": "object" },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "contentType", "bytesBase64"],
+        "properties": {
+          "name": { "type": "string" },
+          "contentType": { "type": "string" },
+          "bytesBase64": { "type": "string" }
+        }
+      }
+    },
+    "error": { "type": "string" },
+    "message": { "type": "string" },
+    "onboardingUrl": { "type": ["string", "null"] }
+  }
+}

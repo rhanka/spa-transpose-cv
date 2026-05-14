@@ -139,3 +139,7 @@ async def handle_transpose_cvs(
             {key: str(value) for key, value in claims.items() if value is not None},
         )
         return _build_tenant_not_configured_response(tenant_key, onboarding_url)
+
+
+def handle_jwks_request(*, env: Mapping[str, str]) -> dict[str, object]:
+    return load_runtime_settings(COPILOT_ENV_PREFIX, env).build_signer().jwks()

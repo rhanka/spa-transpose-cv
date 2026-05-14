@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["tenantKey", "artifact", "reportCard"],
+  "properties": {
+    "tenantKey": { "type": "string" },
+    "artifact": {
+      "type": ["object", "null"],
+      "required": ["name", "mime", "bytesBase64"],
+      "properties": {
+        "name": { "type": "string" },
+        "mime": { "type": "string" },
+        "bytesBase64": { "type": "string" }
+      }
+    },
+    "reportCard": {
+      "type": "object",
+      "required": ["files", "succeeded", "failed", "warnings"],
+      "properties": {
+        "files": { "type": "integer" },
+        "succeeded": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "warnings": { "type": "integer" }
+      }
+    },
+    "error": { "type": "string" },
+    "message": { "type": "string" },
+    "onboardingUrl": { "type": ["string", "null"] }
+  }
+}

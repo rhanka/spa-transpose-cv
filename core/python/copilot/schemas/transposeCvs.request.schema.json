@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["files", "context"],
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "contentType", "bytesBase64"],
+        "properties": {
+          "name": { "type": "string" },
+          "contentType": { "type": "string" },
+          "bytesBase64": { "type": "string" }
+        }
+      }
+    },
+    "userPrompt": { "type": "string" },
+    "context": {
+      "type": "object",
+      "required": ["identity"],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "required": ["tid"],
+          "properties": {
+            "tid": { "type": "string" },
+            "upn": { "type": "string" },
+            "oid": { "type": "string" },
+            "sub": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
