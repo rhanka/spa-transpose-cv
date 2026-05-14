@@ -32,6 +32,7 @@ function loadScalianTenantConfig(): TenantConfig {
 
   return {
     slug: raw.slug as string,
+    tenantKey: ((raw.tenantKey as string | undefined) ?? `direct:${raw.slug as string}`) as TenantConfig['tenantKey'],
     displayName: raw.displayName as string,
     routeBase: raw.routeBase as string,
     brandUrl: raw.brandUrl as string,
@@ -90,6 +91,18 @@ test('tenantConfigToTemplateAssets produces a manifest that passes validateTempl
     true,
     validation.ok ? '' : `manifest failed validation: ${validation.errors.join('; ')}`,
   );
+});
+
+test('tenantConfigToTemplateAssets falls back to direct:slug when tenantKey is absent', () => {
+  const tenantConfig = loadScalianTenantConfig();
+  const legacyTenantConfig = {
+    ...tenantConfig,
+    tenantKey: undefined,
+  } as unknown as TenantConfig;
+
+  const assets = tenantConfigToTemplateAssets(legacyTenantConfig, DUMMY_DOCX_BYTES);
+
+  assert.equal(assets.manifest.tenantKey, 'direct:scalian');
 });
 
 test('tenantConfigToTemplateAssets derives brand tokens from templateContract.styleTokens', () => {

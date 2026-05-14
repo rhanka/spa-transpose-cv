@@ -28,11 +28,20 @@ const DEFAULT_TENANT_RENDERING: TemplateRendering = {
 
 export const DEFAULT_TENANT_SLUG = '_default';
 export const RESERVED_TENANT_SLUGS = ['admin', 'api', 'session'] as const;
+export const TENANT_KEY_PREFIXES = ['direct', 'ms', 'gws'] as const;
+
+export type TenantKeyPrefix = typeof TENANT_KEY_PREFIXES[number];
+export type TenantKey = `${TenantKeyPrefix}:${string}`;
 
 const RESERVED_TENANT_SLUG_SET = new Set<string>(RESERVED_TENANT_SLUGS);
 const TENANT_CONFIG_CACHE_TTL_MS = 30_000;
 const TENANT_ASSET_CACHE_DIR = join(env.DATA_DIR, 'tenant-assets');
 const tenantSlugSchema = z.string().trim().min(1).regex(/^[a-z0-9_][a-z0-9_-]*$/);
+const tenantKeySchema = z.string().trim().regex(/^(direct|ms|gws):[a-z0-9._-]+$/);
+const tenantIdentitySchema = z.object({
+  provider: z.enum(TENANT_KEY_PREFIXES),
+  subject: z.string().trim().min(1),
+}).optional();
 const tenantBrandingSchema = z.object({
   logoPath: z.string().trim().min(1).optional(),
   faviconPath: z.string().trim().min(1).optional(),
@@ -42,6 +51,8 @@ const tenantBrandingSchema = z.object({
 }).optional();
 const rawTenantConfigSchema = z.object({
   slug: tenantSlugSchema,
+  tenantKey: tenantKeySchema.optional(),
+  identity: tenantIdentitySchema,
   displayName: z.string().trim().min(1),
   routeBase: z.string().trim().min(1),
   brandUrl: z.string().url(),
@@ -63,7 +74,19 @@ const rawTenantConfigSchema = z.object({
 type RawTenantConfig = z.infer<typeof rawTenantConfigSchema>;
 
 export interface TenantConfig extends Omit<RawTenantConfig, 'templateContract'> {
+  tenantKey: TenantKey;
   templateContract: TemplateContract;
+}
+
+interface TenantRegistryRecord {
+  version: 'v1';
+  tenants: Array<{
+    slug: string;
+    displayName: string;
+    active: boolean;
+    configKey: string;
+    tenantKey?: string;
+  }>;
 }
 
 interface CachedTenantConfig {
@@ -110,6 +133,30 @@ export function normalizeTenantSlug(input?: string | null): string {
   return parsed.data;
 }
 
+export function deriveDirectTenantKey(slug: string): TenantKey {
+  return `direct:${normalizeTenantSlug(slug)}`;
+}
+
+export function normalizeTenantKey(input: string): TenantKey {
+  const normalized = input.trim().toLowerCase();
+  const parsed = tenantKeySchema.safeParse(normalized);
+  if (!parsed.success) {
+    throw new TenantConfigError(400, 'invalid_tenant_key', `Invalid tenant key "${input}"`);
+  }
+  return parsed.data as TenantKey;
+}
+
+function splitTenantKey(tenantKey: TenantKey): {
+  provider: TenantKeyPrefix;
+  subject: string;
+} {
+  const [provider, ...rest] = tenantKey.split(':');
+  return {
+    provider: provider as TenantKeyPrefix,
+    subject: rest.join(':'),
+  };
+}
+
 export function resolveTenantSlug(options: {
   explicitSlug?: string | null;
   headerTenant?: string | null;
@@ -118,8 +165,15 @@ export function resolveTenantSlug(options: {
 }
 
 function hydrateTenantConfig(config: RawTenantConfig): TenantConfig {
+  const tenantKey = config.tenantKey
+    ? normalizeTenantKey(config.tenantKey)
+    : deriveDirectTenantKey(config.slug);
+  const identity = config.identity ?? splitTenantKey(tenantKey);
+
   return {
     ...config,
+    tenantKey,
+    identity,
     templateContract: ensureTemplateContract({
       templateContractVersion: config.templateContractVersion,
       variant: config.variant,
@@ -241,6 +295,60 @@ export async function readStorageObjectText(objectKey: string): Promise<string> 
   return buffer.toString('utf8');
 }
 
+async function loadTenantRegistryFromStorage(): Promise<TenantRegistryRecord> {
+  let raw: string;
+  try {
+    raw = await readStorageObjectText('registry.json');
+  } catch (error) {
+    if (error instanceof TenantConfigError && error.code === 'tenant_asset_not_found') {
+      return { version: 'v1', tenants: [] };
+    }
+    throw error;
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(raw);
+  } catch {
+    throw new TenantConfigError(500, 'invalid_tenant_registry_json', 'Tenant registry has invalid JSON');
+  }
+
+  const parsedRegistry = z.object({
+    version: z.literal('v1'),
+    tenants: z.array(z.object({
+      slug: tenantSlugSchema,
+      displayName: z.string().trim().min(1),
+      active: z.boolean(),
+      configKey: z.string().trim().min(1),
+      tenantKey: tenantKeySchema.optional(),
+    })),
+  }).safeParse(parsedJson);
+
+  if (!parsedRegistry.success) {
+    throw new TenantConfigError(500, 'invalid_tenant_registry_schema', 'Tenant registry has an invalid schema');
+  }
+
+  return parsedRegistry.data;
+}
+
+async function resolveTenantSlugFromTenantKey(tenantKey: TenantKey): Promise<string> {
+  const { provider, subject } = splitTenantKey(tenantKey);
+  if (provider === 'direct') {
+    return normalizeTenantSlug(subject);
+  }
+
+  const registry = await loadTenantRegistryFromStorage();
+  const match = registry.tenants.find((tenant) => normalizeTenantKey(
+    tenant.tenantKey ?? deriveDirectTenantKey(tenant.slug),
+  ) === tenantKey);
+
+  if (!match) {
+    throw new TenantConfigError(404, 'tenant_not_found', `Tenant "${tenantKey}" not found`);
+  }
+
+  return match.slug;
+}
+
 async function loadTenantConfigFromStorage(slug: string): Promise<TenantConfig> {
   const configAssetKey = `tenants/${slug}/config.json`;
 
@@ -296,6 +404,18 @@ export async function getTenantConfig(options: {
     expiresAt: now + TENANT_CONFIG_CACHE_TTL_MS,
     value: config,
   });
+
+  return config;
+}
+
+export async function getTenantConfigByTenantKey(tenantKey: string): Promise<TenantConfig> {
+  const normalizedTenantKey = normalizeTenantKey(tenantKey);
+  const slug = await resolveTenantSlugFromTenantKey(normalizedTenantKey);
+  const config = await getTenantConfig({ explicitSlug: slug });
+
+  if (normalizeTenantKey(config.tenantKey) !== normalizedTenantKey) {
+    throw new TenantConfigError(404, 'tenant_not_found', `Tenant "${tenantKey}" not found`);
+  }
 
   return config;
 }

@@ -1,5 +1,10 @@
 {
   "slug": "scalian",
+  "tenantKey": "direct:scalian",
+  "identity": {
+    "provider": "direct",
+    "subject": "scalian"
+  },
   "displayName": "Scalian",
   "routeBase": "/scalian/",
   "brandUrl": "https://www.scalian.com/en/",

@@ -3,12 +3,14 @@
   "tenants": [
     {
       "slug": "_default",
+      "tenantKey": "direct:_default",
       "displayName": "Sent Tech",
       "active": true,
       "configKey": "tenants/_default/config.json"
     },
     {
       "slug": "scalian",
+      "tenantKey": "direct:scalian",
       "displayName": "Scalian",
       "active": true,
       "configKey": "tenants/scalian/config.json"

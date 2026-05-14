@@ -1,5 +1,10 @@
 {
   "slug": "_default",
+  "tenantKey": "direct:_default",
+  "identity": {
+    "provider": "direct",
+    "subject": "_default"
+  },
   "displayName": "Sent Tech",
   "routeBase": "/",
   "brandUrl": "https://www.sent-tech.ca/",
