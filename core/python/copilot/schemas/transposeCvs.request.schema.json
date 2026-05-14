@@ -7,11 +7,16 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "contentType", "bytesBase64"],
+        "required": ["name", "contentType"],
+        "anyOf": [
+          { "required": ["bytesBase64"] },
+          { "required": ["downloadUrl"] }
+        ],
         "properties": {
           "name": { "type": "string" },
           "contentType": { "type": "string" },
-          "bytesBase64": { "type": "string" }
+          "bytesBase64": { "type": "string" },
+          "downloadUrl": { "type": "string", "format": "uri" }
         }
       }
     },

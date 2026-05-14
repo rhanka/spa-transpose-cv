@@ -66,7 +66,9 @@ def test_runtime_contract_schema_files_are_wired(repo_root) -> None:
     )
 
     assert copilot_request["required"] == ["files", "context"]
-    assert "bytesBase64" in copilot_request["properties"]["files"]["items"]["required"]
+    assert "bytesBase64" in copilot_request["properties"]["files"]["items"]["properties"]
+    assert "downloadUrl" in copilot_request["properties"]["files"]["items"]["properties"]
+    assert len(copilot_request["properties"]["files"]["items"]["anyOf"]) == 2
     assert copilot_response["required"] == ["tenantKey", "adaptiveCard", "attachments"]
     assert "alignmentReport" in copilot_response["properties"]
     assert gemini_request["required"] == ["files", "context"]

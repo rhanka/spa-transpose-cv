@@ -97,6 +97,65 @@ async def test_copilot_http_adapter_posts_action_payload(private_key_pem: str) -
 
 
 @pytest.mark.asyncio
+async def test_copilot_http_adapter_downloads_graph_file_payload(private_key_pem: str) -> None:
+    from copilot.http import handle_http_request
+
+    captured: dict[str, object] = {}
+
+    def fake_download_file(url: str, item: dict[str, object]) -> bytes:
+        captured["download_url"] = url
+        captured["download_item"] = item
+        return b"graph-pdf-bytes"
+
+    async def fake_run_copilot_transpose(**kwargs):
+        captured["files"] = kwargs["files"]
+        return CopilotActionResult(
+            tenant_key="ms:123e4567-e89b-12d3-a456-426614174000",
+            attachments=[],
+            card={"type": "AdaptiveCard", "version": "1.5", "body": []},
+            transpose_output=None,  # type: ignore[arg-type]
+        )
+
+    response = await handle_http_request(
+        "POST",
+        "/actions/transposeCvs",
+        json.dumps(
+            {
+                "files": [
+                    {
+                        "name": "candidate.pdf",
+                        "contentType": "application/pdf",
+                        "downloadUrl": "https://graph.microsoft.com/v1.0/me/drive/items/123/content",
+                    }
+                ],
+                "context": {
+                    "identity": {
+                        "tid": "123E4567-E89B-12D3-A456-426614174000",
+                        "upn": "user@example.com",
+                    }
+                },
+            }
+        ).encode("utf-8"),
+        llm=object(),
+        env={
+            "CVT_COPILOT_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_COPILOT_JWT_ISSUER": "ms-copilot.cv-transpose.com",
+            "CVT_COPILOT_JWT_KID": "copilot-key",
+            "CVT_COPILOT_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        run_transpose=fake_run_copilot_transpose,
+        download_file=fake_download_file,
+    )
+
+    assert response.status == 200
+    assert captured["download_url"] == "https://graph.microsoft.com/v1.0/me/drive/items/123/content"
+    assert captured["download_item"]["name"] == "candidate.pdf"
+    files = captured["files"]
+    assert len(files) == 1
+    assert files[0].bytes_ == b"graph-pdf-bytes"
+
+
+@pytest.mark.asyncio
 async def test_copilot_http_adapter_rejects_invalid_json(private_key_pem: str) -> None:
     from copilot.http import handle_http_request
 
