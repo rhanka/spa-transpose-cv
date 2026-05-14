@@ -8,6 +8,7 @@ version = "0.2.0"
 description = "Python port of CV Transpose core"
 requires-python = ">=3.12"
 dependencies = [
+  "cryptography>=45,<46",
   "lxml>=5.2,<6",
   "pypdf>=4.2,<6",
 ]
