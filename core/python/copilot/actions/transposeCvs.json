@@ -1,0 +1,24 @@
+{
+  "name": "transposeCvs",
+  "description": "Transform attached CV files into enterprise-formatted DOCX outputs.",
+  "entrypoint": "runtime.handle_transpose_cvs",
+  "input": {
+    "type": "object",
+    "required": ["files", "context"],
+    "properties": {
+      "files": {
+        "type": "array"
+      },
+      "userPrompt": {
+        "type": "string"
+      },
+      "context": {
+        "type": "object"
+      }
+    }
+  },
+  "output": {
+    "type": "object",
+    "required": ["tenantKey", "adaptiveCard", "attachments"]
+  }
+}
