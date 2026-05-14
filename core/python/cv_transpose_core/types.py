@@ -9,6 +9,7 @@ CvMime = Literal[
     "application/msword",
 ]
 Persistence = Literal["session", "ephemeral"]
+TemplateRenderer = Literal["generic", "legacy-scalian"]
 TransposePhase = Literal[
     "extract-text",
     "extract-cv-llm",
@@ -41,6 +42,7 @@ class TemplateAssets:
     manifest: dict[str, Any]
     base_docx: bytes
     brand: BrandTokens
+    renderer: TemplateRenderer | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,7 @@ class LlmCompleteArgs:
     temperature: float | None = None
     enable_reasoning: bool | None = None
     reasoning_budget: int | None = None
+    response_format: Literal["json"] | None = None
     on_delta: Callable[[dict[str, str]], None] | None = None
 
 
@@ -70,6 +73,7 @@ class LlmProvider(Protocol):
         temperature: float | None = None,
         enable_reasoning: bool | None = None,
         reasoning_budget: int | None = None,
+        response_format: Literal["json"] | None = None,
         on_delta: Callable[[dict[str, str]], None] | None = None,
     ) -> LlmCompleteResult | dict[str, Any]:
         ...
@@ -79,6 +83,8 @@ class LlmProvider(Protocol):
 class ExtractionOptions:
     reasoning_budget: int | None = None
     enable_reasoning: bool | None = None
+    max_tokens: int | None = None
+    max_parse_retries: int | None = None
     max_validation_retries: int | None = None
 
 

@@ -711,7 +711,14 @@ def _empty_story_xml(existing_xml: bytes, tag_name: str) -> bytes:
     return f"{opening}{paragraph}{closing}".encode("utf-8")
 
 
-def render_docx(base_docx: bytes, profile: dict[str, Any], contract: dict[str, Any]) -> bytes:
+def render_docx(
+    base_docx: bytes,
+    profile: dict[str, Any],
+    contract: dict[str, Any],
+    *,
+    renderer: str = "generic",
+) -> bytes:
+    _ = renderer
     if contract.get("layout", {}).get("variant") == "brand-accent":
         document = _build_brand_accent_document_xml(base_docx, profile, contract).encode("utf-8")
     else:
