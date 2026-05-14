@@ -14,6 +14,7 @@ async def handle_http_request(
     *,
     llm: Any,
     env: Mapping[str, str],
+    download_file=None,
     run_transpose=None,
 ) -> HttpResponse:
     normalized_path = path.split("?", 1)[0]
@@ -29,6 +30,8 @@ async def handle_http_request(
             return json_response(400, {"error": "invalid_json"})
 
         kwargs = {"llm": llm, "env": env}
+        if download_file is not None:
+            kwargs["download_file"] = download_file
         if run_transpose is not None:
             kwargs["run_transpose"] = run_transpose
         return json_response(200, await handle_transpose_cvs(payload, **kwargs))

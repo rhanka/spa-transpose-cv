@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import time
+from urllib.request import Request, urlopen
 from typing import Any, Mapping, Sequence
 
 from cv_transpose_core import InputFile, LlmProvider
@@ -16,14 +17,32 @@ COPILOT_ENV_PREFIX = "CVT_COPILOT"
 TENANT_NOT_CONFIGURED_MESSAGE = "Votre entreprise n'a pas encore configure de template. Contactez votre admin."
 
 
-def _parse_input_files(payload_files: Sequence[Mapping[str, Any]]) -> list[InputFile]:
+def _download_file_bytes(download_url: str, item: Mapping[str, Any]) -> bytes:
+    request = Request(download_url, headers={"Accept": str(item.get("contentType") or "application/octet-stream")})
+    with urlopen(request) as response:
+        return response.read()
+
+
+def _parse_input_files(
+    payload_files: Sequence[Mapping[str, Any]],
+    *,
+    download_file=_download_file_bytes,
+) -> list[InputFile]:
     files: list[InputFile] = []
     for item in payload_files:
+        bytes_base64 = item.get("bytesBase64")
+        download_url = item.get("downloadUrl")
+        if isinstance(bytes_base64, str) and bytes_base64:
+            file_bytes = base64.b64decode(bytes_base64)
+        elif isinstance(download_url, str) and download_url.strip():
+            file_bytes = download_file(download_url.strip(), item)
+        else:
+            raise RuntimeJwtIssuerError("Each Copilot file must provide bytesBase64 or downloadUrl")
         files.append(
             InputFile(
                 name=str(item["name"]),
                 mime=str(item["contentType"]),
-                bytes_=base64.b64decode(str(item["bytesBase64"])),
+                bytes_=file_bytes,
             )
         )
     return files
@@ -97,6 +116,7 @@ async def handle_transpose_cvs(
     assets_base_url: str | None = None,
     signer: RuntimeJwtIssuer | None = None,
     env: Mapping[str, str] | None = None,
+    download_file=_download_file_bytes,
     run_transpose=run_copilot_transpose,
 ) -> dict[str, Any]:
     context = payload.get("context")
@@ -105,7 +125,7 @@ async def handle_transpose_cvs(
         raise RuntimeJwtIssuerError("Missing identity context for Copilot runtime")
 
     claims = dict(identity)
-    files = _parse_input_files(payload.get("files", []))
+    files = _parse_input_files(payload.get("files", []), download_file=download_file)
     user_prompt = payload.get("userPrompt")
     if assets_base_url is None or signer is None:
         settings = load_runtime_settings(COPILOT_ENV_PREFIX, env or {})
