@@ -46,9 +46,6 @@ def derive_tenant_key_from_claims(provider: TenantProvider, claims: Mapping[str,
         domain = claims.get("hd")
         if domain:
             return derive_gws_tenant_key(domain)
-        email = claims.get("email")
-        if email and "@" in email:
-            return derive_gws_tenant_key(email.rsplit("@", 1)[1])
-        raise MarketplaceIdentityError("domain is required to derive a gws tenant key")
+        raise MarketplaceIdentityError("primary domain is required to derive a gws tenant key")
 
     raise MarketplaceIdentityError(f"Unsupported tenant provider {provider!r}")

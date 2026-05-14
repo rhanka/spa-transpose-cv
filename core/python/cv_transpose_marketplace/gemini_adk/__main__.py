@@ -60,7 +60,7 @@ async def run_offline_demo() -> dict:
         private_key_pem=_generate_private_key_pem(),
     )
     request = GeminiToolRequest(
-        claims={"email": "user@workspace.example"},
+        claims={"hd": "workspace.example", "email": "user@workspace.example"},
         files=[
             GeminiToolFile(
                 name="cv-001-junior-pm.pdf",

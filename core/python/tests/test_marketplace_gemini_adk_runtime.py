@@ -51,6 +51,7 @@ async def test_handle_gemini_request_loads_env_settings_and_mints_token(private_
             ],
             "context": {
                 "identity": {
+                    "hd": "workspace.example",
                     "email": "user@workspace.example",
                 }
             },
@@ -67,7 +68,7 @@ async def test_handle_gemini_request_loads_env_settings_and_mints_token(private_
     )
 
     request = captured["request"]
-    assert request.claims == {"email": "user@workspace.example"}
+    assert request.claims == {"hd": "workspace.example", "email": "user@workspace.example"}
     assert request.assets_base_url == "https://cv-api.sent-tech.ca"
     assert isinstance(request.assets_bearer_token, str)
     assert request.user_prompt == "TARGET: Fabrikam"
@@ -89,6 +90,7 @@ async def test_handle_gemini_request_maps_tenant_not_configured_error(private_ke
             "files": [],
             "context": {
                 "identity": {
+                    "hd": "workspace.example",
                     "email": "user@workspace.example",
                 }
             },
@@ -112,3 +114,28 @@ async def test_handle_gemini_request_maps_tenant_not_configured_error(private_ke
         "message": "Votre entreprise n'a pas encore configure de template. Contactez votre admin.",
         "onboardingUrl": "https://admin.sent-tech.ca/onboard?source=gws",
     }
+
+
+@pytest.mark.asyncio
+async def test_handle_gemini_request_rejects_missing_primary_domain(private_key_pem: str) -> None:
+    from cv_transpose_marketplace.gemini_adk.runtime import handle_gemini_request
+    from cv_transpose_marketplace.identity import MarketplaceIdentityError
+
+    with pytest.raises(MarketplaceIdentityError, match="primary domain"):
+        await handle_gemini_request(
+            {
+                "files": [],
+                "context": {
+                    "identity": {
+                        "email": "user@workspace.example",
+                    }
+                },
+            },
+            llm=object(),
+            env={
+                "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+                "CVT_GEMINI_JWT_ISSUER": "gemini-ent.runtime.sent-tech.ca",
+                "CVT_GEMINI_JWT_KID": "gemini-key",
+                "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+            },
+        )

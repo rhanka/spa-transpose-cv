@@ -55,7 +55,7 @@ async def test_transpose_cvs_maps_request_and_builds_report_card() -> None:
 
     result = await transpose_cvs(
         GeminiToolRequest(
-            claims={"email": "user@workspace.example"},
+            claims={"hd": "workspace.example", "email": "user@workspace.example"},
             files=[GeminiToolFile(name="candidate.pdf", mime="application/pdf", bytes_=b"pdf-bytes")],
             user_prompt="TARGET: Fabrikam",
             assets_base_url="https://cv-api.sent-tech.ca",
@@ -65,7 +65,7 @@ async def test_transpose_cvs_maps_request_and_builds_report_card() -> None:
         run_fn=fake_run_gemini_transpose,
     )
 
-    assert captured["claims"] == {"email": "user@workspace.example"}
+    assert captured["claims"] == {"hd": "workspace.example", "email": "user@workspace.example"}
     assert captured["assets_base_url"] == "https://cv-api.sent-tech.ca"
     assert captured["assets_bearer_token"] == "signed.jwt.token"
     files = captured["files"]

@@ -23,15 +23,14 @@ def test_derive_tenant_key_from_gws_claims_prefers_hd() -> None:
     assert tenant_key == "gws:example.com"
 
 
-def test_derive_tenant_key_from_gws_claims_falls_back_to_email_domain() -> None:
-    tenant_key = derive_tenant_key_from_claims(
-        "gws",
-        {
-            "email": "user@workspace.example",
-        },
-    )
-
-    assert tenant_key == "gws:workspace.example"
+def test_derive_tenant_key_from_claims_rejects_gws_email_without_primary_domain() -> None:
+    with pytest.raises(MarketplaceIdentityError, match="primary domain"):
+        derive_tenant_key_from_claims(
+            "gws",
+            {
+                "email": "user@workspace.example",
+            },
+        )
 
 
 def test_derive_tenant_key_from_claims_rejects_missing_ms_tid() -> None:
@@ -40,5 +39,5 @@ def test_derive_tenant_key_from_claims_rejects_missing_ms_tid() -> None:
 
 
 def test_derive_tenant_key_from_claims_rejects_missing_gws_domain() -> None:
-    with pytest.raises(MarketplaceIdentityError, match="domain"):
+    with pytest.raises(MarketplaceIdentityError, match="primary domain"):
         derive_tenant_key_from_claims("gws", {"sub": "abc"})

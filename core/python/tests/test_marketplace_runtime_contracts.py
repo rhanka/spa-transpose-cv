@@ -73,6 +73,7 @@ def test_runtime_contract_schema_files_are_wired(repo_root) -> None:
     assert "alignmentReport" in copilot_response["properties"]
     assert gemini_request["required"] == ["files", "context"]
     assert "bytesBase64" in gemini_request["properties"]["files"]["items"]["required"]
+    assert "hd" in gemini_request["properties"]["context"]["properties"]["identity"]["required"]
     assert gemini_response["required"] == ["tenantKey", "artifact", "reportCard"]
     assert "alignmentScore" in gemini_response["properties"]["reportCard"]["properties"]
     assert "items" in gemini_response["properties"]["reportCard"]["properties"]
