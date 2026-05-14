@@ -226,6 +226,7 @@ async def test_gemini_http_adapter_posts_tool_payload(private_key_pem: str) -> N
                 "files": [],
                 "context": {
                     "identity": {
+                        "hd": "workspace.example",
                         "email": "user@workspace.example",
                     }
                 },
@@ -244,6 +245,7 @@ async def test_gemini_http_adapter_posts_tool_payload(private_key_pem: str) -> N
     assert response.status == 200
     request = captured["request"]
     assert request.assets_base_url == "https://cv-api.sent-tech.ca"
+    assert request.claims["hd"] == "workspace.example"
     payload = json.loads(response.body)
     assert payload["tenantKey"] == "gws:workspace.example"
     assert payload["artifact"]["name"] == "Candidate.docx"

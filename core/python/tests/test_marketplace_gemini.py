@@ -64,7 +64,7 @@ async def test_run_gemini_transpose_passes_user_prompt_override(repo_root, expec
         return await transpose(input_)
 
     result = await run_gemini_transpose(
-        claims={"email": "user@workspace.example"},
+        claims={"hd": "workspace.example", "email": "user@workspace.example"},
         files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
         llm=FakeLlm(expected_profile),
         assets_base_url="https://cv-api.sent-tech.ca",

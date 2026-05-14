@@ -21,13 +21,18 @@
       "required": ["identity"],
       "properties": {
         "identity": {
-          "type": "object",
-          "required": ["email"],
-          "properties": {
-            "email": { "type": "string" },
-            "sub": { "type": "string" }
-          }
+        "type": "object",
+        "required": ["hd"],
+        "anyOf": [
+          { "required": ["email"] },
+          { "required": ["sub"] }
+        ],
+        "properties": {
+          "hd": { "type": "string" },
+          "email": { "type": "string" },
+          "sub": { "type": "string" }
         }
+      }
       }
     }
   }
