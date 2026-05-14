@@ -1,7 +1,7 @@
 import { type Context, Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
-import { env } from './config/env.js';
+import { buildInfo, env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { healthRoutes } from './routes/health.js';
@@ -79,4 +79,4 @@ app.route('/api/tenants/:slug/sessions', sessionRoutes);
 app.route('/api/sessions', sessionRoutes);
 
 // Root
-app.get('/', (c) => c.json({ name: 'spa-transpose-cv-api', version: '0.1.0' }));
+app.get('/', (c) => c.json({ name: 'spa-transpose-cv-api', ...buildInfo }));
