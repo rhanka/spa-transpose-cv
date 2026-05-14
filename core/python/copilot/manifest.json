@@ -1,0 +1,6 @@
+{
+  "name": "CV Transpose",
+  "description": "Transpose attached CVs into the enterprise DOCX template.",
+  "instructionsRef": "instructions.md",
+  "actions": ["transposeCvs"]
+}
