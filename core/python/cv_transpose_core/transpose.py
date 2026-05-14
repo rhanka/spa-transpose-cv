@@ -21,6 +21,11 @@ from .types import (
 )
 from .validate import validate_docx_structure
 
+DEFAULT_EXTRACTION_MAX_TOKENS = 16_000
+LARGE_CV_EXTRACTION_MAX_TOKENS = 32_000
+LARGE_CV_TEXT_CHAR_THRESHOLD = 30_000
+DEFAULT_PARSE_RETRIES = 1
+
 
 def _fallback_profile() -> dict[str, Any]:
     return deepcopy(EMPTY_PROFILE_FALLBACK)
@@ -81,6 +86,41 @@ def _coerce_llm_result(raw: LlmCompleteResult | dict[str, Any]) -> LlmCompleteRe
     return LlmCompleteResult(text=raw["text"], usage=raw.get("usage"))
 
 
+def _parse_llm_json(text: str) -> Any:
+    trimmed = text.strip()
+    without_fence = trimmed.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    return json.loads(without_fence)
+
+
+def _parse_cv_data_from_llm(text: str) -> dict[str, Any]:
+    try:
+        parsed = _parse_llm_json(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM did not return valid JSON: {exc.msg}: line {exc.lineno} column {exc.colno} (char {exc.pos})") from exc
+
+    return validate_cv_data(parsed)
+
+
+def _resolve_extraction_max_tokens(source_text: str, configured: int | None) -> int:
+    if isinstance(configured, int) and configured > 0:
+        return configured
+    if len(source_text) > LARGE_CV_TEXT_CHAR_THRESHOLD:
+        return LARGE_CV_EXTRACTION_MAX_TOKENS
+    return DEFAULT_EXTRACTION_MAX_TOKENS
+
+
+def _build_parse_retry_prompt(base_prompt: str | None, error: str) -> str:
+    return "\n\n".join(
+        part
+        for part in [
+            base_prompt or "",
+            f"PREVIOUS LLM OUTPUT WAS NOT VALID JSON: {error}.",
+            "Return ONLY one complete valid JSON object matching the requested schema. Do not include markdown, comments, analysis, or trailing text.",
+        ]
+        if part
+    )
+
+
 async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -> TransposedCv:
     errors: list[str] = []
     source_text = ""
@@ -93,39 +133,64 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
     max_retries = input_.extraction.max_validation_retries if input_.extraction else None
     if max_retries is None:
         max_retries = 1
+    max_parse_retries = input_.extraction.max_parse_retries if input_.extraction else None
+    if max_parse_retries is None:
+        max_parse_retries = DEFAULT_PARSE_RETRIES
     user_prompt_override = file.user_prompt_override
 
     try:
         _emit_phase(input_, file.name, "extract-text")
         source_text = extract_text_from_bytes(file.bytes_, file.name, file.mime)
+        extraction_max_tokens = _resolve_extraction_max_tokens(
+            source_text,
+            input_.extraction.max_tokens if input_.extraction else None,
+        )
         for attempt in range(max_retries + 1):
             if attempt > 0:
                 _emit_phase(input_, file.name, "retry")
-            _emit_phase(input_, file.name, "extract-cv-llm")
-            llm_result = _coerce_llm_result(
-                await input_.llm.complete(
-                    system_prompt=build_system_prompt(),
-                    user_prompt=build_user_prompt(
-                        cv_text=source_text,
-                        source_file_name=file.name,
-                        user_prompt_override=user_prompt_override,
-                    ),
-                    max_tokens=8192,
-                    temperature=0.1,
-                    enable_reasoning=True if input_.extraction is None or input_.extraction.enable_reasoning is None else input_.extraction.enable_reasoning,
-                    reasoning_budget=input_.extraction.reasoning_budget if input_.extraction else None,
-                    on_delta=_on_delta(input_, file.name),
+            parse_prompt_override = user_prompt_override
+            profile = None
+            for parse_attempt in range(max_parse_retries + 1):
+                if parse_attempt > 0:
+                    _emit_phase(input_, file.name, "retry")
+                _emit_phase(input_, file.name, "extract-cv-llm")
+                llm_result = _coerce_llm_result(
+                    await input_.llm.complete(
+                        system_prompt=build_system_prompt(),
+                        user_prompt=build_user_prompt(
+                            cv_text=source_text,
+                            source_file_name=file.name,
+                            user_prompt_override=parse_prompt_override,
+                        ),
+                        max_tokens=extraction_max_tokens,
+                        temperature=0.1,
+                        enable_reasoning=True if input_.extraction is None or input_.extraction.enable_reasoning is None else input_.extraction.enable_reasoning,
+                        reasoning_budget=input_.extraction.reasoning_budget if input_.extraction else None,
+                        response_format="json",
+                        on_delta=_on_delta(input_, file.name),
+                    )
                 )
-            )
-            if llm_result.usage:
-                usage_in += int(llm_result.usage.get("inputTokens", llm_result.usage.get("input_tokens", 0)))
-                usage_out += int(llm_result.usage.get("outputTokens", llm_result.usage.get("output_tokens", 0)))
-            parsed = json.loads(llm_result.text)
-            profile = validate_cv_data(parsed)
+                if llm_result.usage:
+                    usage_in += int(llm_result.usage.get("inputTokens", llm_result.usage.get("input_tokens", 0)))
+                    usage_out += int(llm_result.usage.get("outputTokens", llm_result.usage.get("output_tokens", 0)))
+                try:
+                    profile = _parse_cv_data_from_llm(llm_result.text)
+                    break
+                except ValueError as exc:
+                    if parse_attempt >= max_parse_retries:
+                        raise
+                    parse_prompt_override = _build_parse_retry_prompt(user_prompt_override, str(exc))
+            if profile is None:
+                raise ValueError("LLM extraction failed without a parsed profile")
             if input_.stream_callbacks and input_.stream_callbacks.on_parsed_keys:
                 input_.stream_callbacks.on_parsed_keys(file.name, list(profile.keys()))
             _emit_phase(input_, file.name, "render-docx")
-            output_docx = render_docx(input_.template.base_docx, profile, contract)
+            output_docx = render_docx(
+                input_.template.base_docx,
+                profile,
+                contract,
+                renderer=input_.template.renderer or "generic",
+            )
             required = [section["label"] for section in contract["sections"] if section["required"]]
             _emit_phase(input_, file.name, "validate-page1")
             structure = validate_docx_structure(output_docx, required)
