@@ -59,7 +59,7 @@ Reste a fermer avant de considerer P1.2 comme bouclee:
 
 ## P1.3 — Backoffice marketplace + assets API
 
-Statut: **partiel**
+Statut: **minimum unblocker en place**
 
 Fondations deja presentes dans le repo:
 
@@ -69,19 +69,29 @@ Fondations deja presentes dans le repo:
 - [x] creation tenant + analyse template + scraping brand
 - [x] bridge `TenantConfig -> TemplateAssets`
 
+Deja en place pour le minimum unblocker:
+
+- [x] API read-only d'assets pour agents marketplace
+- [x] auth JWT RS256 pour cette API
+- [x] mapping explicite des claims identite -> `tenantKey` (`direct:` present, socle `ms:` / `gws:` pose)
+
 Manques critiques pour la phase marketplace:
 
 - [ ] portail backoffice dedie `admin.cv-transpose.com`
 - [ ] SSO Entra ID
 - [ ] SSO Google Workspace
-- [ ] API read-only d'assets pour agents marketplace
-- [ ] auth JWT RS256 pour cette API
-- [ ] mapping explicite des claims identite -> `tenantKey` (`ms:` / `gws:`)
 - [ ] workflow d'upload/publication adapte au backoffice marketplace
 
 ## P1.4 — Agent Microsoft 365 Copilot
 
-Statut: **non demarre**
+Statut: **en cours**
+
+Fondations deja presentes dans le repo:
+
+- [x] package Python partage `cv_transpose_marketplace` (claims -> `tenantKey`, fetch assets)
+- [x] wrapper `run_copilot_transpose(...)` pur Python au-dessus de `cv_transpose_core.transpose()`
+- [x] packaging in-memory DOCX / ZIP + card JSON minimale
+- [x] execution `persistence="ephemeral"` cote wrapper
 
 - [ ] agent declaratif Copilot Studio
 - [ ] action `transposeCvs` branchant le core Python
