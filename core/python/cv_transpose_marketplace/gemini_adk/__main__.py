@@ -8,7 +8,8 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cv_transpose_core import LlmCompleteResult
+from cv_transpose_core import BrandTokens, LlmCompleteResult, TemplateAssets
+from cv_transpose_marketplace.gemini import run_gemini_transpose
 from cv_transpose_marketplace.gemini_adk.tool import transpose_cvs
 from cv_transpose_marketplace.gemini_adk.types import GeminiToolFile, GeminiToolRequest
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer
@@ -34,13 +35,27 @@ def _generate_private_key_pem() -> str:
     ).decode("utf-8")
 
 
-async def main() -> None:
+def _load_fixture_template_assets(repo_root: Path) -> TemplateAssets:
+    return TemplateAssets(
+        manifest=json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text()),
+        base_docx=(repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes(),
+        brand=BrandTokens(
+            primary="#0F2137",
+            secondary="#23344A",
+            accent="#7DB7E1",
+            font_family="Lato",
+        ),
+    )
+
+
+async def run_offline_demo() -> dict:
     repo_root = _repo_root()
     expected_profile = json.loads(
         (repo_root / "core/fixtures/cv-001-junior-pm.expected-extraction.json").read_text()
     )
+    template_assets = _load_fixture_template_assets(repo_root)
     signer = RuntimeJwtIssuer(
-        issuer="gemini-ent.cv-transpose.com",
+        issuer="local-gemini.invalid",
         kid="local-gemini-key",
         private_key_pem=_generate_private_key_pem(),
     )
@@ -54,15 +69,26 @@ async def main() -> None:
             )
         ],
         user_prompt=None,
-        assets_base_url="https://cv-api.sent-tech.ca",
+        assets_base_url="https://local.invalid",
         assets_bearer_token=signer.mint_token(
             subject="user@workspace.example",
             tenant_key="gws:workspace.example",
             issued_at=1_715_708_800,
         ),
     )
-    result = await transpose_cvs(request, llm=FakeLlm(expected_profile))
-    payload = {
+
+    async def offline_run_gemini_transpose(**kwargs):
+        return await run_gemini_transpose(
+            **kwargs,
+            fetch_assets=lambda **_: template_assets,
+        )
+
+    result = await transpose_cvs(
+        request,
+        llm=FakeLlm(expected_profile),
+        run_fn=offline_run_gemini_transpose,
+    )
+    return {
         "tenantKey": result.tenant_key,
         "artifact": None
         if result.artifact is None
@@ -73,6 +99,10 @@ async def main() -> None:
         },
         "reportCard": result.report_card,
     }
+
+
+async def main() -> None:
+    payload = await run_offline_demo()
     print(json.dumps(payload, indent=2)[:1000])
 
 

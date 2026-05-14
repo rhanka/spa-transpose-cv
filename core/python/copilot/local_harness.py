@@ -8,7 +8,8 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cv_transpose_core import LlmCompleteResult
+from cv_transpose_core import BrandTokens, LlmCompleteResult, TemplateAssets
+from cv_transpose_marketplace.copilot import run_copilot_transpose
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer
 
 from .runtime import handle_transpose_cvs
@@ -34,7 +35,20 @@ def _generate_private_key_pem() -> str:
     ).decode("utf-8")
 
 
-async def main() -> None:
+def _load_fixture_template_assets(repo_root: Path) -> TemplateAssets:
+    return TemplateAssets(
+        manifest=json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text()),
+        base_docx=(repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes(),
+        brand=BrandTokens(
+            primary="#0F2137",
+            secondary="#23344A",
+            accent="#7DB7E1",
+            font_family="Lato",
+        ),
+    )
+
+
+async def run_offline_harness() -> dict:
     repo_root = _repo_root()
     payload = {
         "files": [
@@ -56,17 +70,30 @@ async def main() -> None:
     expected_profile = json.loads(
         (repo_root / "core/fixtures/cv-001-junior-pm.expected-extraction.json").read_text()
     )
+    template_assets = _load_fixture_template_assets(repo_root)
     signer = RuntimeJwtIssuer(
-        issuer="ms-copilot.cv-transpose.com",
+        issuer="local-ms-copilot.invalid",
         kid="local-harness-key",
         private_key_pem=_generate_private_key_pem(),
     )
-    response = await handle_transpose_cvs(
+
+    async def offline_run_copilot_transpose(**kwargs):
+        return await run_copilot_transpose(
+            **kwargs,
+            fetch_assets=lambda **_: template_assets,
+        )
+
+    return await handle_transpose_cvs(
         payload,
         llm=FakeLlm(expected_profile),
-        assets_base_url="https://cv-api.sent-tech.ca",
+        assets_base_url="https://local.invalid",
         signer=signer,
+        run_transpose=offline_run_copilot_transpose,
     )
+
+
+async def main() -> None:
+    response = await run_offline_harness()
     print(json.dumps(response, indent=2)[:1000])
 
 
