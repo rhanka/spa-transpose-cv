@@ -18,6 +18,7 @@ from .identity import (
 )
 from .jwt import RuntimeJwtIssuer, RuntimeJwtIssuerError
 from .runtime import build_output_artifact, run_marketplace_transpose
+from .settings import RuntimeSettings, RuntimeSettingsError, load_runtime_settings
 from .types import MarketplaceRunResult, OutputArtifact
 
 __all__ = [
@@ -32,6 +33,8 @@ __all__ = [
     "OutputArtifact",
     "RuntimeJwtIssuer",
     "RuntimeJwtIssuerError",
+    "RuntimeSettings",
+    "RuntimeSettingsError",
     "TenantNotConfiguredError",
     "build_output_artifact",
     "build_root_agent",
@@ -40,6 +43,7 @@ __all__ = [
     "derive_ms_tenant_key",
     "derive_tenant_key_from_claims",
     "fetch_template_assets",
+    "load_runtime_settings",
     "run_gemini_transpose",
     "run_marketplace_transpose",
     "run_copilot_transpose",

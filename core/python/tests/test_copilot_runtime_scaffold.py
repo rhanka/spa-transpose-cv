@@ -7,6 +7,7 @@ import pytest
 
 from cv_transpose_marketplace.copilot import CopilotActionResult, CopilotAttachment
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer
+from cv_transpose_marketplace.assets import TenantNotConfiguredError
 
 
 @pytest.fixture
@@ -103,3 +104,82 @@ def test_copilot_scaffold_artifacts_are_wired(repo_root) -> None:
     assert action["name"] == "transposeCvs"
     assert action["entrypoint"] == "runtime.handle_transpose_cvs"
     assert "tenant not configured" in instructions.lower()
+
+
+@pytest.mark.asyncio
+async def test_copilot_runtime_scaffold_loads_env_settings_when_not_passed(private_key_pem: str) -> None:
+    from copilot.runtime import handle_transpose_cvs
+
+    captured: dict[str, object] = {}
+
+    async def fake_run_copilot_transpose(**kwargs):
+        captured.update(kwargs)
+        return CopilotActionResult(
+            tenant_key="ms:123e4567-e89b-12d3-a456-426614174000",
+            attachments=[],
+            card={"type": "AdaptiveCard", "version": "1.5", "body": []},
+            transpose_output=None,  # type: ignore[arg-type]
+        )
+
+    response = await handle_transpose_cvs(
+        {
+            "files": [],
+            "context": {
+                "identity": {
+                    "tid": "123E4567-E89B-12D3-A456-426614174000",
+                    "upn": "user@example.com",
+                }
+            },
+        },
+        llm=object(),
+        env={
+            "CVT_COPILOT_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_COPILOT_JWT_ISSUER": "ms-copilot.cv-transpose.com",
+            "CVT_COPILOT_JWT_KID": "copilot-key",
+            "CVT_COPILOT_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        run_transpose=fake_run_copilot_transpose,
+    )
+
+    assert captured["assets_base_url"] == "https://cv-api.sent-tech.ca"
+    assert isinstance(captured["make_bearer_token"]("ms:123e4567-e89b-12d3-a456-426614174000", {"upn": "user@example.com"}), str)
+    assert response["tenantKey"] == "ms:123e4567-e89b-12d3-a456-426614174000"
+
+
+@pytest.mark.asyncio
+async def test_copilot_runtime_scaffold_maps_tenant_not_configured_error(private_key_pem: str) -> None:
+    from copilot.runtime import handle_transpose_cvs
+
+    async def fake_run_copilot_transpose(**kwargs):
+        raise TenantNotConfiguredError('Tenant "ms:123e4567-e89b-12d3-a456-426614174000" is not configured')
+
+    response = await handle_transpose_cvs(
+        {
+            "files": [],
+            "context": {
+                "identity": {
+                    "tid": "123E4567-E89B-12D3-A456-426614174000",
+                    "upn": "user@example.com",
+                }
+            },
+        },
+        llm=object(),
+        env={
+            "CVT_COPILOT_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_COPILOT_JWT_ISSUER": "ms-copilot.cv-transpose.com",
+            "CVT_COPILOT_JWT_KID": "copilot-key",
+            "CVT_COPILOT_JWT_PRIVATE_KEY_PEM": private_key_pem,
+            "CVT_COPILOT_ONBOARDING_URL": "https://admin.cv-transpose.com/onboard?source=ms",
+        },
+        run_transpose=fake_run_copilot_transpose,
+    )
+
+    assert response == {
+        "tenantKey": "ms:123e4567-e89b-12d3-a456-426614174000",
+        "attachments": [],
+        "error": "tenant_not_configured",
+        "message": "Votre entreprise n'a pas encore configure de template. Contactez votre admin.",
+        "onboardingUrl": "https://admin.cv-transpose.com/onboard?source=ms",
+        "adaptiveCard": response["adaptiveCard"],
+    }
+    assert response["adaptiveCard"]["body"][1]["text"] == "Votre entreprise n'a pas encore configure de template. Contactez votre admin."
