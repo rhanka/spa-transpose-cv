@@ -2,6 +2,10 @@
 
 Python port of `@cv-transpose/core` for marketplace runtimes.
 
+The same folder now also hosts `cv_transpose_marketplace`, a small shared
+helper package for marketplace adapters (tenant-key derivation from identity
+claims, backoffice asset loading).
+
 ## Current Scope
 
 - Mirrors `transpose()` v0.2 for the Scalian fixture path.
