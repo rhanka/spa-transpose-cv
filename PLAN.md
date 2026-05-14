@@ -102,7 +102,14 @@ Fondations deja presentes dans le repo:
 
 ## P1.5 — Agent Gemini Enterprise
 
-Statut: **non demarre**
+Statut: **en cours**
+
+Fondations deja presentes dans le repo:
+
+- [x] runtime Python partage pour artefact DOCX / ZIP
+- [x] wrapper `run_gemini_transpose(...)` pur Python au-dessus de `cv_transpose_core.transpose()`
+- [x] resolution `gws:<domain>` via claims Workspace
+- [x] execution `persistence="ephemeral"` cote wrapper
 
 - [ ] agent Python ADK
 - [ ] integration Vertex AI Agent Builder / Agentspace
