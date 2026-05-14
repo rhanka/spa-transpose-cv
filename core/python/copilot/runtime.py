@@ -41,6 +41,7 @@ def _encode_action_response(result: CopilotActionResult) -> dict[str, Any]:
     return {
         "tenantKey": result.tenant_key,
         "adaptiveCard": result.card,
+        "alignmentReport": result.alignment_report,
         "attachments": [
             {
                 "name": attachment.name,

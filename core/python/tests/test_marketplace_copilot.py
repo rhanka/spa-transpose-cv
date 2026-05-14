@@ -61,6 +61,9 @@ async def test_run_copilot_transpose_returns_single_docx_attachment(repo_root, e
     assert result.attachments[0].bytes_[:4] == b"PK\x03\x04"
     assert result.card["type"] == "AdaptiveCard"
     assert result.card["body"][0]["text"] == "CV Transpose"
+    assert result.alignment_report["files"] == 1
+    assert "alignmentScore" in result.alignment_report
+    assert any(fact["title"] == "Alignment" for fact in result.card["body"][1]["facts"])
 
 
 @pytest.mark.asyncio

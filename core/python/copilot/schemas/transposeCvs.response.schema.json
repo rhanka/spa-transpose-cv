@@ -17,6 +17,17 @@
         }
       }
     },
+    "alignmentReport": {
+      "type": "object",
+      "properties": {
+        "files": { "type": "integer" },
+        "succeeded": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "warnings": { "type": "integer" },
+        "alignmentScore": { "type": "integer" },
+        "items": { "type": "array" }
+      }
+    },
     "error": { "type": "string" },
     "message": { "type": "string" },
     "onboardingUrl": { "type": ["string", "null"] }

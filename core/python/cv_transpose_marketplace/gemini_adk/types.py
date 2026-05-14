@@ -27,5 +27,5 @@ class GeminiToolRequest:
 class GeminiToolResult:
     tenant_key: str
     artifact: OutputArtifact | None
-    report_card: dict[str, int]
+    report_card: dict[str, object]
     results: list[TransposedCv]

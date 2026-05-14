@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, Callable, Mapping, Sequence
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -10,6 +10,7 @@ from cv_transpose_core.types import TransposeInput
 
 from .assets import fetch_template_assets
 from .identity import derive_tenant_key_from_claims
+from .report import build_alignment_report
 
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -29,6 +30,16 @@ class CopilotActionResult:
     attachments: list[CopilotAttachment]
     card: dict[str, Any]
     transpose_output: TransposeOutput
+    alignment_report: dict[str, Any] = field(
+        default_factory=lambda: {
+            "files": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "warnings": 0,
+            "alignmentScore": 0,
+            "items": [],
+        }
+    )
 
 
 def _apply_user_prompt(files: Sequence[InputFile], user_prompt: str | None) -> list[InputFile]:
@@ -80,9 +91,27 @@ def _build_attachments(transpose_output: TransposeOutput) -> list[CopilotAttachm
 
 
 def _build_adaptive_card(transpose_output: TransposeOutput) -> dict[str, Any]:
-    successful = sum(1 for result in transpose_output.results if not result.errors)
-    failed = len(transpose_output.results) - successful
-    warnings = sum(len(result.alignment_report.warnings) for result in transpose_output.results)
+    report = build_alignment_report(transpose_output.results)
+    item_blocks = []
+    for item in report["items"][:5]:
+        sections = ", ".join(item["sectionsDetected"]) or "-"
+        warnings = ", ".join(item["warnings"]) or "none"
+        item_blocks.extend(
+            [
+                {
+                    "type": "TextBlock",
+                    "text": str(item["outputDocxName"]),
+                    "weight": "Bolder",
+                    "wrap": True,
+                },
+                {
+                    "type": "TextBlock",
+                    "text": f"Sections: {sections} | Warnings: {warnings}",
+                    "wrap": True,
+                },
+            ]
+        )
+
     return {
         "type": "AdaptiveCard",
         "version": "1.5",
@@ -96,12 +125,14 @@ def _build_adaptive_card(transpose_output: TransposeOutput) -> dict[str, Any]:
             {
                 "type": "FactSet",
                 "facts": [
-                    {"title": "Files", "value": str(len(transpose_output.results))},
-                    {"title": "Succeeded", "value": str(successful)},
-                    {"title": "Failed", "value": str(failed)},
-                    {"title": "Warnings", "value": str(warnings)},
+                    {"title": "Files", "value": str(report["files"])},
+                    {"title": "Succeeded", "value": str(report["succeeded"])},
+                    {"title": "Failed", "value": str(report["failed"])},
+                    {"title": "Warnings", "value": str(report["warnings"])},
+                    {"title": "Alignment", "value": f'{report["alignmentScore"]}%'},
                 ],
             },
+            *item_blocks,
         ],
     }
 
@@ -133,9 +164,11 @@ async def run_copilot_transpose(
             llm=llm,
         )
     )
+    alignment_report = build_alignment_report(transpose_output.results)
     return CopilotActionResult(
         tenant_key=tenant_key,
         attachments=_build_attachments(transpose_output),
         card=_build_adaptive_card(transpose_output),
+        alignment_report=alignment_report,
         transpose_output=transpose_output,
     )
