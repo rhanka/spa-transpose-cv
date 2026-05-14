@@ -20,7 +20,9 @@
         "files": { "type": "integer" },
         "succeeded": { "type": "integer" },
         "failed": { "type": "integer" },
-        "warnings": { "type": "integer" }
+        "warnings": { "type": "integer" },
+        "alignmentScore": { "type": "integer" },
+        "items": { "type": "array" }
       }
     },
     "error": { "type": "string" },

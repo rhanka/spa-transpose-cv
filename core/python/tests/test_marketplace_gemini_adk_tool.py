@@ -80,4 +80,16 @@ async def test_transpose_cvs_maps_request_and_builds_report_card() -> None:
         "succeeded": 1,
         "failed": 0,
         "warnings": 1,
+        "alignmentScore": 100,
+        "items": [
+            {
+                "sourceFileName": "candidate.pdf",
+                "outputDocxName": "Candidate.docx",
+                "validationPassed": True,
+                "warnings": ["trimmed title"],
+                "sectionsDetected": ["experiences"],
+                "missingRequiredSections": [],
+                "retriesUsed": 0,
+            }
+        ],
     }

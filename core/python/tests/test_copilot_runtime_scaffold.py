@@ -43,6 +43,7 @@ async def test_copilot_runtime_scaffold_maps_payload_and_encodes_response(privat
                 )
             ],
             card={"type": "AdaptiveCard", "version": "1.5", "body": []},
+            alignment_report={"files": 1, "succeeded": 1, "failed": 0, "warnings": 0, "alignmentScore": 100, "items": []},
             transpose_output=None,  # type: ignore[arg-type]
         )
 
@@ -84,6 +85,7 @@ async def test_copilot_runtime_scaffold_maps_payload_and_encodes_response(privat
     assert response == {
         "tenantKey": "ms:123e4567-e89b-12d3-a456-426614174000",
         "adaptiveCard": {"type": "AdaptiveCard", "version": "1.5", "body": []},
+        "alignmentReport": {"files": 1, "succeeded": 1, "failed": 0, "warnings": 0, "alignmentScore": 100, "items": []},
         "attachments": [
             {
                 "name": "result.docx",
@@ -118,6 +120,7 @@ async def test_copilot_runtime_scaffold_loads_env_settings_when_not_passed(priva
             tenant_key="ms:123e4567-e89b-12d3-a456-426614174000",
             attachments=[],
             card={"type": "AdaptiveCard", "version": "1.5", "body": []},
+            alignment_report={"files": 0, "succeeded": 0, "failed": 0, "warnings": 0, "alignmentScore": 0, "items": []},
             transpose_output=None,  # type: ignore[arg-type]
         )
 
