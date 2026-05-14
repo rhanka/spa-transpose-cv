@@ -53,9 +53,6 @@ FROM base AS build
 RUN npm run build
 
 FROM node:24-alpine3.22 AS production
-ARG BUILD_VERSION=dev
-ARG BUILD_COMMIT=unknown
-ARG BUILD_REF=local
 # Same scratch-space confinement as the base stage — keep native tools out of the writable layer.
 ENV HOME=/tmp/home \
     XDG_CONFIG_HOME=/tmp/xdg-config \
@@ -64,10 +61,7 @@ ENV HOME=/tmp/home \
     TMPDIR=/tmp \
     MAGICK_TMPDIR=/tmp \
     NPM_CONFIG_CACHE=/tmp/npm-cache \
-    SAL_USE_VCLPLUGIN=svp \
-    BUILD_VERSION=${BUILD_VERSION} \
-    BUILD_COMMIT=${BUILD_COMMIT} \
-    BUILD_REF=${BUILD_REF}
+    SAL_USE_VCLPLUGIN=svp
 RUN npm install -g npm@latest
 RUN apk add --no-cache \
     fontconfig \

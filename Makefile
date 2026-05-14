@@ -27,9 +27,6 @@ export MINIO_API_PORT ?= 9000
 export MINIO_CONSOLE_PORT ?= 9001
 
 export API_VERSION    ?= $(shell (git ls-files api core package.json package-lock.json tsconfig.base.json 2>/dev/null || find api core package.json package-lock.json tsconfig.base.json -type f 2>/dev/null) | LC_ALL=C sort | xargs cat 2>/dev/null | sha1sum | sed 's/\(......\).*/\1/')
-export BUILD_VERSION  ?= $(API_VERSION)
-export BUILD_COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
-export BUILD_REF      ?= $(shell git describe --tags --exact-match 2>/dev/null || git branch --show-current 2>/dev/null || echo local)
 export API_IMAGE_NAME ?= transpose-cv-api
 
 .DEFAULT_GOAL := help

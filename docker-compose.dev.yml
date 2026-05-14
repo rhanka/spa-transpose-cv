@@ -18,9 +18,6 @@ services:
       - core_node_modules:/app/core/typescript/node_modules
       - api_data:/data
     environment:
-      - BUILD_VERSION=${BUILD_VERSION:-dev}
-      - BUILD_COMMIT=${BUILD_COMMIT:-unknown}
-      - BUILD_REF=${BUILD_REF:-local}
       - TENANT_STORAGE_BACKEND=${DEV_TENANT_STORAGE_BACKEND:-s3}
       - TENANT_S3_BUCKET=${DEV_TENANT_S3_BUCKET:-cv-transpose-dev}
       - TENANT_S3_REGION=${DEV_TENANT_S3_REGION:-fr-par}
@@ -86,10 +83,6 @@ services:
       context: .
       dockerfile: api/Dockerfile
       target: ${TARGET:-development}
-      args:
-        BUILD_VERSION: ${BUILD_VERSION:-dev}
-        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
-        BUILD_REF: ${BUILD_REF:-local}
     depends_on:
       minio-init:
         condition: service_completed_successfully
