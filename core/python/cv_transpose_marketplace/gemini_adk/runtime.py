@@ -4,7 +4,7 @@ import base64
 import time
 from typing import Any, Mapping, Sequence
 
-from cv_transpose_marketplace.assets import TenantNotConfiguredError
+from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.identity import derive_tenant_key_from_claims
 from cv_transpose_marketplace.settings import load_runtime_settings
 
@@ -15,6 +15,7 @@ from .types import GeminiToolFile, GeminiToolRequest, GeminiToolResult
 
 GEMINI_ENV_PREFIX = "CVT_GEMINI"
 TENANT_NOT_CONFIGURED_MESSAGE = "Votre entreprise n'a pas encore configure de template. Contactez votre admin."
+ASSETS_AUTH_FAILED_MESSAGE = "L'authentification des assets template a echoue. Contactez le support."
 
 
 def _parse_input_files(payload_files: Sequence[Mapping[str, Any]]) -> list[GeminiToolFile]:
@@ -61,6 +62,17 @@ def _build_tenant_not_configured_response(tenant_key: str, onboarding_url: str |
     }
 
 
+def _build_assets_auth_failed_response(tenant_key: str, reason: str | None) -> dict[str, Any]:
+    return {
+        "tenantKey": tenant_key,
+        "artifact": None,
+        "reportCard": {"files": 0, "succeeded": 0, "failed": 0, "warnings": 0},
+        "error": "assets_auth_failed",
+        "reason": reason,
+        "message": ASSETS_AUTH_FAILED_MESSAGE,
+    }
+
+
 async def handle_gemini_request(
     payload: Mapping[str, Any],
     *,
@@ -94,6 +106,8 @@ async def handle_gemini_request(
         return _encode_tool_result(result)
     except TenantNotConfiguredError:
         return _build_tenant_not_configured_response(tenant_key, settings.onboarding_url)
+    except InvalidJwtError as exc:
+        return _build_assets_auth_failed_response(tenant_key, exc.reason)
 
 
 def handle_jwks_request(*, env: Mapping[str, str]) -> dict[str, object]:

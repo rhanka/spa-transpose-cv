@@ -6,7 +6,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cv_transpose_marketplace.assets import TenantNotConfiguredError
+from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.gemini_adk.types import GeminiToolResult
 from cv_transpose_marketplace.types import OutputArtifact
 
@@ -139,3 +139,36 @@ async def test_handle_gemini_request_rejects_missing_primary_domain(private_key_
                 "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
             },
         )
+
+
+@pytest.mark.asyncio
+async def test_handle_gemini_request_maps_invalid_jwt_error(private_key_pem: str) -> None:
+    from cv_transpose_marketplace.gemini_adk.runtime import handle_gemini_request
+
+    async def fake_transpose_tool(request, *, llm):
+        raise InvalidJwtError(resource="brand", reason="iss")
+
+    response = await handle_gemini_request(
+        {
+            "files": [],
+            "context": {
+                "identity": {
+                    "hd": "workspace.example",
+                    "email": "user@workspace.example",
+                }
+            },
+        },
+        llm=object(),
+        env={
+            "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_GEMINI_JWT_ISSUER": "gemini-ent.runtime.sent-tech.ca",
+            "CVT_GEMINI_JWT_KID": "gemini-key",
+            "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        transpose_tool=fake_transpose_tool,
+    )
+
+    assert response["tenantKey"] == "gws:workspace.example"
+    assert response["artifact"] is None
+    assert response["error"] == "assets_auth_failed"
+    assert response["reason"] == "iss"
