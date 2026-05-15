@@ -139,6 +139,7 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
     user_prompt_override = file.user_prompt_override
 
     try:
+        validate_base_docx(input_.template.base_docx)
         _emit_phase(input_, file.name, "extract-text")
         source_text = extract_text_from_bytes(file.bytes_, file.name, file.mime)
         extraction_max_tokens = _resolve_extraction_max_tokens(
@@ -237,7 +238,6 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
 
 async def transpose(input_: TransposeInput) -> TransposeOutput:
     contract = manifest_to_contract(input_.template.manifest, input_.template.brand)
-    validate_base_docx(input_.template.base_docx)
     results = []
     for file in input_.files:
         results.append(await _process_one(file, input_, contract))

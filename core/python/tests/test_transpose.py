@@ -290,31 +290,38 @@ async def test_failed_transpose_profiles_have_isolated_fallback_lists(repo_root)
 
 
 @pytest.mark.asyncio
-async def test_transpose_raises_for_unreadable_base_docx_before_llm(repo_root, expected_profile):
+async def test_transpose_captures_unreadable_base_docx_per_file(repo_root, expected_profile):
     class RecordingLlm:
         def __init__(self):
-            self.called = False
+            self.calls = 0
 
         async def complete(self, **kwargs):
-            self.called = True
+            self.calls += 1
             return LlmCompleteResult(text=json.dumps(expected_profile), usage=None)
 
     manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
     cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
     llm = RecordingLlm()
 
-    with pytest.raises(ValueError, match="base_docx"):
-        await transpose(
-            TransposeInput(
-                files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
-                template=TemplateAssets(
-                    manifest=manifest,
-                    base_docx=b"not a docx",
-                    brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
-                ),
-                persistence="ephemeral",
-                llm=llm,
-            )
+    result = await transpose(
+        TransposeInput(
+            files=[
+                InputFile(name="first.pdf", bytes_=cv, mime="application/pdf"),
+                InputFile(name="second.pdf", bytes_=cv, mime="application/pdf"),
+            ],
+            template=TemplateAssets(
+                manifest=manifest,
+                base_docx=b"not a docx",
+                brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+            ),
+            persistence="ephemeral",
+            llm=llm,
         )
+    )
 
-    assert llm.called is False
+    assert llm.calls == 0
+    assert len(result.results) == 2
+    assert result.results[0].errors == ["base_docx_unreadable"]
+    assert result.results[1].errors == ["base_docx_unreadable"]
+    assert result.results[0].profile["name"] == "Candidate"
+    assert result.results[1].profile["name"] == "Candidate"
