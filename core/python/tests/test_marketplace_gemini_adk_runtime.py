@@ -242,6 +242,65 @@ async def test_handle_gemini_request_maps_invalid_jwt_error(private_key_pem: str
     assert response["reason"] == "iss"
 
 
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        ({}, "context"),
+        ({"context": "not-a-map"}, "context"),
+        ({"context": {}}, "identity"),
+        ({"context": {"identity": "not-a-map"}}, "identity"),
+        (
+            {"context": {"identity": {"hd": "workspace.example"}}, "files": "not-a-list"},
+            "files",
+        ),
+        (
+            {
+                "context": {"identity": {"hd": "workspace.example", "email": "u@x"}},
+                "files": [{"name": "cv.pdf", "contentType": "application/pdf"}],
+            },
+            "bytesBase64",
+        ),
+        (
+            {
+                "context": {"identity": {"hd": "workspace.example", "email": "u@x"}},
+                "files": [{"name": "cv.pdf", "bytesBase64": "@@@", "contentType": "application/pdf"}],
+            },
+            "base64",
+        ),
+        (
+            {
+                "context": {"identity": {"hd": "workspace.example", "email": "u@x"}},
+                "files": [],
+                "userPrompt": 12,
+            },
+            "userPrompt",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_handle_gemini_request_rejects_malformed_payload(
+    private_key_pem: str, payload: dict, match: str
+) -> None:
+    from cv_transpose_marketplace.gemini_adk.runtime import handle_gemini_request
+    from cv_transpose_marketplace.validation import MarketplaceInputError
+
+    async def fake_transpose_tool(request, *, llm):  # pragma: no cover - should not run
+        raise AssertionError("transpose_tool should not be invoked when payload is malformed")
+
+    with pytest.raises(MarketplaceInputError, match=match):
+        await handle_gemini_request(
+            payload,
+            llm=object(),
+            env={
+                "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+                "CVT_GEMINI_JWT_ISSUER": "gemini-ent.runtime.sent-tech.ca",
+                "CVT_GEMINI_JWT_KID": "gemini-key",
+                "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+            },
+            transpose_tool=fake_transpose_tool,
+        )
+
+
 @pytest.mark.asyncio
 async def test_handle_gemini_request_maps_assets_api_error(private_key_pem: str) -> None:
     from cv_transpose_marketplace.gemini_adk.runtime import handle_gemini_request
