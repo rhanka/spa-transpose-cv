@@ -15,7 +15,7 @@ const config = {
       handleUnseenRoutes: 'ignore',
     },
   },
-  preprocess: vitePreprocess(),
+  preprocess: vitePreprocess({ style: false }),
 };
 
 export default config;
