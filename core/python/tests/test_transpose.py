@@ -1,3 +1,4 @@
+import importlib
 import json
 
 import pytest
@@ -12,6 +13,8 @@ from cv_transpose_core import (
     transpose,
 )
 from cv_transpose_core.types import LlmCompleteResult
+
+transpose_module = importlib.import_module("cv_transpose_core.transpose")
 
 
 class FakeLlm:
@@ -179,6 +182,97 @@ async def test_transpose_honors_extraction_overrides_for_max_tokens_and_parse_re
     assert len(llm.calls) == 3
     assert [call["max_tokens"] for call in llm.calls] == [1234, 1234, 1234]
     assert item.usage.total_tokens == 8
+
+
+@pytest.mark.asyncio
+async def test_transpose_retries_on_page1_warnings(repo_root, expected_profile, monkeypatch):
+    class WarningLlm:
+        def __init__(self):
+            self.calls = []
+
+        async def complete(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"text": json.dumps(expected_profile), "usage": {"inputTokens": 2, "outputTokens": 3}}
+
+    warnings_seen = []
+
+    def fake_validate_page1(_docx_bytes: bytes, *, experience_section_label: str | None, sector_section_label: str | None):
+        warnings_seen.append((experience_section_label, sector_section_label))
+        if len(warnings_seen) == 1:
+            return {"warnings": ["Page 1 overflow: SECTOR EXPERIENCE not found on page 1"]}
+        return {"warnings": []}
+
+    monkeypatch.setattr(transpose_module, "validate_page1", fake_validate_page1)
+
+    manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
+    base_docx = (repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes()
+    cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
+    llm = WarningLlm()
+
+    result = await transpose(
+        TransposeInput(
+            files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
+            template=TemplateAssets(
+                manifest=manifest,
+                base_docx=base_docx,
+                brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+            ),
+            persistence="ephemeral",
+            llm=llm,
+        )
+    )
+
+    item = result.results[0]
+    assert item.errors == []
+    assert item.alignment_report.validation_passed is True
+    assert item.alignment_report.warnings == []
+    assert item.alignment_report.retries_used == 1
+    assert len(llm.calls) == 2
+    assert "VALIDATION ERRORS: Page 1 overflow: SECTOR EXPERIENCE not found on page 1." in llm.calls[1]["user_prompt"]
+    assert warnings_seen[0][0]
+    assert warnings_seen[0][1]
+
+
+@pytest.mark.asyncio
+async def test_transpose_marks_validation_failed_when_page1_warnings_persist(repo_root, expected_profile, monkeypatch):
+    class WarningLlm:
+        def __init__(self):
+            self.calls = []
+
+        async def complete(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"text": json.dumps(expected_profile), "usage": {"inputTokens": 1, "outputTokens": 1}}
+
+    def fake_validate_page1(_docx_bytes: bytes, *, experience_section_label: str | None, sector_section_label: str | None):
+        return {"warnings": ["Page 1 overflow: SECTOR EXPERIENCE not found on page 1"]}
+
+    monkeypatch.setattr(transpose_module, "validate_page1", fake_validate_page1)
+
+    manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
+    base_docx = (repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes()
+    cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
+    llm = WarningLlm()
+
+    result = await transpose(
+        TransposeInput(
+            files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
+            template=TemplateAssets(
+                manifest=manifest,
+                base_docx=base_docx,
+                brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+            ),
+            persistence="ephemeral",
+            llm=llm,
+            extraction=ExtractionOptions(max_validation_retries=0),
+        )
+    )
+
+    item = result.results[0]
+    assert item.errors == []
+    assert item.alignment_report.validation_passed is False
+    assert item.alignment_report.warnings == ["Page 1 overflow: SECTOR EXPERIENCE not found on page 1"]
+    assert item.alignment_report.retries_used == 0
+    assert len(llm.calls) == 1
 
 
 @pytest.mark.asyncio
