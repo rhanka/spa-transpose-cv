@@ -30,7 +30,7 @@ chemin critique de ce plan.
 
 ## P1.2 — Python core pour runtimes marketplace
 
-Statut: **en qualification**
+Statut: **qualification fermee**
 
 Constat repo:
 
@@ -53,8 +53,8 @@ Reste a fermer avant de considerer P1.2 comme bouclee:
 - [x] aligner le plumbing `validate-page1` vs TS (`warnings`, `validation_passed`, retries, feedback prompt)
 - [x] realigner le fail-soft sur `base_docx` illisible (per-file au lieu d'une exception top-level)
 - [x] arbitrer le contrat `.doc` (`application/msword`) cote Python marketplace
-- [ ] etendre l'equivalence au-dela du golden Scalian unique (retries, callbacks, erreurs)
-- [ ] qualifier proprement la consommation du port Python par les wrappers marketplace
+- [x] etendre l'equivalence au-dela du golden Scalian unique (retries, callbacks, erreurs)
+- [x] qualifier proprement la consommation du port Python par les wrappers marketplace
 - [x] figer ce qui est explicitement hors scope P1.2 pour eviter les glissements
   - detector page-1 concret en Python reste un no-op pur; une heuristique sandbox-safe ne sera ajoutee que si un besoin marketplace reel l'impose
 
