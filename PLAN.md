@@ -119,6 +119,10 @@ Fondations deja presentes dans le repo:
 - [x] cache court in-process des assets template cote runtime (TTL configurable, 300 s par defaut)
 - [x] bundle deterministe local Gemini ADK
 - [x] surface de tool JSON-friendly pour l'agent ADK local
+- [x] surface LLM-facing du tool `transpose_cvs` (function declaration +
+      factory `make_transpose_cvs_tool` pour Agent(tools=[]))
+- [x] validation explicite du payload runtime au bord (MarketplaceInputError)
+- [x] validation forte du claim `hd` Workspace (forme DNS)
 
 - [ ] agent Python ADK
 - [ ] integration Vertex AI Agent Builder / Agentspace
