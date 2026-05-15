@@ -7,7 +7,14 @@ from io import BytesIO
 import pytest
 
 from cv_transpose_core import BrandTokens, InputFile, TemplateAssets, transpose
-from cv_transpose_core.types import LlmCompleteResult
+from cv_transpose_core.types import (
+    AlignmentReport,
+    DetectedFields,
+    LlmCompleteResult,
+    TransposeOutput,
+    TransposedCv,
+    Usage,
+)
 from cv_transpose_marketplace.copilot import run_copilot_transpose
 from cv_transpose_marketplace.validation import MarketplaceInputError
 
@@ -18,6 +25,31 @@ class FakeLlm:
 
     async def complete(self, **kwargs):
         return LlmCompleteResult(text=json.dumps(self.profile), usage={"inputTokens": 10, "outputTokens": 20})
+
+
+def make_warning_result() -> TransposedCv:
+    return TransposedCv(
+        source_file_name="candidate.pdf",
+        output_docx_name="Candidate.docx",
+        output_docx=b"PK\x03\x04docx",
+        profile={"name": "Candidate"},
+        source_text="cv text",
+        usage=Usage(input_tokens=1, output_tokens=2, total_tokens=3),
+        alignment_report=AlignmentReport(
+            validation_passed=False,
+            warnings=["Page 1 overflow: sector section missing from page 1"],
+            detected_fields=DetectedFields(
+                experience_count=1,
+                education_count=1,
+                skill_buckets=1,
+                languages_count=1,
+            ),
+            page1_sections_found=["WORK EXPERIENCE"],
+            missing_required_sections=[],
+            retries_used=1,
+        ),
+        errors=[],
+    )
 
 
 @pytest.mark.asyncio
@@ -131,6 +163,52 @@ async def test_run_copilot_transpose_passes_user_prompt_override(repo_root, expe
 
     assert result.transpose_output.results[0].errors == []
     assert seen_prompt == ["TARGET: Contoso"]
+
+
+@pytest.mark.asyncio
+async def test_run_copilot_transpose_propagates_warning_alignment_report(repo_root, expected_profile) -> None:
+    manifest = json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text())
+    base_docx = (repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes()
+    cv = (repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes()
+
+    async def fake_transpose(_input):
+        return TransposeOutput(results=[make_warning_result()])
+
+    result = await run_copilot_transpose(
+        claims={"tid": "123e4567-e89b-12d3-a456-426614174000"},
+        files=[InputFile(name="cv-001-junior-pm.pdf", bytes_=cv, mime="application/pdf")],
+        llm=FakeLlm(expected_profile),
+        assets_base_url="https://cv-api.sent-tech.ca",
+        make_bearer_token=lambda tenant_key, claims: "signed.jwt.token",
+        fetch_assets=lambda **kwargs: TemplateAssets(
+            manifest=manifest,
+            base_docx=base_docx,
+            brand=BrandTokens(primary="#0F2137", secondary="#23344A", accent="#7DB7E1", font_family="Lato"),
+        ),
+        transpose_fn=fake_transpose,
+    )
+
+    assert result.alignment_report == {
+        "files": 1,
+        "succeeded": 1,
+        "failed": 0,
+        "warnings": 1,
+        "alignmentScore": 0,
+        "items": [
+            {
+                "sourceFileName": "candidate.pdf",
+                "outputDocxName": "Candidate.docx",
+                "validationPassed": False,
+                "warnings": ["Page 1 overflow: sector section missing from page 1"],
+                "sectionsDetected": ["WORK EXPERIENCE"],
+                "missingRequiredSections": [],
+                "retriesUsed": 1,
+            }
+        ],
+    }
+    facts = {fact["title"]: fact["value"] for fact in result.card["body"][1]["facts"]}
+    assert facts["Warnings"] == "1"
+    assert facts["Alignment"] == "0%"
 
 
 @pytest.mark.asyncio
