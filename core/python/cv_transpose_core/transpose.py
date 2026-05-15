@@ -19,7 +19,7 @@ from .types import (
     TransposeOutput,
     Usage,
 )
-from .validate import validate_docx_structure
+from .validate import validate_docx_structure, validate_page1
 
 DEFAULT_EXTRACTION_MAX_TOKENS = 16_000
 LARGE_CV_EXTRACTION_MAX_TOKENS = 32_000
@@ -78,6 +78,20 @@ def _detected_fields(profile: dict[str, Any]) -> DetectedFields:
         skill_buckets=len(profile.get("technicalSkills", [])),
         languages_count=len(profile.get("languages", [])),
     )
+
+
+def _primary_experience_section_label(contract: dict[str, Any]) -> str | None:
+    for section in contract["sections"]:
+        if section["key"] in {"experience", "selectedExperience", "additionalExperience"}:
+            return section["label"]
+    return None
+
+
+def _primary_sector_section_label(contract: dict[str, Any]) -> str | None:
+    for section in contract["sections"]:
+        if section["key"] in {"sectorSkills", "sectorExperience"}:
+            return section["label"]
+    return None
 
 
 def _coerce_llm_result(raw: LlmCompleteResult | dict[str, Any]) -> LlmCompleteResult:
@@ -194,10 +208,15 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
             )
             required = [section["label"] for section in contract["sections"] if section["required"]]
             _emit_phase(input_, file.name, "validate-page1")
+            page1 = validate_page1(
+                output_docx,
+                experience_section_label=_primary_experience_section_label(contract),
+                sector_section_label=_primary_sector_section_label(contract),
+            )
             structure = validate_docx_structure(output_docx, required)
             report = AlignmentReport(
-                validation_passed=len(structure["missing"]) == 0,
-                warnings=[],
+                validation_passed=len(page1["warnings"]) == 0 and len(structure["missing"]) == 0,
+                warnings=page1["warnings"],
                 detected_fields=_detected_fields(profile),
                 page1_sections_found=structure["found"],
                 missing_required_sections=structure["missing"],
@@ -206,7 +225,12 @@ async def _process_one(file, input_: TransposeInput, contract: dict[str, Any]) -
             if report.validation_passed or attempt >= max_retries:
                 break
             retries_used += 1
-            feedback = "; ".join([f'Missing required section "{s}"' for s in report.missing_required_sections])
+            feedback = "; ".join(
+                [
+                    *report.warnings,
+                    *[f'Missing required section "{s}"' for s in report.missing_required_sections],
+                ]
+            )
             user_prompt_override = "\n\n".join(
                 part
                 for part in [
