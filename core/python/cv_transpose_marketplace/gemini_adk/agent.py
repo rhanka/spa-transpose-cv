@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .tool import transpose_cvs_payload
+from .tool import build_transpose_cvs_function_declaration, transpose_cvs_payload
 
 
 def _tool_schema_path(filename: str) -> Path:
@@ -31,6 +31,7 @@ def build_root_agent():
             "description": "Transpose attached CVs into the enterprise DOCX template.",
             "tool_names": ["transpose_cvs"],
             "tool_entrypoint": "transpose_cvs_payload",
+            "function_declarations": [build_transpose_cvs_function_declaration()],
             "request_schema": _load_tool_schema("request.schema.json"),
             "response_schema": _load_tool_schema("response.schema.json"),
             "instruction": build_agent_instruction(),
