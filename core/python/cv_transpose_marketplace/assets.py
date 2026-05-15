@@ -13,6 +13,16 @@ class AssetsApiError(RuntimeError):
     pass
 
 
+class InvalidJwtError(AssetsApiError):
+    def __init__(self, *, resource: str, reason: str | None = None) -> None:
+        self.resource = resource
+        self.reason = reason
+        message = f"Assets API rejected bearer token for {resource}"
+        if reason:
+            message = f"{message} ({reason})"
+        super().__init__(message)
+
+
 class TenantNotConfiguredError(AssetsApiError):
     pass
 
@@ -22,6 +32,23 @@ UrlOpen = Callable[..., Any]
 
 def _build_asset_url(base_url: str, tenant_key: str, resource: str) -> str:
     return f"{base_url.rstrip('/')}/api/v1/tenants/{quote(tenant_key, safe='')}/{resource}"
+
+
+def _read_invalid_jwt_reason(exc: HTTPError) -> str | None:
+    try:
+        body = exc.read()
+    except Exception:
+        return None
+    if not body:
+        return None
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if payload.get("error") != "invalid_jwt":
+        return None
+    reason = payload.get("reason")
+    return str(reason) if isinstance(reason, str) and reason.strip() else None
 
 
 def _read_asset(
@@ -44,6 +71,8 @@ def _read_asset(
     except HTTPError as exc:
         if exc.code == 404:
             raise TenantNotConfiguredError(f'Tenant "{tenant_key}" is not configured') from exc
+        if exc.code == 401:
+            raise InvalidJwtError(resource=resource, reason=_read_invalid_jwt_reason(exc)) from exc
         raise AssetsApiError(f"Assets API returned {exc.code} for {resource}") from exc
     except URLError as exc:
         raise AssetsApiError(f"Assets API request failed for {resource}") from exc

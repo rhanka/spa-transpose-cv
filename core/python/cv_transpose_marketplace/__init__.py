@@ -1,4 +1,4 @@
-from .assets import AssetsApiError, TenantNotConfiguredError, fetch_template_assets
+from .assets import AssetsApiError, InvalidJwtError, TenantNotConfiguredError, fetch_template_assets
 from .copilot import CopilotActionResult, CopilotAttachment, run_copilot_transpose
 from .gemini import run_gemini_transpose
 from .gemini_adk import (
@@ -23,6 +23,7 @@ from .types import MarketplaceRunResult, OutputArtifact
 
 __all__ = [
     "AssetsApiError",
+    "InvalidJwtError",
     "CopilotActionResult",
     "CopilotAttachment",
     "GeminiToolFile",

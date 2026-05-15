@@ -5,7 +5,12 @@ from urllib.error import HTTPError
 
 import pytest
 
-from cv_transpose_marketplace import AssetsApiError, TenantNotConfiguredError, fetch_template_assets
+from cv_transpose_marketplace import (
+    AssetsApiError,
+    InvalidJwtError,
+    TenantNotConfiguredError,
+    fetch_template_assets,
+)
 
 
 class FakeHttpResponse:
@@ -21,6 +26,9 @@ class FakeHttpResponse:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def close(self) -> None:
         return None
 
 
@@ -83,14 +91,43 @@ def test_fetch_template_assets_raises_tenant_not_configured_on_404() -> None:
         )
 
 
-def test_fetch_template_assets_raises_invalid_jwt_error_on_401() -> None:
+def test_fetch_template_assets_raises_invalid_jwt_error_on_401_with_reason() -> None:
     def fake_urlopen(request, timeout=0):
-        raise HTTPError(request.full_url, 401, "unauthorized", hdrs=None, fp=None)
+        raise HTTPError(
+            request.full_url,
+            401,
+            "unauthorized",
+            hdrs=None,
+            fp=FakeHttpResponse(b'{"error":"invalid_jwt","reason":"tk_mismatch"}'),
+        )
 
-    with pytest.raises(AssetsApiError, match="401"):
+    with pytest.raises(InvalidJwtError, match="tk_mismatch") as exc_info:
         fetch_template_assets(
             base_url="https://cv-api.sent-tech.ca",
             tenant_key="direct:scalian",
             bearer_token="signed.jwt.token",
             urlopen=fake_urlopen,
         )
+
+    assert exc_info.value.reason == "tk_mismatch"
+
+
+def test_fetch_template_assets_raises_invalid_jwt_error_without_reason_on_non_json_401() -> None:
+    def fake_urlopen(request, timeout=0):
+        raise HTTPError(
+            request.full_url,
+            401,
+            "unauthorized",
+            hdrs=None,
+            fp=FakeHttpResponse(b"not-json"),
+        )
+
+    with pytest.raises(InvalidJwtError, match="manifest") as exc_info:
+        fetch_template_assets(
+            base_url="https://cv-api.sent-tech.ca",
+            tenant_key="direct:scalian",
+            bearer_token="signed.jwt.token",
+            urlopen=fake_urlopen,
+        )
+
+    assert exc_info.value.reason is None
