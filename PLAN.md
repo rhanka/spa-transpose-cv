@@ -93,11 +93,14 @@ Fondations deja presentes dans le repo:
 - [x] wrapper `run_copilot_transpose(...)` pur Python au-dessus de `cv_transpose_core.transpose()`
 - [x] packaging in-memory DOCX / ZIP + card JSON minimale
 - [x] execution `persistence="ephemeral"` cote wrapper
+- [x] resolution du tenant via identite Entra ID (`ms:<tid>`)
+- [x] retour DOCX / ZIP + rapport d'alignement via runtime HTTP local
+- [x] fallback explicite `tenant_not_configured` / `assets_auth_failed` / `assets_unavailable`
+- [x] cache court in-process des assets template cote runtime (TTL configurable, 300 s par defaut)
+- [x] bundle deterministe local du runtime Copilot
 
 - [ ] agent declaratif Copilot Studio
 - [ ] action `transposeCvs` branchant le core Python
-- [ ] resolution du tenant via identite Entra ID
-- [ ] retour DOCX / ZIP + carte de resultat
 - [ ] packaging / attestation AppSource / Partner Center
 - [ ] smoke post-publication
 
@@ -111,11 +114,14 @@ Fondations deja presentes dans le repo:
 - [x] wrapper `run_gemini_transpose(...)` pur Python au-dessus de `cv_transpose_core.transpose()`
 - [x] resolution `gws:<domain>` via claims Workspace
 - [x] execution `persistence="ephemeral"` cote wrapper
+- [x] runtime HTTP local + JWKS pour l'adapter Gemini
+- [x] fallback explicite `tenant_not_configured` / `assets_auth_failed` / `assets_unavailable`
+- [x] cache court in-process des assets template cote runtime (TTL configurable, 300 s par defaut)
+- [x] bundle deterministe local Gemini ADK
+- [x] surface de tool JSON-friendly pour l'agent ADK local
 
 - [ ] agent Python ADK
 - [ ] integration Vertex AI Agent Builder / Agentspace
-- [ ] resolution du tenant via identite Workspace
-- [ ] retour DOCX / ZIP symetrique a Copilot
 - [ ] packaging / publication partner basique Google
 - [ ] smoke post-publication
 
