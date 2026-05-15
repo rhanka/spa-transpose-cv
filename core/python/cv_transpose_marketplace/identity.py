@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
 from typing import Literal, Mapping
 
 
 TenantProvider = Literal["direct", "ms", "gws"]
+
+
+_GWS_DOMAIN_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_GWS_DOMAIN_PATTERN = re.compile(rf"^{_GWS_DOMAIN_LABEL}(?:\.{_GWS_DOMAIN_LABEL})+$")
 
 
 class MarketplaceIdentityError(ValueError):
@@ -26,7 +31,12 @@ def derive_ms_tenant_key(tid: str) -> str:
 
 
 def derive_gws_tenant_key(primary_domain: str) -> str:
-    return f"gws:{_normalize_subject(primary_domain, field_name='domain')}"
+    normalized = _normalize_subject(primary_domain, field_name="domain")
+    if not _GWS_DOMAIN_PATTERN.match(normalized):
+        raise MarketplaceIdentityError(
+            f"Invalid Workspace primary domain {primary_domain!r}; expected a DNS-style domain"
+        )
+    return f"gws:{normalized}"
 
 
 def derive_tenant_key_from_claims(provider: TenantProvider, claims: Mapping[str, str]) -> str:

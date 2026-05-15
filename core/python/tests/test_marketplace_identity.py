@@ -41,3 +41,27 @@ def test_derive_tenant_key_from_claims_rejects_missing_ms_tid() -> None:
 def test_derive_tenant_key_from_claims_rejects_missing_gws_domain() -> None:
     with pytest.raises(MarketplaceIdentityError, match="primary domain"):
         derive_tenant_key_from_claims("gws", {"sub": "abc"})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "no-dot",
+        "with space.example",
+        "bad_underscore.example",
+        "trailing-dot.",
+        ".leading-dot",
+        "double..dot.example",
+        "-leading-hyphen.example",
+        "trailing-hyphen-.example",
+    ],
+)
+def test_derive_tenant_key_from_gws_claims_rejects_malformed_domain(value: str) -> None:
+    with pytest.raises(MarketplaceIdentityError, match="domain"):
+        derive_tenant_key_from_claims("gws", {"hd": value})
+
+
+def test_derive_tenant_key_from_gws_claims_accepts_hyphenated_subdomain() -> None:
+    tenant_key = derive_tenant_key_from_claims("gws", {"hd": "sub-domain.workspace.example"})
+
+    assert tenant_key == "gws:sub-domain.workspace.example"
