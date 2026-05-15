@@ -76,6 +76,73 @@ async def test_handle_gemini_request_loads_env_settings_and_mints_token(private_
     assert request.files[0].bytes_ == b"pdf-bytes"
     assert response["tenantKey"] == "gws:workspace.example"
     assert response["artifact"]["name"] == "Candidate.docx"
+    assert response["reportCard"] == {"files": 1, "succeeded": 1, "failed": 0, "warnings": 0}
+
+
+@pytest.mark.asyncio
+async def test_handle_gemini_request_preserves_enriched_report_card(private_key_pem: str) -> None:
+    from cv_transpose_marketplace.gemini_adk.runtime import handle_gemini_request
+
+    async def fake_transpose_tool(request, *, llm):
+        return GeminiToolResult(
+            tenant_key="gws:workspace.example",
+            artifact=OutputArtifact(
+                name="Candidate.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                bytes_=b"PK\x03\x04docx",
+            ),
+            report_card={
+                "files": 1,
+                "succeeded": 1,
+                "failed": 0,
+                "warnings": 1,
+                "alignmentScore": 0,
+                "items": [
+                    {
+                        "sourceFileName": "candidate.pdf",
+                        "outputDocxName": "Candidate.docx",
+                        "validationPassed": False,
+                        "warnings": ["Page 1 overflow"],
+                        "sectionsDetected": ["WORK EXPERIENCE"],
+                        "missingRequiredSections": [],
+                        "retriesUsed": 1,
+                    }
+                ],
+            },
+            results=[],
+        )
+
+    response = await handle_gemini_request(
+        {
+            "files": [
+                {
+                    "name": "candidate.pdf",
+                    "contentType": "application/pdf",
+                    "bytesBase64": base64.b64encode(b"pdf-bytes").decode("ascii"),
+                }
+            ],
+            "context": {
+                "identity": {
+                    "hd": "workspace.example",
+                    "email": "user@workspace.example",
+                }
+            },
+        },
+        llm=object(),
+        env={
+            "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_GEMINI_JWT_ISSUER": "gemini-ent.runtime.sent-tech.ca",
+            "CVT_GEMINI_JWT_KID": "gemini-key",
+            "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        transpose_tool=fake_transpose_tool,
+    )
+
+    assert response["tenantKey"] == "gws:workspace.example"
+    assert response["reportCard"]["alignmentScore"] == 0
+    assert response["reportCard"]["warnings"] == 1
+    assert response["reportCard"]["items"][0]["warnings"] == ["Page 1 overflow"]
+    assert response["reportCard"]["items"][0]["retriesUsed"] == 1
 
 
 @pytest.mark.asyncio
