@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+from io import BytesIO
+from zipfile import ZipFile
 
 import pytest
 
@@ -106,6 +108,31 @@ def test_copilot_scaffold_artifacts_are_wired(repo_root) -> None:
     assert action["name"] == "transposeCvs"
     assert action["entrypoint"] == "runtime.handle_transpose_cvs"
     assert "tenant not configured" in instructions.lower()
+
+
+def test_copilot_bundle_builder_is_deterministic_and_includes_runtime_assets(repo_root, tmp_path) -> None:
+    from copilot import build_copilot_bundle, iter_copilot_bundle_paths
+
+    bundle_path = tmp_path / "copilot-bundle.zip"
+    first = build_copilot_bundle(repo_root, bundle_path)
+    second = build_copilot_bundle(repo_root)
+
+    assert first == second
+    assert bundle_path.read_bytes() == first
+
+    listed = [relative for _, relative in iter_copilot_bundle_paths(repo_root)]
+    archive = ZipFile(BytesIO(first))
+    names = archive.namelist()
+
+    assert names == listed
+    assert "pyproject.toml" in names
+    assert "copilot/manifest.json" in names
+    assert "copilot/actions/transposeCvs.json" in names
+    assert "copilot/runtime.py" in names
+    assert "cv_transpose_core/spec/prompts/extract-cv.md" in names
+    assert "cv_transpose_marketplace/assets.py" in names
+    assert not any("__pycache__" in name for name in names)
+    assert not any(name.endswith(".pyc") for name in names)
 
 
 @pytest.mark.asyncio
