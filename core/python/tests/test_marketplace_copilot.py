@@ -87,6 +87,7 @@ async def test_run_copilot_transpose_returns_single_docx_attachment(repo_root, e
         "base_url": "https://cv-api.sent-tech.ca",
         "tenant_key": result.tenant_key,
         "bearer_token": "signed.jwt.token",
+        "cache_ttl_seconds": 0,
     }
     assert len(result.attachments) == 1
     assert result.attachments[0].name == "Scalian_Profile_Jane_Smith.docx"

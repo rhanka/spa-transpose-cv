@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 from typing import Any, Mapping, Sequence
 
 from cv_transpose_core import InputFile, LlmProvider
-from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
+from cv_transpose_marketplace.assets import AssetsApiError, InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.copilot import CopilotActionResult, run_copilot_transpose
 from cv_transpose_marketplace.identity import derive_tenant_key_from_claims
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer, RuntimeJwtIssuerError
@@ -17,6 +17,7 @@ from cv_transpose_marketplace.validation import assert_marketplace_upload_allowe
 COPILOT_ENV_PREFIX = "CVT_COPILOT"
 TENANT_NOT_CONFIGURED_MESSAGE = "Votre entreprise n'a pas encore configure de template. Contactez votre admin."
 ASSETS_AUTH_FAILED_MESSAGE = "L'authentification des assets template a echoue. Contactez le support."
+ASSETS_UNAVAILABLE_MESSAGE = "Configuration entreprise non joignable, reessayez plus tard."
 
 
 def _download_file_bytes(download_url: str, item: Mapping[str, Any]) -> bytes:
@@ -118,14 +119,7 @@ def _build_assets_auth_failed_response(tenant_key: str, reason: str | None) -> d
     return {
         "tenantKey": tenant_key,
         "attachments": [],
-        "alignmentReport": {
-            "files": 0,
-            "succeeded": 0,
-            "failed": 0,
-            "warnings": 0,
-            "alignmentScore": 0,
-            "items": [],
-        },
+        "alignmentReport": _empty_alignment_report(),
         "error": "assets_auth_failed",
         "reason": reason,
         "message": ASSETS_AUTH_FAILED_MESSAGE,
@@ -142,6 +136,44 @@ def _build_assets_auth_failed_response(tenant_key: str, reason: str | None) -> d
                 {
                     "type": "TextBlock",
                     "text": ASSETS_AUTH_FAILED_MESSAGE,
+                    "wrap": True,
+                },
+            ],
+        },
+    }
+
+
+def _empty_alignment_report() -> dict[str, Any]:
+    return {
+        "files": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "warnings": 0,
+        "alignmentScore": 0,
+        "items": [],
+    }
+
+
+def _build_assets_unavailable_response(tenant_key: str) -> dict[str, Any]:
+    return {
+        "tenantKey": tenant_key,
+        "attachments": [],
+        "alignmentReport": _empty_alignment_report(),
+        "error": "assets_unavailable",
+        "message": ASSETS_UNAVAILABLE_MESSAGE,
+        "adaptiveCard": {
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock",
+                    "text": "Configuration unavailable",
+                    "weight": "Bolder",
+                    "wrap": True,
+                },
+                {
+                    "type": "TextBlock",
+                    "text": ASSETS_UNAVAILABLE_MESSAGE,
                     "wrap": True,
                 },
             ],
@@ -174,8 +206,11 @@ async def handle_transpose_cvs(
         if signer is None:
             signer = settings.build_signer()
         onboarding_url = settings.onboarding_url
+        assets_cache_ttl_seconds = settings.assets_cache_ttl_seconds
     else:
         onboarding_url = (env or {}).get(f"{COPILOT_ENV_PREFIX}_ONBOARDING_URL", "").strip() or None
+        assets_cache_ttl_raw = (env or {}).get(f"{COPILOT_ENV_PREFIX}_ASSETS_CACHE_TTL_SECONDS", "").strip()
+        assets_cache_ttl_seconds = 300 if not assets_cache_ttl_raw else max(0, int(assets_cache_ttl_raw))
 
     def make_bearer_token(tenant_key: str, token_claims: Mapping[str, Any]) -> str:
         return signer.mint_token(
@@ -192,6 +227,7 @@ async def handle_transpose_cvs(
             assets_base_url=assets_base_url,
             make_bearer_token=make_bearer_token,
             user_prompt=str(user_prompt) if isinstance(user_prompt, str) and user_prompt.strip() else None,
+            assets_cache_ttl_seconds=assets_cache_ttl_seconds,
         )
         return _encode_action_response(result)
     except TenantNotConfiguredError:
@@ -206,6 +242,12 @@ async def handle_transpose_cvs(
             {key: str(value) for key, value in claims.items() if value is not None},
         )
         return _build_assets_auth_failed_response(tenant_key, exc.reason)
+    except AssetsApiError:
+        tenant_key = derive_tenant_key_from_claims(
+            "ms",
+            {key: str(value) for key, value in claims.items() if value is not None},
+        )
+        return _build_assets_unavailable_response(tenant_key)
 
 
 def handle_jwks_request(*, env: Mapping[str, str]) -> dict[str, object]:

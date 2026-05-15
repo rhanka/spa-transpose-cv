@@ -23,6 +23,7 @@ async def transpose_cvs(
         assets_base_url=request.assets_base_url,
         assets_bearer_token=request.assets_bearer_token,
         user_prompt=request.user_prompt,
+        assets_cache_ttl_seconds=request.assets_cache_ttl_seconds,
     )
     return GeminiToolResult(
         tenant_key=result.tenant_key,

@@ -146,6 +146,7 @@ async def run_copilot_transpose(
     assets_base_url: str,
     make_bearer_token: Callable[[str, Mapping[str, object]], str],
     user_prompt: str | None = None,
+    assets_cache_ttl_seconds: int = 0,
     fetch_assets: Callable[..., TemplateAssets] = fetch_template_assets,
     transpose_fn: Callable[[TransposeInput], Any] = transpose,
 ) -> CopilotActionResult:
@@ -157,6 +158,7 @@ async def run_copilot_transpose(
         base_url=assets_base_url,
         tenant_key=tenant_key,
         bearer_token=bearer_token,
+        cache_ttl_seconds=assets_cache_ttl_seconds,
     )
     transpose_output = await transpose_fn(
         TransposeInput(

@@ -50,6 +50,7 @@ async def test_run_gemini_transpose_derives_gws_tenant_and_returns_docx(repo_roo
         "base_url": "https://cv-api.sent-tech.ca",
         "tenant_key": "gws:example.com",
         "bearer_token": "signed.jwt.token",
+        "cache_ttl_seconds": 0,
     }
 
 

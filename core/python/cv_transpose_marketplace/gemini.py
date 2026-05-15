@@ -19,6 +19,7 @@ async def run_gemini_transpose(
     assets_base_url: str,
     assets_bearer_token: str,
     user_prompt: str | None = None,
+    assets_cache_ttl_seconds: int = 0,
     extraction: ExtractionOptions | None = None,
     fetch_assets: Callable[..., TemplateAssets] = fetch_template_assets,
     run_fn: Callable[..., Any] = run_marketplace_transpose,
@@ -30,6 +31,7 @@ async def run_gemini_transpose(
         base_url=assets_base_url,
         tenant_key=tenant_key,
         bearer_token=assets_bearer_token,
+        cache_ttl_seconds=assets_cache_ttl_seconds,
     )
     return await run_fn(
         tenant_key=tenant_key,

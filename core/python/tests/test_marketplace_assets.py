@@ -131,3 +131,67 @@ def test_fetch_template_assets_raises_invalid_jwt_error_without_reason_on_non_js
         )
 
     assert exc_info.value.reason is None
+
+
+def test_fetch_template_assets_uses_short_lived_cache(repo_root) -> None:
+    manifest = (repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_bytes()
+    base_docx = (repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes()
+    brand = json.dumps(
+        {
+            "primary": "#0F2137",
+            "secondary": "#23344A",
+            "accent": "#7DB7E1",
+            "fontFamily": "Lato",
+        }
+    ).encode("utf-8")
+    calls: list[str] = []
+    now = [100.0]
+
+    def fake_time() -> float:
+        return now[0]
+
+    def fake_urlopen(request, timeout=0):
+        calls.append(request.full_url)
+        if request.full_url.endswith("/manifest"):
+            return FakeHttpResponse(manifest)
+        if request.full_url.endswith("/base.docx"):
+            return FakeHttpResponse(
+                base_docx,
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        if request.full_url.endswith("/brand"):
+            return FakeHttpResponse(brand)
+        raise AssertionError(f"Unexpected URL {request.full_url}")
+
+    first = fetch_template_assets(
+        base_url="https://cv-api.sent-tech.ca",
+        tenant_key="ms:cache-tenant",
+        bearer_token="signed.jwt.token",
+        cache_ttl_seconds=300,
+        time_fn=fake_time,
+        urlopen=fake_urlopen,
+    )
+    second = fetch_template_assets(
+        base_url="https://cv-api.sent-tech.ca",
+        tenant_key="ms:cache-tenant",
+        bearer_token="another.jwt.token",
+        cache_ttl_seconds=300,
+        time_fn=fake_time,
+        urlopen=fake_urlopen,
+    )
+
+    assert first == second
+    assert len(calls) == 3
+
+    now[0] = 401.0
+    third = fetch_template_assets(
+        base_url="https://cv-api.sent-tech.ca",
+        tenant_key="ms:cache-tenant",
+        bearer_token="third.jwt.token",
+        cache_ttl_seconds=300,
+        time_fn=fake_time,
+        urlopen=fake_urlopen,
+    )
+
+    assert third.manifest["tenantKey"] == "direct:scalian-test"
+    assert len(calls) == 6

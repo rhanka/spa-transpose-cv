@@ -4,7 +4,7 @@ import base64
 import time
 from typing import Any, Mapping, Sequence
 
-from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
+from cv_transpose_marketplace.assets import AssetsApiError, InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.identity import derive_tenant_key_from_claims
 from cv_transpose_marketplace.settings import load_runtime_settings
 from cv_transpose_marketplace.validation import assert_marketplace_upload_allowed
@@ -17,6 +17,7 @@ from .types import GeminiToolFile, GeminiToolRequest, GeminiToolResult
 GEMINI_ENV_PREFIX = "CVT_GEMINI"
 TENANT_NOT_CONFIGURED_MESSAGE = "Votre entreprise n'a pas encore configure de template. Contactez votre admin."
 ASSETS_AUTH_FAILED_MESSAGE = "L'authentification des assets template a echoue. Contactez le support."
+ASSETS_UNAVAILABLE_MESSAGE = "Configuration entreprise non joignable, reessayez plus tard."
 
 
 def _parse_input_files(payload_files: Sequence[Mapping[str, Any]]) -> list[GeminiToolFile]:
@@ -79,6 +80,16 @@ def _build_assets_auth_failed_response(tenant_key: str, reason: str | None) -> d
     }
 
 
+def _build_assets_unavailable_response(tenant_key: str) -> dict[str, Any]:
+    return {
+        "tenantKey": tenant_key,
+        "artifact": None,
+        "reportCard": {"files": 0, "succeeded": 0, "failed": 0, "warnings": 0},
+        "error": "assets_unavailable",
+        "message": ASSETS_UNAVAILABLE_MESSAGE,
+    }
+
+
 async def handle_gemini_request(
     payload: Mapping[str, Any],
     *,
@@ -105,6 +116,7 @@ async def handle_gemini_request(
             tenant_key=tenant_key,
             issued_at=int(time.time()),
         ),
+        assets_cache_ttl_seconds=settings.assets_cache_ttl_seconds,
     )
 
     try:
@@ -114,6 +126,8 @@ async def handle_gemini_request(
         return _build_tenant_not_configured_response(tenant_key, settings.onboarding_url)
     except InvalidJwtError as exc:
         return _build_assets_auth_failed_response(tenant_key, exc.reason)
+    except AssetsApiError:
+        return _build_assets_unavailable_response(tenant_key)
 
 
 def handle_jwks_request(*, env: Mapping[str, str]) -> dict[str, object]:

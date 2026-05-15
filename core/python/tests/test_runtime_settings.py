@@ -34,12 +34,28 @@ def test_load_runtime_settings_supports_base64_private_key(private_key_pem: str)
     assert settings.jwt_issuer == "ms-copilot.cv-transpose.com"
     assert settings.jwt_kid == "copilot-key"
     assert settings.onboarding_url is None
+    assert settings.assets_cache_ttl_seconds == 300
     token = settings.build_signer().mint_token(
         subject="user@example.com",
         tenant_key="ms:123e4567-e89b-12d3-a456-426614174000",
         issued_at=1_715_708_800,
     )
     assert token.count(".") == 2
+
+
+def test_load_runtime_settings_supports_custom_assets_cache_ttl(private_key_pem: str) -> None:
+    settings = load_runtime_settings(
+        "CVT_GEMINI",
+        {
+            "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_GEMINI_JWT_ISSUER": "gemini-ent.runtime.sent-tech.ca",
+            "CVT_GEMINI_JWT_KID": "gemini-key",
+            "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+            "CVT_GEMINI_ASSETS_CACHE_TTL_SECONDS": "45",
+        },
+    )
+
+    assert settings.assets_cache_ttl_seconds == 45
 
 
 def test_load_runtime_settings_rejects_missing_required_env() -> None:

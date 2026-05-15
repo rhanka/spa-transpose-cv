@@ -19,6 +19,7 @@ class RuntimeSettings:
     jwt_private_key_pem: str
     onboarding_url: str | None = None
     token_ttl_seconds: int = 300
+    assets_cache_ttl_seconds: int = 300
 
     def build_signer(self) -> RuntimeJwtIssuer:
         return RuntimeJwtIssuer(
@@ -58,6 +59,8 @@ def load_runtime_settings(prefix: str, env: Mapping[str, str]) -> RuntimeSetting
     onboarding_url = env.get(f"{prefix}_ONBOARDING_URL", "").strip() or None
     token_ttl_raw = env.get(f"{prefix}_JWT_TTL_SECONDS", "").strip()
     token_ttl_seconds = 300 if not token_ttl_raw else int(token_ttl_raw)
+    cache_ttl_raw = env.get(f"{prefix}_ASSETS_CACHE_TTL_SECONDS", "").strip()
+    assets_cache_ttl_seconds = 300 if not cache_ttl_raw else max(0, int(cache_ttl_raw))
 
     return RuntimeSettings(
         assets_base_url=assets_base_url,
@@ -66,4 +69,5 @@ def load_runtime_settings(prefix: str, env: Mapping[str, str]) -> RuntimeSetting
         jwt_private_key_pem=jwt_private_key_pem,
         onboarding_url=onboarding_url,
         token_ttl_seconds=token_ttl_seconds,
+        assets_cache_ttl_seconds=assets_cache_ttl_seconds,
     )
