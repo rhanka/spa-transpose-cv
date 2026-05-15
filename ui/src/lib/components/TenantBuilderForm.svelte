@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, Card, Checkbox, Input } from '@sentropic/design-system-svelte';
   import { createTenantViaAdmin, requestClaimOtp, type AdminTenantCreateResponse, type ClaimOtpResponse } from '$lib/api';
 
   let companyUrl = $state('');
@@ -51,8 +52,9 @@
     templateDragOver = false;
   }
 
-  function toggleOperatorAccess() {
-    showOperatorAccess = !showOperatorAccess;
+  function handleOperatorAccessToggle(event: Event) {
+    const target = event.currentTarget as HTMLInputElement;
+    showOperatorAccess = target.checked;
     if (!showOperatorAccess) {
       rootAdminPassword = '';
     }
@@ -109,7 +111,7 @@
   }
 </script>
 
-<section class="builder-shell card p-8">
+<Card class="builder-shell">
   <div class="builder-header">
     <div>
       <h2 class="builder-title">Créer un espace CV pour votre société</h2>
@@ -121,29 +123,23 @@
   </div>
 
   <div class="builder-grid">
-    <div class="builder-field">
-      <label class="builder-label" for="builder-company-url">Site de référence</label>
-      <input
-        id="builder-company-url"
-        type="url"
-        bind:value={companyUrl}
-        placeholder="Ex: https://entreprise.com"
-        class="builder-input"
-      />
-      <p class="builder-help">Utilisé pour retrouver les couleurs, les polices, le logo et le fond d’accueil.</p>
-    </div>
+    <Input
+      id="builder-company-url"
+      type="url"
+      label="Site de référence"
+      bind:value={companyUrl}
+      placeholder="Ex: https://entreprise.com"
+      helperText="Utilisé pour retrouver les couleurs, les polices, le logo et le fond d’accueil."
+    />
 
-    <div class="builder-field">
-      <label class="builder-label" for="builder-corporate-email">Adresse de vérification</label>
-      <input
-        id="builder-corporate-email"
-        type="email"
-        bind:value={corporateEmail}
-        placeholder="Ex: prenom.nom@entreprise.com"
-        class="builder-input"
-      />
-      <p class="builder-help">Une adresse de l’entreprise est nécessaire pour recevoir le code de vérification.</p>
-    </div>
+    <Input
+      id="builder-corporate-email"
+      type="email"
+      label="Adresse de vérification"
+      bind:value={corporateEmail}
+      placeholder="Ex: prenom.nom@entreprise.com"
+      helperText="Une adresse de l’entreprise est nécessaire pour recevoir le code de vérification."
+    />
   </div>
 
   <div class="builder-field">
@@ -182,40 +178,39 @@
 
   {#if !isRootAdminMode}
     <div class="builder-otp-row">
-      <button class="btn-secondary" onclick={handleRequestOtp} disabled={loadingOtp}>
+      <Button variant="secondary" onclick={handleRequestOtp} disabled={loadingOtp}>
         {loadingOtp ? 'Envoi du code...' : 'Envoyer le code'}
-      </button>
+      </Button>
 
-      <div class="builder-field flex-1">
-        <label class="builder-label" for="builder-otp">Code de vérification</label>
-        <input
+      <div class="builder-otp-input">
+        <Input
           id="builder-otp"
           type="text"
+          label="Code de vérification"
           bind:value={otp}
           placeholder="Code reçu par courriel"
-          class="builder-input"
         />
       </div>
     </div>
   {/if}
 
   <div class="builder-operator">
-    <button type="button" class="builder-operator-toggle" onclick={toggleOperatorAccess}>
-      {showOperatorAccess ? 'Masquer l’accès opérateur' : 'Accès opérateur Sent Tech'}
-    </button>
+    <Checkbox
+      id="builder-operator-toggle"
+      label="Accès opérateur Sent Tech"
+      checked={showOperatorAccess}
+      onchange={handleOperatorAccessToggle}
+    />
 
     {#if showOperatorAccess}
-      <div class="builder-field">
-        <label class="builder-label" for="builder-root-password">Clé opérateur</label>
-        <input
-          id="builder-root-password"
-          type="password"
-          bind:value={rootAdminPassword}
-          placeholder="Réservé à l’équipe Sent Tech"
-          class="builder-input"
-        />
-        <p class="builder-help">Réservé à l’équipe Sent Tech.</p>
-      </div>
+      <Input
+        id="builder-root-password"
+        type="password"
+        label="Clé opérateur"
+        bind:value={rootAdminPassword}
+        placeholder="Réservé à l’équipe Sent Tech"
+        helperText="Réservé à l’équipe Sent Tech."
+      />
     {/if}
   </div>
 
@@ -247,21 +242,22 @@
   {/if}
 
   <div class="builder-actions">
-    <button class="btn-primary" onclick={handleCreate} disabled={loadingCreate}>
+    <Button variant="primary" onclick={handleCreate} disabled={loadingCreate}>
       {loadingCreate
         ? 'Création en cours...'
         : isRootAdminMode
           ? 'Créer et publier'
           : 'Créer le brouillon'}
-    </button>
+    </Button>
   </div>
-</section>
+</Card>
 
 <style>
-  .builder-shell {
+  :global(.builder-shell) {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+    padding: 2rem;
   }
 
   .builder-header {
@@ -305,14 +301,6 @@
     color: var(--color-purple-light);
   }
 
-  .builder-input {
-    width: 100%;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--color-purple-border);
-    border-radius: calc(var(--radius-base) * 0.75);
-    background: white;
-  }
-
   .builder-dropzone {
     padding: 2rem 1rem;
     border: 2px dashed var(--color-purple-border);
@@ -353,6 +341,10 @@
     gap: 1rem;
   }
 
+  .builder-otp-input {
+    flex: 1;
+  }
+
   .builder-status,
   .builder-success,
   .builder-error {
@@ -391,19 +383,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
-  }
-
-  .builder-operator-toggle {
-    align-self: flex-start;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--color-purple-light);
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 0.16rem;
   }
 
   .builder-actions {
