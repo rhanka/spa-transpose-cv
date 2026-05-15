@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 from typing import Any, Mapping, Sequence
 
 from cv_transpose_core import InputFile, LlmProvider
-from cv_transpose_marketplace.assets import TenantNotConfiguredError
+from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.copilot import CopilotActionResult, run_copilot_transpose
 from cv_transpose_marketplace.identity import derive_tenant_key_from_claims
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer, RuntimeJwtIssuerError
@@ -15,6 +15,7 @@ from cv_transpose_marketplace.settings import load_runtime_settings
 
 COPILOT_ENV_PREFIX = "CVT_COPILOT"
 TENANT_NOT_CONFIGURED_MESSAGE = "Votre entreprise n'a pas encore configure de template. Contactez votre admin."
+ASSETS_AUTH_FAILED_MESSAGE = "L'authentification des assets template a echoue. Contactez le support."
 
 
 def _download_file_bytes(download_url: str, item: Mapping[str, Any]) -> bytes:
@@ -109,6 +110,41 @@ def _build_tenant_not_configured_response(tenant_key: str, onboarding_url: str |
     }
 
 
+def _build_assets_auth_failed_response(tenant_key: str, reason: str | None) -> dict[str, Any]:
+    return {
+        "tenantKey": tenant_key,
+        "attachments": [],
+        "alignmentReport": {
+            "files": 0,
+            "succeeded": 0,
+            "failed": 0,
+            "warnings": 0,
+            "alignmentScore": 0,
+            "items": [],
+        },
+        "error": "assets_auth_failed",
+        "reason": reason,
+        "message": ASSETS_AUTH_FAILED_MESSAGE,
+        "adaptiveCard": {
+            "type": "AdaptiveCard",
+            "version": "1.5",
+            "body": [
+                {
+                    "type": "TextBlock",
+                    "text": "Configuration error",
+                    "weight": "Bolder",
+                    "wrap": True,
+                },
+                {
+                    "type": "TextBlock",
+                    "text": ASSETS_AUTH_FAILED_MESSAGE,
+                    "wrap": True,
+                },
+            ],
+        },
+    }
+
+
 async def handle_transpose_cvs(
     payload: Mapping[str, Any],
     *,
@@ -160,6 +196,12 @@ async def handle_transpose_cvs(
             {key: str(value) for key, value in claims.items() if value is not None},
         )
         return _build_tenant_not_configured_response(tenant_key, onboarding_url)
+    except InvalidJwtError as exc:
+        tenant_key = derive_tenant_key_from_claims(
+            "ms",
+            {key: str(value) for key, value in claims.items() if value is not None},
+        )
+        return _build_assets_auth_failed_response(tenant_key, exc.reason)
 
 
 def handle_jwks_request(*, env: Mapping[str, str]) -> dict[str, object]:
