@@ -9,7 +9,7 @@ import pytest
 
 from cv_transpose_marketplace.copilot import CopilotActionResult, CopilotAttachment
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer
-from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
+from cv_transpose_marketplace.assets import AssetsApiError, InvalidJwtError, TenantNotConfiguredError
 
 
 @pytest.fixture
@@ -77,6 +77,7 @@ async def test_copilot_runtime_scaffold_maps_payload_and_encodes_response(privat
     )
 
     assert captured["assets_base_url"] == "https://cv-api.sent-tech.ca"
+    assert captured["assets_cache_ttl_seconds"] == 300
     assert captured["user_prompt"] == "TARGET: Contoso"
     files = captured["files"]
     assert len(files) == 1
@@ -172,6 +173,7 @@ async def test_copilot_runtime_scaffold_loads_env_settings_when_not_passed(priva
     )
 
     assert captured["assets_base_url"] == "https://cv-api.sent-tech.ca"
+    assert captured["assets_cache_ttl_seconds"] == 300
     assert isinstance(captured["make_bearer_token"]("ms:123e4567-e89b-12d3-a456-426614174000", {"upn": "user@example.com"}), str)
     assert response["tenantKey"] == "ms:123e4567-e89b-12d3-a456-426614174000"
 
@@ -246,3 +248,36 @@ async def test_copilot_runtime_scaffold_maps_invalid_jwt_error(private_key_pem: 
     assert response["attachments"] == []
     assert response["error"] == "assets_auth_failed"
     assert response["reason"] == "tk_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_copilot_runtime_scaffold_maps_assets_api_error(private_key_pem: str) -> None:
+    from copilot.runtime import handle_transpose_cvs
+
+    async def fake_run_copilot_transpose(**kwargs):
+        raise AssetsApiError("Assets API returned 503 for manifest")
+
+    response = await handle_transpose_cvs(
+        {
+            "files": [],
+            "context": {
+                "identity": {
+                    "tid": "123E4567-E89B-12D3-A456-426614174000",
+                    "upn": "user@example.com",
+                }
+            },
+        },
+        llm=object(),
+        env={
+            "CVT_COPILOT_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_COPILOT_JWT_ISSUER": "ms-copilot.cv-transpose.com",
+            "CVT_COPILOT_JWT_KID": "copilot-key",
+            "CVT_COPILOT_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        run_transpose=fake_run_copilot_transpose,
+    )
+
+    assert response["tenantKey"] == "ms:123e4567-e89b-12d3-a456-426614174000"
+    assert response["attachments"] == []
+    assert response["error"] == "assets_unavailable"
+    assert response["message"] == "Configuration entreprise non joignable, reessayez plus tard."

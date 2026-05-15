@@ -6,7 +6,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
+from cv_transpose_marketplace.assets import AssetsApiError, InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.gemini_adk.types import GeminiToolResult
 from cv_transpose_marketplace.types import OutputArtifact
 
@@ -71,6 +71,7 @@ async def test_handle_gemini_request_loads_env_settings_and_mints_token(private_
     assert request.claims == {"hd": "workspace.example", "email": "user@workspace.example"}
     assert request.assets_base_url == "https://cv-api.sent-tech.ca"
     assert isinstance(request.assets_bearer_token, str)
+    assert request.assets_cache_ttl_seconds == 300
     assert request.user_prompt == "TARGET: Fabrikam"
     assert len(request.files) == 1
     assert request.files[0].bytes_ == b"pdf-bytes"
@@ -239,3 +240,36 @@ async def test_handle_gemini_request_maps_invalid_jwt_error(private_key_pem: str
     assert response["artifact"] is None
     assert response["error"] == "assets_auth_failed"
     assert response["reason"] == "iss"
+
+
+@pytest.mark.asyncio
+async def test_handle_gemini_request_maps_assets_api_error(private_key_pem: str) -> None:
+    from cv_transpose_marketplace.gemini_adk.runtime import handle_gemini_request
+
+    async def fake_transpose_tool(request, *, llm):
+        raise AssetsApiError("Assets API request failed for manifest")
+
+    response = await handle_gemini_request(
+        {
+            "files": [],
+            "context": {
+                "identity": {
+                    "hd": "workspace.example",
+                    "email": "user@workspace.example",
+                }
+            },
+        },
+        llm=object(),
+        env={
+            "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_GEMINI_JWT_ISSUER": "gemini-ent.runtime.sent-tech.ca",
+            "CVT_GEMINI_JWT_KID": "gemini-key",
+            "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        transpose_tool=fake_transpose_tool,
+    )
+
+    assert response["tenantKey"] == "gws:workspace.example"
+    assert response["artifact"] is None
+    assert response["error"] == "assets_unavailable"
+    assert response["message"] == "Configuration entreprise non joignable, reessayez plus tard."

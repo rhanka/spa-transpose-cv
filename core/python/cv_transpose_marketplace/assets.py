@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 import json
+import time
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -28,6 +30,15 @@ class TenantNotConfiguredError(AssetsApiError):
 
 
 UrlOpen = Callable[..., Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class _CachedTemplateAssets:
+    expires_at: float
+    template_assets: TemplateAssets
+
+
+_ASSETS_CACHE: dict[tuple[str, str], _CachedTemplateAssets] = {}
 
 
 def _build_asset_url(base_url: str, tenant_key: str, resource: str) -> str:
@@ -84,8 +95,17 @@ def fetch_template_assets(
     tenant_key: str,
     bearer_token: str,
     timeout: float = 30.0,
+    cache_ttl_seconds: int = 0,
+    time_fn: Callable[[], float] = time.monotonic,
     urlopen: UrlOpen = default_urlopen,
 ) -> TemplateAssets:
+    cache_key = (base_url.rstrip("/"), tenant_key)
+    if cache_ttl_seconds > 0:
+        cached = _ASSETS_CACHE.get(cache_key)
+        now = time_fn()
+        if cached is not None and cached.expires_at > now:
+            return cached.template_assets
+
     manifest_bytes = _read_asset(
         base_url=base_url,
         tenant_key=tenant_key,
@@ -117,7 +137,7 @@ def fetch_template_assets(
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise AssetsApiError("Assets API returned invalid JSON") from exc
 
-    return TemplateAssets(
+    template_assets = TemplateAssets(
         manifest=manifest,
         base_docx=base_docx,
         brand=BrandTokens(
@@ -127,3 +147,9 @@ def fetch_template_assets(
             font_family=brand_payload["fontFamily"],
         ),
     )
+    if cache_ttl_seconds > 0:
+        _ASSETS_CACHE[cache_key] = _CachedTemplateAssets(
+            expires_at=time_fn() + cache_ttl_seconds,
+            template_assets=template_assets,
+        )
+    return template_assets

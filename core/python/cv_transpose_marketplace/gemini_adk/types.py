@@ -21,6 +21,7 @@ class GeminiToolRequest:
     assets_base_url: str
     assets_bearer_token: str
     user_prompt: str | None = None
+    assets_cache_ttl_seconds: int = 0
 
 
 @dataclass(frozen=True)
