@@ -7,6 +7,7 @@ import pytest
 from cv_transpose_core import BrandTokens, InputFile, TemplateAssets, transpose
 from cv_transpose_core.types import LlmCompleteResult
 from cv_transpose_marketplace.gemini import run_gemini_transpose
+from cv_transpose_marketplace.validation import MarketplaceInputError
 
 
 class FakeLlm:
@@ -80,3 +81,18 @@ async def test_run_gemini_transpose_passes_user_prompt_override(repo_root, expec
 
     assert result.results[0].errors == []
     assert seen_prompt == ["TARGET: Fabrikam"]
+
+
+@pytest.mark.asyncio
+async def test_run_gemini_transpose_rejects_legacy_doc_before_fetching_assets() -> None:
+    with pytest.raises(MarketplaceInputError, match=r"\.doc"):
+        await run_gemini_transpose(
+            claims={"hd": "workspace.example", "email": "user@workspace.example"},
+            files=[InputFile(name="legacy.doc", bytes_=b"legacy-doc", mime="application/msword")],
+            llm=object(),  # type: ignore[arg-type]
+            assets_base_url="https://cv-api.sent-tech.ca",
+            assets_bearer_token="signed.jwt.token",
+            fetch_assets=lambda **kwargs: (_ for _ in ()).throw(
+                AssertionError("fetch_assets should not be called for legacy .doc")
+            ),
+        )

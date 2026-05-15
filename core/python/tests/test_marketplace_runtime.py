@@ -3,6 +3,8 @@ from __future__ import annotations
 from io import BytesIO
 from zipfile import ZipFile
 
+import pytest
+
 from cv_transpose_core.types import (
     AlignmentReport,
     DetectedFields,
@@ -10,6 +12,7 @@ from cv_transpose_core.types import (
     Usage,
 )
 from cv_transpose_marketplace.runtime import build_output_artifact
+from cv_transpose_marketplace.validation import MarketplaceInputError, validate_marketplace_file
 
 
 def make_result(name: str, *, errors: list[str] | None = None) -> TransposedCv:
@@ -61,3 +64,15 @@ def test_build_output_artifact_returns_none_when_everything_failed() -> None:
     artifact = build_output_artifact([make_result("alpha", errors=["boom"])])
 
     assert artifact is None
+
+
+def test_validate_marketplace_file_rejects_legacy_doc_by_extension() -> None:
+    with pytest.raises(MarketplaceInputError, match=r"\.doc"):
+        validate_marketplace_file(name="legacy.doc", mime="application/pdf")
+
+
+def test_validate_marketplace_file_allows_docx_when_mime_is_msword() -> None:
+    assert validate_marketplace_file(
+        name="candidate.docx",
+        mime="application/msword",
+    ) == "docx"

@@ -8,6 +8,7 @@ from .assets import fetch_template_assets
 from .identity import derive_tenant_key_from_claims
 from .runtime import run_marketplace_transpose
 from .types import MarketplaceRunResult
+from .validation import validate_marketplace_files
 
 
 async def run_gemini_transpose(
@@ -23,6 +24,7 @@ async def run_gemini_transpose(
     run_fn: Callable[..., Any] = run_marketplace_transpose,
     transpose_fn: Callable[..., Any] = transpose,
 ) -> MarketplaceRunResult:
+    validate_marketplace_files(files)
     tenant_key = derive_tenant_key_from_claims("gws", claims)
     template_assets = fetch_assets(
         base_url=assets_base_url,

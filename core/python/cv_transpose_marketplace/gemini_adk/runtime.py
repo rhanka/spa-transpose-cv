@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 from cv_transpose_marketplace.assets import InvalidJwtError, TenantNotConfiguredError
 from cv_transpose_marketplace.identity import derive_tenant_key_from_claims
 from cv_transpose_marketplace.settings import load_runtime_settings
+from cv_transpose_marketplace.validation import assert_marketplace_upload_allowed
 
 from ..jwt import RuntimeJwtIssuerError
 from .tool import transpose_cvs
@@ -19,14 +20,19 @@ ASSETS_AUTH_FAILED_MESSAGE = "L'authentification des assets template a echoue. C
 
 
 def _parse_input_files(payload_files: Sequence[Mapping[str, Any]]) -> list[GeminiToolFile]:
-    return [
-        GeminiToolFile(
-            name=str(item["name"]),
-            mime=str(item.get("contentType") or item["mime"]),
-            bytes_=base64.b64decode(str(item["bytesBase64"])),
+    files: list[GeminiToolFile] = []
+    for item in payload_files:
+        file_name = str(item["name"])
+        content_type = str(item.get("contentType") or item["mime"])
+        assert_marketplace_upload_allowed(file_name, content_type)
+        files.append(
+            GeminiToolFile(
+                name=file_name,
+                mime=content_type,
+                bytes_=base64.b64decode(str(item["bytesBase64"])),
+            )
         )
-        for item in payload_files
-    ]
+    return files
 
 
 def _get_subject_from_claims(claims: Mapping[str, Any]) -> str:

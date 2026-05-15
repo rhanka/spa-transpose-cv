@@ -20,6 +20,12 @@ from .jwt import RuntimeJwtIssuer, RuntimeJwtIssuerError
 from .runtime import build_output_artifact, run_marketplace_transpose
 from .settings import RuntimeSettings, RuntimeSettingsError, load_runtime_settings
 from .types import MarketplaceRunResult, OutputArtifact
+from .validation import (
+    MarketplaceInputError,
+    assert_marketplace_upload_allowed,
+    validate_marketplace_file,
+    validate_marketplace_files,
+)
 
 __all__ = [
     "AssetsApiError",
@@ -31,6 +37,7 @@ __all__ = [
     "GeminiToolResult",
     "MarketplaceRunResult",
     "MarketplaceIdentityError",
+    "MarketplaceInputError",
     "OutputArtifact",
     "RuntimeJwtIssuer",
     "RuntimeJwtIssuerError",
@@ -50,4 +57,7 @@ __all__ = [
     "run_copilot_transpose",
     "root_agent",
     "transpose_cvs",
+    "assert_marketplace_upload_allowed",
+    "validate_marketplace_file",
+    "validate_marketplace_files",
 ]

@@ -9,6 +9,7 @@ import pytest
 from cv_transpose_core import BrandTokens, InputFile, TemplateAssets, transpose
 from cv_transpose_core.types import LlmCompleteResult
 from cv_transpose_marketplace.copilot import run_copilot_transpose
+from cv_transpose_marketplace.validation import MarketplaceInputError
 
 
 class FakeLlm:
@@ -130,3 +131,20 @@ async def test_run_copilot_transpose_passes_user_prompt_override(repo_root, expe
 
     assert result.transpose_output.results[0].errors == []
     assert seen_prompt == ["TARGET: Contoso"]
+
+
+@pytest.mark.asyncio
+async def test_run_copilot_transpose_rejects_legacy_doc_before_fetching_assets() -> None:
+    with pytest.raises(MarketplaceInputError, match=r"\.doc"):
+        await run_copilot_transpose(
+            claims={"tid": "123e4567-e89b-12d3-a456-426614174000"},
+            files=[InputFile(name="legacy.doc", bytes_=b"legacy-doc", mime="application/msword")],
+            llm=object(),  # type: ignore[arg-type]
+            assets_base_url="https://cv-api.sent-tech.ca",
+            make_bearer_token=lambda tenant_key, claims: (_ for _ in ()).throw(
+                AssertionError("make_bearer_token should not be called for legacy .doc")
+            ),
+            fetch_assets=lambda **kwargs: (_ for _ in ()).throw(
+                AssertionError("fetch_assets should not be called for legacy .doc")
+            ),
+        )

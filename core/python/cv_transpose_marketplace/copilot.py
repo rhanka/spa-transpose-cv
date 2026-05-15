@@ -11,6 +11,7 @@ from cv_transpose_core.types import TransposeInput
 from .assets import fetch_template_assets
 from .identity import derive_tenant_key_from_claims
 from .report import build_alignment_report
+from .validation import validate_marketplace_files
 
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -149,6 +150,7 @@ async def run_copilot_transpose(
     transpose_fn: Callable[[TransposeInput], Any] = transpose,
 ) -> CopilotActionResult:
     string_claims = {key: str(value) for key, value in claims.items() if value is not None}
+    validate_marketplace_files(files)
     tenant_key = derive_tenant_key_from_claims("ms", string_claims)
     bearer_token = make_bearer_token(tenant_key, claims)
     template_assets = fetch_assets(
