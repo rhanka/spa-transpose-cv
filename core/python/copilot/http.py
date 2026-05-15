@@ -10,6 +10,7 @@ from cv_transpose_marketplace.http import (
 )
 from cv_transpose_marketplace.identity import MarketplaceIdentityError
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuerError
+from cv_transpose_marketplace.validation import MarketplaceInputError
 
 from .runtime import handle_jwks_request, handle_transpose_cvs
 
@@ -43,7 +44,7 @@ async def handle_http_request(
             kwargs["run_transpose"] = run_transpose
         try:
             return json_response(200, await handle_transpose_cvs(payload, **kwargs))
-        except (KeyError, MarketplaceIdentityError, RuntimeJwtIssuerError) as exc:
+        except (KeyError, MarketplaceIdentityError, MarketplaceInputError, RuntimeJwtIssuerError) as exc:
             return invalid_request_response(str(exc))
 
     return json_response(404, {"error": "not_found"})

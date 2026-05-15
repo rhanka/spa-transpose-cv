@@ -9,6 +9,7 @@ from cv_transpose_marketplace.http import (
     json_response,
 )
 from cv_transpose_marketplace.identity import MarketplaceIdentityError
+from cv_transpose_marketplace.validation import MarketplaceInputError
 
 from ..jwt import RuntimeJwtIssuerError
 from .runtime import handle_gemini_request, handle_jwks_request
@@ -40,7 +41,7 @@ async def handle_http_request(
             kwargs["transpose_tool"] = transpose_tool
         try:
             return json_response(200, await handle_gemini_request(payload, **kwargs))
-        except (KeyError, MarketplaceIdentityError, RuntimeJwtIssuerError) as exc:
+        except (KeyError, MarketplaceIdentityError, MarketplaceInputError, RuntimeJwtIssuerError) as exc:
             return invalid_request_response(str(exc))
 
     return json_response(404, {"error": "not_found"})

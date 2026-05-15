@@ -214,6 +214,49 @@ async def test_copilot_http_adapter_rejects_invalid_request_payload(private_key_
 
 
 @pytest.mark.asyncio
+async def test_copilot_http_adapter_rejects_legacy_doc_before_download(private_key_pem: str) -> None:
+    from copilot.http import handle_http_request
+
+    def fail_download(url: str, item: dict[str, object]) -> bytes:
+        raise AssertionError("download_file should not be called for legacy .doc")
+
+    response = await handle_http_request(
+        "POST",
+        "/actions/transposeCvs",
+        json.dumps(
+            {
+                "files": [
+                    {
+                        "name": "legacy.doc",
+                        "contentType": "application/msword",
+                        "downloadUrl": "https://graph.microsoft.com/v1.0/me/drive/items/123/content",
+                    }
+                ],
+                "context": {
+                    "identity": {
+                        "tid": "123E4567-E89B-12D3-A456-426614174000",
+                        "upn": "user@example.com",
+                    }
+                },
+            }
+        ).encode("utf-8"),
+        llm=object(),
+        env={
+            "CVT_COPILOT_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_COPILOT_JWT_ISSUER": "ms-copilot.cv-transpose.com",
+            "CVT_COPILOT_JWT_KID": "copilot-key",
+            "CVT_COPILOT_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+        download_file=fail_download,
+    )
+
+    assert response.status == 400
+    payload = json.loads(response.body)
+    assert payload["error"] == "invalid_request"
+    assert "Upload PDF or DOCX" in payload["message"]
+
+
+@pytest.mark.asyncio
 async def test_gemini_http_adapter_serves_jwks(private_key_pem: str) -> None:
     from cv_transpose_marketplace.gemini_adk.http import handle_http_request
 
@@ -318,3 +361,42 @@ async def test_gemini_http_adapter_rejects_invalid_request_payload(private_key_p
     payload = json.loads(response.body)
     assert payload["error"] == "invalid_request"
     assert "primary domain" in payload["message"]
+
+
+@pytest.mark.asyncio
+async def test_gemini_http_adapter_rejects_legacy_doc_payload(private_key_pem: str) -> None:
+    from cv_transpose_marketplace.gemini_adk.http import handle_http_request
+
+    response = await handle_http_request(
+        "POST",
+        "/tools/transposeCvs",
+        json.dumps(
+            {
+                "files": [
+                    {
+                        "name": "legacy.doc",
+                        "contentType": "application/msword",
+                        "bytesBase64": "bGVnYWN5LWRvYw==",
+                    }
+                ],
+                "context": {
+                    "identity": {
+                        "hd": "workspace.example",
+                        "email": "user@workspace.example",
+                    }
+                },
+            }
+        ).encode("utf-8"),
+        llm=object(),
+        env={
+            "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_GEMINI_JWT_ISSUER": "gemini-ent.cv-transpose.com",
+            "CVT_GEMINI_JWT_KID": "gemini-key",
+            "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+    )
+
+    assert response.status == 400
+    payload = json.loads(response.body)
+    assert payload["error"] == "invalid_request"
+    assert "Upload PDF or DOCX" in payload["message"]

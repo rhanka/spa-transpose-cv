@@ -11,6 +11,7 @@ from cv_transpose_marketplace.copilot import CopilotActionResult, run_copilot_tr
 from cv_transpose_marketplace.identity import derive_tenant_key_from_claims
 from cv_transpose_marketplace.jwt import RuntimeJwtIssuer, RuntimeJwtIssuerError
 from cv_transpose_marketplace.settings import load_runtime_settings
+from cv_transpose_marketplace.validation import assert_marketplace_upload_allowed
 
 
 COPILOT_ENV_PREFIX = "CVT_COPILOT"
@@ -31,6 +32,9 @@ def _parse_input_files(
 ) -> list[InputFile]:
     files: list[InputFile] = []
     for item in payload_files:
+        file_name = str(item["name"])
+        content_type = str(item["contentType"])
+        assert_marketplace_upload_allowed(file_name, content_type)
         bytes_base64 = item.get("bytesBase64")
         download_url = item.get("downloadUrl")
         if isinstance(bytes_base64, str) and bytes_base64:
@@ -41,8 +45,8 @@ def _parse_input_files(
             raise RuntimeJwtIssuerError("Each Copilot file must provide bytesBase64 or downloadUrl")
         files.append(
             InputFile(
-                name=str(item["name"]),
-                mime=str(item["contentType"]),
+                name=file_name,
+                mime=content_type,
                 bytes_=file_bytes,
             )
         )
