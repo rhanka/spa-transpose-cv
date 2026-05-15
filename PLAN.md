@@ -50,12 +50,13 @@ Constat repo:
 
 Reste a fermer avant de considerer P1.2 comme bouclee:
 
-- [ ] traiter l'ecart page-1 validation vs TS (`warnings`, `validation_passed`, phase `validate-page1`)
-- [ ] realigner le fail-soft sur `base_docx` illisible (per-file au lieu d'une exception top-level)
-- [ ] arbitrer le contrat `.doc` (`application/msword`) cote Python marketplace
+- [x] aligner le plumbing `validate-page1` vs TS (`warnings`, `validation_passed`, retries, feedback prompt)
+- [x] realigner le fail-soft sur `base_docx` illisible (per-file au lieu d'une exception top-level)
+- [x] arbitrer le contrat `.doc` (`application/msword`) cote Python marketplace
 - [ ] etendre l'equivalence au-dela du golden Scalian unique (retries, callbacks, erreurs)
 - [ ] qualifier proprement la consommation du port Python par les wrappers marketplace
-- [ ] figer ce qui est explicitement hors scope P1.2 pour eviter les glissements
+- [x] figer ce qui est explicitement hors scope P1.2 pour eviter les glissements
+  - detector page-1 concret en Python reste un no-op pur; une heuristique sandbox-safe ne sera ajoutee que si un besoin marketplace reel l'impose
 
 ## P1.3 — Backoffice marketplace + assets API
 
