@@ -1,6 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { onDestroy } from 'svelte';
+  import { ThemeProvider } from '@sentropic/design-system-svelte';
+  import { sentTechTheme } from '@sentropic/design-system-themes';
   import '../app.css';
   import Disclaimer from '$lib/components/Disclaimer.svelte';
   import { fetchTenantConfig } from '$lib/api';
@@ -61,6 +63,7 @@
   });
 </script>
 
+<ThemeProvider theme={sentTechTheme}>
 <Disclaimer />
 
 <div class="min-h-screen flex flex-col">
@@ -137,6 +140,7 @@
     </div>
   </footer>
 </div>
+</ThemeProvider>
 
 <style>
   header {

@@ -58,6 +58,49 @@
   --radius-base: 16px;
 }
 
+/* Bridge: route Sentropic Design System tokens to the existing tenant
+   CSS variables so DS components inherit the multi-tenant theming
+   already wired through applyTenantTheme(). The tokens emitted by
+   ThemeProvider keep providing fallback values when a tenant is not yet
+   resolved. */
+[data-st-theme] {
+  --st-semantic-action-primary: var(--color-green);
+  --st-semantic-action-primaryText: #ffffff;
+  --st-semantic-action-secondary: transparent;
+  --st-semantic-action-secondaryText: var(--color-purple-dark);
+  --st-semantic-text-primary: var(--color-purple-dark);
+  --st-semantic-text-secondary: var(--color-purple-light);
+  --st-semantic-text-muted: var(--color-purple-lighter);
+  --st-semantic-text-link: var(--color-purple);
+  --st-semantic-text-inverse: #ffffff;
+  --st-semantic-surface-default: #ffffff;
+  --st-semantic-surface-raised: #ffffff;
+  --st-semantic-surface-subtle: var(--color-purple-bg);
+  --st-semantic-border-subtle: var(--color-purple-border);
+  --st-semantic-border-strong: var(--color-purple);
+  --st-semantic-border-interactive: var(--color-green);
+  --st-semantic-feedback-error: #be123c;
+  --st-component-button-primaryBackground: var(--color-green);
+  --st-component-button-primaryText: #ffffff;
+  --st-component-button-secondaryBackground: transparent;
+  --st-component-button-secondaryText: var(--color-purple-dark);
+  --st-component-button-radius: var(--radius-base);
+  --st-component-card-background: #ffffff;
+  --st-component-card-border: var(--color-purple-border);
+  --st-component-card-radius: var(--radius-base);
+  --st-component-card-shadow: var(--shadow-card);
+  --st-component-control-background: #ffffff;
+  --st-component-control-border: var(--color-purple-border);
+  --st-component-control-radius: calc(var(--radius-base) * 0.75);
+  --st-component-control-text: var(--color-purple-dark);
+  --st-component-control-placeholderText: var(--color-purple-lighter);
+  --st-component-control-hoverBorder: var(--color-purple);
+  --st-component-control-focusRing: var(--color-purple);
+  --st-component-field-labelText: var(--color-purple-dark);
+  --st-component-field-helpText: var(--color-purple-light);
+  --st-component-field-maxWidth: 100%;
+}
+
 * {
   box-sizing: border-box;
 }
