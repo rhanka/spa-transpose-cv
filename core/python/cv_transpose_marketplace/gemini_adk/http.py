@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from cv_transpose_marketplace.http import HttpResponse, decode_json_body, json_response
+from cv_transpose_marketplace.http import (
+    HttpResponse,
+    decode_json_body,
+    invalid_request_response,
+    json_response,
+)
+from cv_transpose_marketplace.identity import MarketplaceIdentityError
 
+from ..jwt import RuntimeJwtIssuerError
 from .runtime import handle_gemini_request, handle_jwks_request
 
 
@@ -31,6 +38,9 @@ async def handle_http_request(
         kwargs = {"llm": llm, "env": env}
         if transpose_tool is not None:
             kwargs["transpose_tool"] = transpose_tool
-        return json_response(200, await handle_gemini_request(payload, **kwargs))
+        try:
+            return json_response(200, await handle_gemini_request(payload, **kwargs))
+        except (KeyError, MarketplaceIdentityError, RuntimeJwtIssuerError) as exc:
+            return invalid_request_response(str(exc))
 
     return json_response(404, {"error": "not_found"})

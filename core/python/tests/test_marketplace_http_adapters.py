@@ -177,6 +177,43 @@ async def test_copilot_http_adapter_rejects_invalid_json(private_key_pem: str) -
 
 
 @pytest.mark.asyncio
+async def test_copilot_http_adapter_rejects_invalid_request_payload(private_key_pem: str) -> None:
+    from copilot.http import handle_http_request
+
+    response = await handle_http_request(
+        "POST",
+        "/actions/transposeCvs",
+        json.dumps(
+            {
+                "files": [
+                    {
+                        "name": "candidate.pdf",
+                        "contentType": "application/pdf",
+                    }
+                ],
+                "context": {
+                    "identity": {
+                        "tid": "123E4567-E89B-12D3-A456-426614174000",
+                    }
+                },
+            }
+        ).encode("utf-8"),
+        llm=object(),
+        env={
+            "CVT_COPILOT_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_COPILOT_JWT_ISSUER": "ms-copilot.cv-transpose.com",
+            "CVT_COPILOT_JWT_KID": "copilot-key",
+            "CVT_COPILOT_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+    )
+
+    assert response.status == 400
+    payload = json.loads(response.body)
+    assert payload["error"] == "invalid_request"
+    assert "bytesBase64 or downloadUrl" in payload["message"]
+
+
+@pytest.mark.asyncio
 async def test_gemini_http_adapter_serves_jwks(private_key_pem: str) -> None:
     from cv_transpose_marketplace.gemini_adk.http import handle_http_request
 
@@ -249,3 +286,35 @@ async def test_gemini_http_adapter_posts_tool_payload(private_key_pem: str) -> N
     payload = json.loads(response.body)
     assert payload["tenantKey"] == "gws:workspace.example"
     assert payload["artifact"]["name"] == "Candidate.docx"
+
+
+@pytest.mark.asyncio
+async def test_gemini_http_adapter_rejects_invalid_request_payload(private_key_pem: str) -> None:
+    from cv_transpose_marketplace.gemini_adk.http import handle_http_request
+
+    response = await handle_http_request(
+        "POST",
+        "/tools/transposeCvs",
+        json.dumps(
+            {
+                "files": [],
+                "context": {
+                    "identity": {
+                        "email": "user@workspace.example",
+                    }
+                },
+            }
+        ).encode("utf-8"),
+        llm=object(),
+        env={
+            "CVT_GEMINI_ASSETS_BASE_URL": "https://cv-api.sent-tech.ca",
+            "CVT_GEMINI_JWT_ISSUER": "gemini-ent.cv-transpose.com",
+            "CVT_GEMINI_JWT_KID": "gemini-key",
+            "CVT_GEMINI_JWT_PRIVATE_KEY_PEM": private_key_pem,
+        },
+    )
+
+    assert response.status == 400
+    payload = json.loads(response.body)
+    assert payload["error"] == "invalid_request"
+    assert "primary domain" in payload["message"]
