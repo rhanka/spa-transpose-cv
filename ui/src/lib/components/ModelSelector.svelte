@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Card } from '@sentropic/design-system-svelte';
   import { getModels, type ProviderInfo } from '$lib/api';
 
   let { selected = $bindable('') }: { selected?: string } = $props();
@@ -35,34 +36,33 @@
 
 {#if loaded && providers.length > 1}
   <div class="mb-5">
-    <span class="block text-sm font-medium mb-1.5">Mod&egrave;le IA</span>
-    <div class="flex flex-wrap gap-2">
+    <span id="model-selector-label" class="block text-sm font-medium mb-1.5">Mod&egrave;le IA</span>
+    <div class="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="model-selector-label">
       {#each providers as p}
         {@const isActive = p.id === selected}
-        <button
-          type="button"
-          class="flex items-center gap-2 px-4 py-2.5 text-sm transition-colors"
-          style="
-            border: 2px solid {isActive ? 'var(--color-green)' : 'var(--color-purple-border)'};
-            background: {isActive ? 'rgba(96, 187, 155, 0.08)' : 'white'};
-            color: {isActive ? 'var(--color-purple-dark)' : 'var(--color-purple-lighter)'};
-            cursor: pointer;
-          "
+        <Card
+          interactive
+          class={`model-chip${isActive ? ' model-chip--active' : ''}`}
+          role="radio"
+          tabindex={isActive ? 0 : -1}
+          aria-checked={isActive}
+          aria-label={p.label}
           onclick={() => select(p.id)}
+          onkeydown={(event: KeyboardEvent) => {
+            if (event.key === ' ' || event.key === 'Enter') {
+              event.preventDefault();
+              select(p.id);
+            }
+          }}
         >
-          <span
-            class="inline-flex items-center justify-center text-xs font-semibold"
-            style="
-              width: 22px; height: 22px;
-              background: {isActive ? 'var(--color-green)' : 'var(--color-purple-border)'};
-              color: {isActive ? 'white' : 'var(--color-purple-light)'};
-            "
-          >{ICONS[p.id] || '?'}</span>
-          <span class="font-medium" style="color: {isActive ? 'var(--color-purple-dark)' : 'inherit'};">{p.label}</span>
+          <span class="model-chip__icon" class:model-chip__icon--active={isActive}>
+            {ICONS[p.id] || '?'}
+          </span>
+          <span class="model-chip__label" class:model-chip__label--active={isActive}>{p.label}</span>
           {#if isActive}
-            <span class="text-xs" style="color: var(--color-green);">&#x2713;</span>
+            <span class="model-chip__check">&#x2713;</span>
           {/if}
-        </button>
+        </Card>
       {/each}
     </div>
     <p class="text-xs mt-1.5" style="color: var(--color-purple-lighter);">
@@ -74,3 +74,54 @@
     </p>
   </div>
 {/if}
+
+<style>
+  :global(.model-chip) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border: 2px solid var(--color-purple-border);
+    background: white;
+    color: var(--color-purple-lighter);
+    cursor: pointer;
+    font-size: 0.875rem;
+    box-shadow: none;
+  }
+
+  :global(.model-chip--active) {
+    border-color: var(--color-green);
+    background: rgba(96, 187, 155, 0.08);
+    color: var(--color-purple-dark);
+  }
+
+  .model-chip__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    background: var(--color-purple-border);
+    color: var(--color-purple-light);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .model-chip__icon--active {
+    background: var(--color-green);
+    color: white;
+  }
+
+  .model-chip__label {
+    font-weight: 500;
+  }
+
+  .model-chip__label--active {
+    color: var(--color-purple-dark);
+  }
+
+  .model-chip__check {
+    font-size: 0.75rem;
+    color: var(--color-green);
+  }
+</style>
