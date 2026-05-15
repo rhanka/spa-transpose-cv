@@ -10,7 +10,7 @@ from cv_transpose_marketplace.settings import load_runtime_settings
 from cv_transpose_marketplace.validation import assert_marketplace_upload_allowed
 
 from ..jwt import RuntimeJwtIssuerError
-from .tool import transpose_cvs
+from .tool import encode_tool_result, transpose_cvs
 from .types import GeminiToolFile, GeminiToolRequest, GeminiToolResult
 
 
@@ -45,17 +45,7 @@ def _get_subject_from_claims(claims: Mapping[str, Any]) -> str:
 
 
 def _encode_tool_result(result: GeminiToolResult) -> dict[str, Any]:
-    return {
-        "tenantKey": result.tenant_key,
-        "artifact": None
-        if result.artifact is None
-        else {
-            "name": result.artifact.name,
-            "mime": result.artifact.mime,
-            "bytesBase64": base64.b64encode(result.artifact.bytes_).decode("ascii"),
-        },
-        "reportCard": result.report_card,
-    }
+    return encode_tool_result(result)
 
 
 def _build_tenant_not_configured_response(tenant_key: str, onboarding_url: str | None) -> dict[str, Any]:
