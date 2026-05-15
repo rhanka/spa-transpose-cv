@@ -8,7 +8,12 @@ from cv_transpose_core.types import (
     TransposedCv,
     Usage,
 )
-from cv_transpose_marketplace.gemini_adk import GeminiToolFile, GeminiToolRequest, transpose_cvs
+from cv_transpose_marketplace.gemini_adk import (
+    GeminiToolFile,
+    GeminiToolRequest,
+    transpose_cvs,
+    transpose_cvs_payload,
+)
 from cv_transpose_marketplace.types import MarketplaceRunResult, OutputArtifact
 
 
@@ -93,3 +98,48 @@ async def test_transpose_cvs_maps_request_and_builds_report_card() -> None:
             }
         ],
     }
+
+
+@pytest.mark.asyncio
+async def test_transpose_cvs_payload_accepts_json_friendly_args() -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_run_gemini_transpose(**kwargs):
+        captured.update(kwargs)
+        return MarketplaceRunResult(
+            tenant_key="gws:workspace.example",
+            results=[make_result()],
+            artifact=OutputArtifact(
+                name="Candidate.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                bytes_=b"PK\x03\x04docx",
+            ),
+        )
+
+    result = await transpose_cvs_payload(
+        claims={"hd": "workspace.example", "email": "user@workspace.example"},
+        files=[
+            {
+                "name": "candidate.pdf",
+                "contentType": "application/pdf",
+                "bytesBase64": "cGRmLWJ5dGVz",
+            }
+        ],
+        assets_base_url="https://cv-api.sent-tech.ca",
+        assets_bearer_token="signed.jwt.token",
+        assets_cache_ttl_seconds=300,
+        user_prompt="TARGET: Fabrikam",
+        llm=object(),
+        run_fn=fake_run_gemini_transpose,
+    )
+
+    assert captured["claims"] == {"hd": "workspace.example", "email": "user@workspace.example"}
+    assert captured["assets_base_url"] == "https://cv-api.sent-tech.ca"
+    assert captured["assets_bearer_token"] == "signed.jwt.token"
+    assert captured["assets_cache_ttl_seconds"] == 300
+    files = captured["files"]
+    assert len(files) == 1
+    assert files[0].bytes_ == b"pdf-bytes"
+    assert result["tenantKey"] == "gws:workspace.example"
+    assert result["artifact"]["name"] == "Candidate.docx"
+    assert result["reportCard"]["alignmentScore"] == 100
