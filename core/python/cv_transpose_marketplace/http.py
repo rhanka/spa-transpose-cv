@@ -28,3 +28,7 @@ def json_response(status: int, payload: Any) -> HttpResponse:
         headers={"content-type": "application/json"},
         body=json.dumps(payload, sort_keys=True).encode("utf-8"),
     )
+
+
+def invalid_request_response(message: str) -> HttpResponse:
+    return json_response(400, {"error": "invalid_request", "message": message})
