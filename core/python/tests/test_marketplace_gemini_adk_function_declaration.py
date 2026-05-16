@@ -126,13 +126,11 @@ async def test_make_transpose_cvs_tool_does_not_leak_caller_mutations() -> None:
     assert claims["hd"] == "evil.example"
 
 
-def test_root_agent_fallback_exposes_function_declarations() -> None:
-    from cv_transpose_marketplace.gemini_adk import build_root_agent, build_transpose_cvs_function_declaration
+def test_agent_descriptor_exposes_function_declarations() -> None:
+    from cv_transpose_marketplace.gemini_adk import build_agent_descriptor, build_transpose_cvs_function_declaration
+    from cv_transpose_marketplace.gemini_adk.model_config import ModelConfig
 
-    agent = build_root_agent()
+    config = ModelConfig(model="gemini-2.5-flash", region=None, project_id=None, endpoint_mode="ai_studio")
+    descriptor = build_agent_descriptor(model_config=config)
 
-    assert isinstance(agent, dict)
-    declarations = agent["function_declarations"]
-    assert isinstance(declarations, list)
-    assert len(declarations) == 1
-    assert declarations[0] == build_transpose_cvs_function_declaration()
+    assert descriptor["function_declarations"] == [build_transpose_cvs_function_declaration()]
