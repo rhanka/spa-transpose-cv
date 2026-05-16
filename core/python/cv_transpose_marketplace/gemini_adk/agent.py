@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
+from importlib.resources import files
 from pathlib import Path
 
 from .tool import build_transpose_cvs_function_declaration, transpose_cvs_payload
+
+
+@lru_cache(maxsize=1)
+def load_system_instruction() -> str:
+    return (files("cv_transpose_marketplace.gemini_adk.prompts") / "transpose_cvs.md").read_text(encoding="utf-8")
+
+
+def build_agent_instruction() -> str:
+    return load_system_instruction()
 
 
 def _tool_schema_path(filename: str) -> Path:
@@ -12,14 +23,6 @@ def _tool_schema_path(filename: str) -> Path:
 
 def _load_tool_schema(filename: str) -> dict[str, object]:
     return json.loads(_tool_schema_path(filename).read_text())
-
-
-def build_agent_instruction() -> str:
-    return (
-        "Accept CV attachments, call transpose_cvs once per user request, and return only the generated "
-        "DOCX or ZIP artifact plus the report card. Do not keep conversational memory. If the tenant is "
-        "not configured or template assets are unavailable, surface the structured tool error as-is."
-    )
 
 
 def build_root_agent():

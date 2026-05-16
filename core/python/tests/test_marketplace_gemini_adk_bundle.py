@@ -11,6 +11,8 @@ EXPECTED_GEMINI_ADK_PATHS = [
     "cv_transpose_marketplace/gemini_adk/http.py",
     "cv_transpose_marketplace/gemini_adk/model_config.py",
     "cv_transpose_marketplace/gemini_adk/package.py",
+    "cv_transpose_marketplace/gemini_adk/prompts/__init__.py",
+    "cv_transpose_marketplace/gemini_adk/prompts/transpose_cvs.md",
     "cv_transpose_marketplace/gemini_adk/request.schema.json",
     "cv_transpose_marketplace/gemini_adk/response.schema.json",
     "cv_transpose_marketplace/gemini_adk/runtime.py",
