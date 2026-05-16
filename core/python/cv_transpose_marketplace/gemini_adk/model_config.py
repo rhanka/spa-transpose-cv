@@ -27,6 +27,10 @@ def _coerce_endpoint_mode(region: str | None, project_id: str | None) -> Endpoin
         raise MarketplaceInputError(
             "model_config_invalid: project_id is required when region is set"
         )
+    if region is None and project_id is not None:
+        raise MarketplaceInputError(
+            "model_config_invalid: region is required when project_id is set"
+        )
     return "vertex"
 
 

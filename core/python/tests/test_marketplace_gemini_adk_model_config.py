@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from typing import Mapping
 
 from cv_transpose_marketplace.gemini_adk.model_config import (
     DEFAULT_MODEL,
@@ -35,7 +36,7 @@ def test_env_overrides_default() -> None:
 
 
 def test_tenant_lookup_overrides_env() -> None:
-    def lookup(tenant_key: str):
+    def lookup(tenant_key: str) -> Mapping[str, str] | None:
         assert tenant_key == "gws:example.com"
         return {"gemini.model": "gemini-2.5-pro", "gemini.region": "us-central1", "gemini.project_id": "tenant-proj"}
 
@@ -84,3 +85,31 @@ def test_endpoint_mode_vertex_when_region_and_project_set() -> None:
     config = resolve_model_config(claims={}, env=env)
 
     assert config.endpoint_mode == "vertex"
+
+
+def test_project_id_without_region_raises() -> None:
+    env = {"GEMINI_AGENT_PROJECT_ID": "p"}
+
+    with pytest.raises(MarketplaceInputError) as excinfo:
+        resolve_model_config(claims={}, env=env)
+
+    assert str(excinfo.value).startswith("model_config_invalid:")
+
+
+def test_tenant_partial_override_falls_back_to_env() -> None:
+    def lookup(_tenant_key: str) -> Mapping[str, str] | None:
+        return {"gemini.model": "gemini-2.5-pro"}
+
+    env = {
+        "GEMINI_AGENT_MODEL": "gemini-2.5-flash",
+        "GEMINI_AGENT_REGION": "us-central1",
+        "GEMINI_AGENT_PROJECT_ID": "env-proj",
+    }
+    claims = {"hd": "example.com"}
+
+    config = resolve_model_config(claims=claims, env=env, tenant_lookup=lookup)
+
+    # Tenant supplies the model; region+project come from env.
+    assert config.model == "gemini-2.5-pro"
+    assert config.region == "us-central1"
+    assert config.project_id == "env-proj"
