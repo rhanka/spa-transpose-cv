@@ -31,12 +31,22 @@ def _instruction_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _resolve_instruction(instruction: str | None) -> str:
+    return instruction if instruction is not None else load_system_instruction()
+
+
 def build_agent_descriptor(
     *,
     model_config: ModelConfig,
     instruction: str | None = None,
 ) -> dict[str, Any]:
-    resolved_instruction = instruction if instruction is not None else load_system_instruction()
+    """SDK-free descriptor for the Gemini ADK agent.
+
+    Included in the deterministic bundle for traceability. The
+    `instruction_sha256` field lets bundle consumers detect prompt drift
+    between releases without diffing the prompt body.
+    """
+    resolved_instruction = _resolve_instruction(instruction)
     return {
         "name": "cv_transpose_gemini",
         "description": "Transpose attached CVs into the enterprise DOCX template.",
@@ -65,6 +75,18 @@ def build_root_agent(
     assets_cache_ttl_seconds: int = 0,
     run_fn: Callable[..., Awaitable[Any]] = run_gemini_transpose,
 ):
+    """Build the live `google.adk.agents.Agent` bound to a runtime context.
+
+    Requires the `gemini-adk` optional extra (`pip install
+    cv-transpose-marketplace[gemini-adk]`).
+
+    `model_config` describes routing, but only `model_config.model` is
+    forwarded to `Agent(...)`. Endpoint mode (`vertex` vs `ai_studio`),
+    region, and project_id are consumed by `google.genai` through the
+    process environment (`GOOGLE_GENAI_USE_VERTEXAI`,
+    `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`). Callers are
+    responsible for setting those env vars before building the agent.
+    """
     try:
         from google.adk.agents import Agent  # type: ignore[import-not-found]
     except ImportError as err:
@@ -86,6 +108,6 @@ def build_root_agent(
         name="cv_transpose_gemini",
         description="Transpose attached CVs into the enterprise DOCX template.",
         model=model_config.model,
-        instruction=instruction if instruction is not None else load_system_instruction(),
+        instruction=_resolve_instruction(instruction),
         tools=[tool],
     )
