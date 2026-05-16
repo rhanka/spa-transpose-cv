@@ -25,3 +25,8 @@ include = ["cv_transpose_core*", "cv_transpose_marketplace*"]
 
 [tool.setuptools.package-data]
 cv_transpose_core = ["spec/prompts/*.md"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: opt-in test that requires GOOGLE_API_KEY",
+]
