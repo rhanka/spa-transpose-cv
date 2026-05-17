@@ -275,8 +275,12 @@
         {/if}
       </div>
 
-      <div class="p-4 mb-6 text-sm" style="background: var(--color-purple-bg); border-left: 3px solid var(--color-purple);">
-        Certaines erreurs de transposition peuvent subsister. Nous recommandons une relecture attentive d'environ 15 minutes pour un CV de 10 ans d'exp&eacute;rience.
+      <div class="mb-6">
+        <Alert
+          tone="info"
+          title="Recommandation de relecture"
+          message="Certaines erreurs de transposition peuvent subsister. Nous recommandons une relecture attentive d'environ 15 minutes pour un CV de 10 ans d'expérience."
+        />
       </div>
 
       <div class="card p-4">
@@ -291,7 +295,9 @@
     {/if}
 
     {#if error}
-      <div class="mt-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
+      <div class="mt-4">
+        <Alert tone="error" title="Erreur" message={error} />
+      </div>
     {/if}
   {/if}
 </div>
