@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 
@@ -26,7 +27,7 @@ async def test_agent_invokes_transpose_cvs_once_with_real_gemini(monkeypatch, tm
         build_root_agent,
         resolve_model_config,
     )
-    from cv_transpose_marketplace.gemini_adk.runner import make_local_runner
+    from cv_transpose_marketplace.gemini_adk.runner import make_local_runner, make_user_content
 
     fake_pdf = tmp_path / "cv.pdf"
     fake_pdf.write_bytes(b"%PDF-1.4\n%minimal\n")
@@ -58,12 +59,20 @@ async def test_agent_invokes_transpose_cvs_once_with_real_gemini(monkeypatch, tm
 
     runner = make_local_runner(agent=agent)
 
-    user_message = "Transpose the attached CV."
+    user_message = (
+        "Call the transpose_cvs tool exactly once with files=["
+        "{"
+        '"name":"cv.pdf",'
+        '"contentType":"application/pdf",'
+        f'"bytesBase64":"{base64.b64encode(fake_pdf.read_bytes()).decode("ascii")}"'
+        "}"
+        "] and user_prompt=null."
+    )
     invoke = getattr(runner, "run_async", None) or getattr(runner, "run")
     async for _event in invoke(  # type: ignore[func-returns-value]
         user_id="smoke",
         session_id="smoke-session",
-        new_message=user_message,
+        new_message=make_user_content(user_message),
     ):
         pass
 
