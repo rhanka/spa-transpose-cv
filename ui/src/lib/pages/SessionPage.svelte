@@ -18,6 +18,7 @@
     Badge,
     Button,
     Card,
+    CopyButton,
     InlineLoading,
     PasswordInput,
     ProgressBar,
@@ -264,7 +265,7 @@
     </div>
 
     {#if sessionStatus === 'done' || sessionStatus === 'error'}
-      <div class="card p-6 mb-6">
+      <Card class="session-download-card">
         <h3 class="text-lg font-semibold mb-4">Téléchargements</h3>
         {#each outputs.filter((o) => o.endsWith('.zip')) as zipFile}
           <div class="flex items-center justify-between p-3" style="background: var(--color-purple-bg);">
@@ -272,13 +273,13 @@
               <span class="text-sm font-semibold">Tous les profils (ZIP)</span>
               <span class="text-xs ml-2" style="color: var(--color-purple-lighter);">{zipFile}</span>
             </div>
-            <button onclick={() => handleDownload(zipFile)} class="btn-primary text-xs py-2 px-4">Télécharger</button>
+            <Button variant="primary" size="sm" onclick={() => handleDownload(zipFile)}>Télécharger</Button>
           </div>
         {/each}
         {#if expiresAt}
           <p class="text-xs mt-4" style="color: var(--color-purple-lighter);">Suppression le {formatExpiry(expiresAt)}</p>
         {/if}
-      </div>
+      </Card>
 
       <div class="mb-6">
         <Alert
@@ -288,15 +289,15 @@
         />
       </div>
 
-      <div class="card p-4">
+      <Card class="session-share-card">
         <p class="text-sm font-medium mb-2">Partager cette session</p>
         <div class="flex items-center gap-2">
           <input readonly value={shareUrl}
             class="flex-1 px-3 py-2 text-xs bg-white border" style="border-color: var(--color-purple-border);" />
-          <button onclick={() => navigator.clipboard.writeText(shareUrl)} class="btn-secondary text-xs py-2 px-3">Copier</button>
+          <CopyButton value={shareUrl} label="Copier" copiedLabel="Copié" size="sm" />
         </div>
         <p class="text-xs mt-2" style="color: var(--color-purple-lighter);">Le destinataire aura besoin du mot de passe.</p>
-      </div>
+      </Card>
     {/if}
 
     {#if error}
@@ -399,5 +400,14 @@
   :global(.session-auth-submit) {
     width: 100%;
     justify-content: center;
+  }
+
+  :global(.session-download-card) {
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  :global(.session-share-card) {
+    padding: 1rem;
   }
 </style>
