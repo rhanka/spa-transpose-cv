@@ -18,6 +18,10 @@ test = [
   "pytest>=8.2,<9",
   "pytest-asyncio>=0.23,<1",
 ]
+gemini-adk = [
+    "google-adk>=1.0,<2",
+    "google-genai>=1.0,<2",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -25,3 +29,8 @@ include = ["cv_transpose_core*", "cv_transpose_marketplace*"]
 
 [tool.setuptools.package-data]
 cv_transpose_core = ["spec/prompts/*.md"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: opt-in test that requires GOOGLE_API_KEY",
+]

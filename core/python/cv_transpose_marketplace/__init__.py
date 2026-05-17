@@ -5,8 +5,8 @@ from .gemini_adk import (
     GeminiToolFile,
     GeminiToolRequest,
     GeminiToolResult,
+    build_agent_descriptor,
     build_root_agent,
-    root_agent,
     transpose_cvs,
 )
 from .identity import (
@@ -45,6 +45,7 @@ __all__ = [
     "RuntimeSettingsError",
     "TenantNotConfiguredError",
     "build_output_artifact",
+    "build_agent_descriptor",
     "build_root_agent",
     "derive_direct_tenant_key",
     "derive_gws_tenant_key",
@@ -55,7 +56,6 @@ __all__ = [
     "run_gemini_transpose",
     "run_marketplace_transpose",
     "run_copilot_transpose",
-    "root_agent",
     "transpose_cvs",
     "assert_marketplace_upload_allowed",
     "validate_marketplace_file",

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import inspect
+import sys
+import types
 
 import pytest
 
@@ -126,13 +128,87 @@ async def test_make_transpose_cvs_tool_does_not_leak_caller_mutations() -> None:
     assert claims["hd"] == "evil.example"
 
 
-def test_root_agent_fallback_exposes_function_declarations() -> None:
-    from cv_transpose_marketplace.gemini_adk import build_root_agent, build_transpose_cvs_function_declaration
+def test_agent_descriptor_exposes_function_declarations() -> None:
+    from cv_transpose_marketplace.gemini_adk import build_agent_descriptor, build_transpose_cvs_function_declaration
+    from cv_transpose_marketplace.gemini_adk.model_config import ModelConfig
 
-    agent = build_root_agent()
+    config = ModelConfig(model="gemini-2.5-flash", region=None, project_id=None, endpoint_mode="ai_studio")
+    descriptor = build_agent_descriptor(model_config=config)
 
-    assert isinstance(agent, dict)
-    declarations = agent["function_declarations"]
-    assert isinstance(declarations, list)
-    assert len(declarations) == 1
-    assert declarations[0] == build_transpose_cvs_function_declaration()
+    assert descriptor["function_declarations"] == [build_transpose_cvs_function_declaration()]
+
+
+@pytest.mark.asyncio
+async def test_make_transpose_cvs_adk_tool_uses_explicit_declaration(monkeypatch) -> None:
+    from cv_transpose_marketplace.types import MarketplaceRunResult
+
+    captured: dict[str, object] = {}
+
+    class FakeBaseTool:
+        def __init__(self, *, name, description) -> None:
+            captured["tool_name"] = name
+            captured["tool_description"] = description
+
+    class FakeFunctionDeclaration:
+        @classmethod
+        def model_validate(cls, payload):
+            captured["declaration"] = payload
+            return {"validated": payload}
+
+    adk_tools_module = types.ModuleType("google.adk.tools")
+    adk_tools_module.BaseTool = FakeBaseTool  # type: ignore[attr-defined]
+    genai_module = types.ModuleType("google.genai")
+    genai_module.types = types.SimpleNamespace(  # type: ignore[attr-defined]
+        FunctionDeclaration=FakeFunctionDeclaration,
+    )
+    google_module = types.ModuleType("google")
+    google_module.genai = genai_module  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "google", google_module)
+    monkeypatch.setitem(sys.modules, "google.adk.tools", adk_tools_module)
+    monkeypatch.setitem(sys.modules, "google.genai", genai_module)
+
+    async def fake_run_gemini_transpose(**kwargs):
+        captured["run_kwargs"] = kwargs
+        return MarketplaceRunResult(tenant_key="gws:workspace.example", results=[], artifact=None)
+
+    from cv_transpose_marketplace.gemini_adk import (
+        build_transpose_cvs_function_declaration,
+        make_transpose_cvs_adk_tool,
+    )
+
+    tool = make_transpose_cvs_adk_tool(
+        claims={"hd": "workspace.example"},
+        llm=object(),
+        assets_base_url="https://cv-api.sent-tech.ca",
+        assets_bearer_token="signed.jwt.token",
+        assets_cache_ttl_seconds=120,
+        run_fn=fake_run_gemini_transpose,
+    )
+
+    assert isinstance(tool, FakeBaseTool)
+    assert captured["tool_name"] == "transpose_cvs"
+    assert tool._get_declaration() == {"validated": build_transpose_cvs_function_declaration()}
+    assert captured["declaration"] == build_transpose_cvs_function_declaration()
+
+    result = await tool.run_async(
+        args={
+            "files": [
+                {
+                    "name": "candidate.pdf",
+                    "contentType": "application/pdf",
+                    "bytesBase64": base64.b64encode(b"pdf-bytes").decode("ascii"),
+                }
+            ],
+            "user_prompt": "TARGET: Fabrikam",
+        },
+        tool_context=object(),
+    )
+
+    run_kwargs = captured["run_kwargs"]
+    assert run_kwargs["claims"] == {"hd": "workspace.example"}
+    assert run_kwargs["assets_base_url"] == "https://cv-api.sent-tech.ca"
+    assert run_kwargs["assets_bearer_token"] == "signed.jwt.token"
+    assert run_kwargs["assets_cache_ttl_seconds"] == 120
+    assert run_kwargs["user_prompt"] == "TARGET: Fabrikam"
+    assert result["tenantKey"] == "gws:workspace.example"

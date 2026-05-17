@@ -124,7 +124,8 @@ Fondations deja presentes dans le repo:
 - [x] validation explicite du payload runtime au bord (MarketplaceInputError)
 - [x] validation forte du claim `hd` Workspace (forme DNS)
 
-- [ ] agent Python ADK
+- [x] agent Python ADK (local Runner + CLI, layered ModelConfig, externalized prompt,
+      opt-in integration smoke)
 - [ ] integration Vertex AI Agent Builder / Agentspace
 - [ ] packaging / publication partner basique Google
 - [ ] smoke post-publication
