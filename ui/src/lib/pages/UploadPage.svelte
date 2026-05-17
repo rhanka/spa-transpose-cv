@@ -8,6 +8,17 @@
   import { tenantConfig, tenantSlug } from '$lib/stores/tenant';
   import { buildTenantPath, DEFAULT_TENANT_SLUG } from '$lib/tenant';
   import ModelSelector from '$lib/components/ModelSelector.svelte';
+  import {
+    Alert,
+    Button,
+    FileUploader,
+    PasswordInput,
+    Textarea,
+  } from '@sentropic/design-system-svelte';
+
+  const ACCEPTED_CV_EXTENSIONS = /\.(pdf|docx?|doc)$/i;
+  const CV_ACCEPT =
+    '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
   let files = $state<File[]>([]);
   let password = $state('');
@@ -16,7 +27,6 @@
   let pageMode = $state<'optimizer' | 'builder'>('builder');
   let loading = $state(false);
   let error = $state('');
-  let dragOver = $state(false);
 
   function getRendererOverride(value: string | null): TemplateRenderer | undefined {
     return value === 'generic' || value === 'legacy-scalian' ? value : undefined;
@@ -54,27 +64,10 @@
     }
   });
 
-  function handleDrop(e: DragEvent) {
-    e.preventDefault();
-    dragOver = false;
-    const dropped = Array.from(e.dataTransfer?.files || []);
-    files = [...files, ...dropped.filter((f) => f.name.match(/\.(pdf|docx?|doc)$/i))];
-  }
-
-  function handleDragOver(e: DragEvent) { e.preventDefault(); dragOver = true; }
-  function handleDragLeave() { dragOver = false; }
-
-  function handleFileSelect(e: Event) {
-    const input = e.target as HTMLInputElement;
-    if (input.files) files = [...files, ...Array.from(input.files)];
-  }
-
-  function removeFile(index: number) { files = files.filter((_, i) => i !== index); }
-
-  function formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} o`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  function handleFiles(next: File[]) {
+    // The FileUploader accepts attribute filters the picker but the drop
+    // target is permissive, so re-apply the extension allow-list here.
+    files = next.filter((file) => ACCEPTED_CV_EXTENSIONS.test(file.name));
   }
 
   async function handleSubmit() {
@@ -147,84 +140,58 @@
       <TenantBuilderForm />
     {:else}
     <div class="card p-8">
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="border-2 border-dashed p-10 text-center mb-6 transition-colors cursor-pointer"
-        style="border-color: {dragOver ? 'var(--color-green)' : 'var(--color-purple-border)'};"
-        ondrop={handleDrop}
-        ondragover={handleDragOver}
-        ondragleave={handleDragLeave}
-        onclick={() => document.getElementById('file-input')?.click()}
-        role="button"
-        tabindex="0"
-        onkeydown={(e) => { if (e.key === 'Enter') document.getElementById('file-input')?.click(); }}
-      >
-        <input id="file-input" type="file" multiple accept=".pdf,.docx,.doc" class="hidden" onchange={handleFileSelect} />
-        {#if files.length === 0}
-          <div class="mb-3">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-purple-lighter)" stroke-width="1.5" class="mx-auto">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-            </svg>
-          </div>
-          <p class="text-sm" style="color: var(--color-purple-light);">Glissez vos fichiers ici ou cliquez pour sélectionner</p>
-          <p class="text-xs mt-1" style="color: var(--color-purple-lighter);">PDF, DOCX, DOC — 50 Mo max au total</p>
-        {:else}
-          <p class="text-sm font-semibold mb-3">{files.length} fichier{files.length > 1 ? 's' : ''}</p>
-          <div class="text-left max-h-48 overflow-y-auto space-y-1">
-            {#each files as file, i}
-              <div class="flex items-center justify-between text-sm py-1.5 px-3" style="background: var(--color-purple-bg);">
-                <span class="truncate flex-1">{file.name}</span>
-                <span class="text-xs mx-3" style="color: var(--color-purple-lighter);">{formatSize(file.size)}</span>
-                <button class="text-red-400 hover:text-red-600 text-xs font-bold" onclick={(e) => { e.stopPropagation(); removeFile(i); }}>&#x2715;</button>
-              </div>
-            {/each}
-          </div>
-          <p class="text-xs mt-2" style="color: var(--color-purple-lighter);">Cliquez ou glissez pour en ajouter</p>
-        {/if}
-      </div>
-
-      <div class="mb-5">
-        <label class="block text-sm font-medium mb-1.5" for="password">Mot de passe de chiffrement</label>
-        <input
-          id="password"
-          type="password"
-          bind:value={password}
-          placeholder="Choisissez un mot de passe pour cette session"
-          class="w-full px-4 py-3 border-2 text-sm"
-          style="border-color: var(--color-purple-border);"
-        />
-        <p class="text-xs mt-1" style="color: var(--color-purple-lighter);">
-          Nécessaire pour déchiffrer les résultats. Communiquez-le au destinataire.
-        </p>
-      </div>
-
       <div class="mb-6">
-        <label class="block text-sm font-medium mb-1.5" for="prompt">
-          Consignes de conversion <span style="color: var(--color-purple-lighter);" class="font-normal">(optionnel)</span>
-        </label>
-        <textarea
+        <FileUploader
+          id="file-input"
+          class="upload-file-uploader"
+          accept={CV_ACCEPT}
+          multiple={true}
+          bind:files
+          onfiles={handleFiles}
+          triggerLabel="Sélectionner des fichiers"
+          dropzoneLabel="Glissez vos CV ici ou cliquez pour sélectionner"
+          removeLabel={(name: string) => `Retirer ${name}`}
+          helperText="PDF, DOCX, DOC — 50 Mo max au total"
+        />
+      </div>
+
+      <div class="mb-5 upload-field">
+        <PasswordInput
+          id="password"
+          label="Mot de passe de chiffrement"
+          placeholder="Choisissez un mot de passe pour cette session"
+          helperText="Nécessaire pour déchiffrer les résultats. Communiquez-le au destinataire."
+          autocomplete="new-password"
+          bind:value={password}
+        />
+      </div>
+
+      <div class="mb-6 upload-field">
+        <Textarea
           id="prompt"
+          label="Consignes de conversion (optionnel)"
           rows={3}
-          bind:value={prompt}
           placeholder="Ex: garder les intitulés exacts, raccourcir les bullets trop longues, conserver le ton exécutif..."
-          class="w-full px-4 py-3 border-2 text-sm resize-none"
-          style="border-color: var(--color-purple-border);"
-        ></textarea>
+          bind:value={prompt}
+        />
       </div>
 
       <ModelSelector bind:selected={selectedProvider} />
 
       {#if error}
-        <div class="mb-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
+        <div class="mb-4">
+          <Alert tone="error" title="Erreur" message={error} />
+        </div>
       {/if}
 
-      <button
+      <Button
+        variant="primary"
+        class="upload-submit-btn"
         onclick={handleSubmit}
         disabled={!files.length || !password || loading}
-        class="w-full btn-primary"
       >
         {loading ? 'Traitement en cours...' : 'Lancer la conversion'}
-      </button>
+      </Button>
     </div>
     {/if}
   </div>
@@ -264,5 +231,18 @@
       flex-direction: column;
       border-radius: calc(var(--radius-base) * 0.75);
     }
+  }
+
+  :global(.upload-file-uploader) {
+    max-width: 100%;
+  }
+
+  .upload-field :global(.st-field) {
+    max-width: 100%;
+  }
+
+  :global(.upload-submit-btn) {
+    width: 100%;
+    justify-content: center;
   }
 </style>

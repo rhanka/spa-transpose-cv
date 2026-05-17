@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Card, Checkbox, Input } from '@sentropic/design-system-svelte';
+  import { Button, Card, Checkbox, FileUploader, Input } from '@sentropic/design-system-svelte';
   import { createTenantViaAdmin, requestClaimOtp, type AdminTenantCreateResponse, type ClaimOtpResponse } from '$lib/api';
 
   let companyUrl = $state('');
@@ -8,7 +8,7 @@
   let rootAdminPassword = $state('');
   let otp = $state('');
   let templateFile = $state<File | null>(null);
-  let templateDragOver = $state(false);
+  let templateFiles = $state<File[]>([]);
   let loadingOtp = $state(false);
   let loadingCreate = $state(false);
   let error = $state('');
@@ -17,39 +17,24 @@
 
   const isRootAdminMode = $derived(rootAdminPassword.trim().length > 0);
 
-  function handleTemplateSelect(event: Event) {
-    const input = event.target as HTMLInputElement;
-    applyTemplateFile(input.files?.[0] ?? null);
-  }
-
-  function applyTemplateFile(file: File | null) {
+  function handleTemplateFiles(next: File[]) {
+    const file = next[0] ?? null;
     if (!file) {
       templateFile = null;
+      templateFiles = [];
       return;
     }
 
     if (!file.name.match(/\.docx$/i)) {
       error = "L'exemple doit etre fourni au format DOCX.";
+      templateFile = null;
+      templateFiles = [];
       return;
     }
 
     error = '';
     templateFile = file;
-  }
-
-  function handleTemplateDrop(event: DragEvent) {
-    event.preventDefault();
-    templateDragOver = false;
-    applyTemplateFile(event.dataTransfer?.files?.[0] ?? null);
-  }
-
-  function handleTemplateDragOver(event: DragEvent) {
-    event.preventDefault();
-    templateDragOver = true;
-  }
-
-  function handleTemplateDragLeave() {
-    templateDragOver = false;
+    templateFiles = [file];
   }
 
   function handleOperatorAccessToggle(event: Event) {
@@ -143,37 +128,19 @@
   </div>
 
   <div class="builder-field">
-      <label class="builder-label" for="builder-template-file">Exemple DOCX de l'entreprise</label>
-    <input id="builder-template-file" type="file" accept=".docx" class="hidden" onchange={handleTemplateSelect} />
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="builder-dropzone"
-      class:builder-dropzone--active={templateDragOver}
-      ondrop={handleTemplateDrop}
-      ondragover={handleTemplateDragOver}
-      ondragleave={handleTemplateDragLeave}
-      onclick={() => document.getElementById('builder-template-file')?.click()}
-      role="button"
-      tabindex="0"
-      onkeydown={(event) => {
-        if (event.key === 'Enter') {
-          document.getElementById('builder-template-file')?.click();
-        }
-      }}
-    >
-      {#if templateFile}
-        <div class="builder-dropzone-icon">&#8593;</div>
-        <div class="builder-dropzone-title">{templateFile.name}</div>
-        <div class="builder-dropzone-copy">Cliquez pour remplacer le document.</div>
-      {:else}
-        <div class="builder-dropzone-icon">&#8593;</div>
-        <div class="builder-dropzone-title">Deposez l'exemple DOCX ici</div>
-        <div class="builder-dropzone-copy">ou cliquez pour le sélectionner</div>
-      {/if}
-    </div>
-    <p class="builder-help">
-      Le document sert a analyser la structure cible. Format DOCX uniquement a ce stade.
-    </p>
+    <FileUploader
+      id="builder-template-file"
+      class="builder-file-uploader"
+      label="Exemple DOCX de l'entreprise"
+      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      multiple={false}
+      bind:files={templateFiles}
+      onfiles={handleTemplateFiles}
+      triggerLabel="Choisir un fichier"
+      dropzoneLabel="Deposez l'exemple DOCX ici ou cliquez pour le sélectionner"
+      removeLabel={(name: string) => `Retirer ${name}`}
+      helperText="Le document sert a analyser la structure cible. Format DOCX uniquement a ce stade."
+    />
   </div>
 
   {#if !isRootAdminMode}
@@ -288,51 +255,8 @@
     gap: 0.45rem;
   }
 
-  .builder-label {
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--color-purple-dark);
-  }
-
-  .builder-help {
-    margin: 0;
-    font-size: 0.78rem;
-    line-height: 1.45;
-    color: var(--color-purple-light);
-  }
-
-  .builder-dropzone {
-    padding: 2rem 1rem;
-    border: 2px dashed var(--color-purple-border);
-    border-radius: calc(var(--radius-base) * 0.85);
-    background: white;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.2s ease, background 0.2s ease;
-  }
-
-  .builder-dropzone--active {
-    border-color: var(--color-green);
-    background: rgba(17, 196, 212, 0.03);
-  }
-
-  .builder-dropzone-icon {
-    font-size: 2rem;
-    line-height: 1;
-    color: var(--color-purple-dark);
-  }
-
-  .builder-dropzone-title {
-    margin-top: 0.65rem;
-    font-size: 0.98rem;
-    font-weight: 600;
-    color: var(--color-purple-dark);
-  }
-
-  .builder-dropzone-copy {
-    margin-top: 0.3rem;
-    font-size: 0.82rem;
-    color: var(--color-purple-light);
+  :global(.builder-file-uploader) {
+    max-width: 100%;
   }
 
   .builder-otp-row {
