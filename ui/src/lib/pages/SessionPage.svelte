@@ -229,8 +229,8 @@
             <div class="p-3 border-r flex flex-col" style="border-color: var(--color-purple-border);">
               <div class="text-sm font-medium truncate mb-2">{file.name}</div>
               {#if isError}
-                <span class="text-xs px-2 py-0.5 inline-block" style="background: #fef2f2; color: #b91c1c;">Erreur</span>
-                {#if file.error}<div class="text-xs mt-1" style="color: #b91c1c;">{file.error}</div>{/if}
+                <Badge tone="error">Erreur</Badge>
+                {#if file.error}<div class="text-xs mt-1" style="color: var(--st-semantic-feedback-error, #b91c1c);">{file.error}</div>{/if}
               {:else if isProcessing && stream}
                 <InlineLoading
                   status={isStalled(idx) ? 'error' : 'active'}
@@ -243,7 +243,7 @@
                   <div class="text-xs mt-2" style="color: var(--color-purple-light);">Candidat : {stream.parsed_keys.name}</div>
                 {/if}
               {:else}
-                <span class="text-xs" style="color: var(--color-purple-lighter);">En attente</span>
+                <Badge tone="neutral">En attente</Badge>
               {/if}
             </div>
             <div class="stream-panel" use:scrollToEnd>
