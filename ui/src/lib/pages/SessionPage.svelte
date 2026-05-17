@@ -161,13 +161,18 @@
 
   {#if !authenticated}
     <section class="max-w-md mx-auto">
-      <div class="card p-8">
-        <label class="block text-sm font-medium mb-1.5" for="sp">Mot de passe</label>
-        <input id="sp" type="password" bind:value={password} placeholder="Mot de passe de la session"
-          class="w-full px-4 py-3 border-2 text-sm mb-4" style="border-color: var(--color-purple-border);"
-          onkeydown={(e) => { if (e.key === 'Enter') authenticate(); }} />
-        <button onclick={authenticate} class="w-full btn-primary">Accéder</button>
-      </div>
+      <Card class="session-auth-card">
+        <div class="session-auth-stack">
+          <PasswordInput
+            id="sp"
+            label="Mot de passe"
+            placeholder="Mot de passe de la session"
+            bind:value={password}
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') authenticate(); }}
+          />
+          <Button variant="primary" class="session-auth-submit" onclick={authenticate}>Accéder</Button>
+        </div>
+      </Card>
     </section>
   {:else}
     {#if files.length > 0}
@@ -379,5 +384,20 @@
     .stream-panel, .attention-cell {
       height: 120px;
     }
+  }
+
+  :global(.session-auth-card) {
+    padding: 2rem;
+  }
+
+  .session-auth-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  :global(.session-auth-submit) {
+    width: 100%;
+    justify-content: center;
   }
 </style>
