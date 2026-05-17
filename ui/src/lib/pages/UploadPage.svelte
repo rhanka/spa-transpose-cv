@@ -8,7 +8,13 @@
   import { tenantConfig, tenantSlug } from '$lib/stores/tenant';
   import { buildTenantPath, DEFAULT_TENANT_SLUG } from '$lib/tenant';
   import ModelSelector from '$lib/components/ModelSelector.svelte';
-  import { FileUploader } from '@sentropic/design-system-svelte';
+  import {
+    Alert,
+    Button,
+    FileUploader,
+    PasswordInput,
+    Textarea,
+  } from '@sentropic/design-system-svelte';
 
   const ACCEPTED_CV_EXTENSIONS = /\.(pdf|docx?|doc)$/i;
   const CV_ACCEPT =
@@ -149,48 +155,43 @@
         />
       </div>
 
-      <div class="mb-5">
-        <label class="block text-sm font-medium mb-1.5" for="password">Mot de passe de chiffrement</label>
-        <input
+      <div class="mb-5 upload-field">
+        <PasswordInput
           id="password"
-          type="password"
-          bind:value={password}
+          label="Mot de passe de chiffrement"
           placeholder="Choisissez un mot de passe pour cette session"
-          class="w-full px-4 py-3 border-2 text-sm"
-          style="border-color: var(--color-purple-border);"
+          helperText="Nécessaire pour déchiffrer les résultats. Communiquez-le au destinataire."
+          autocomplete="new-password"
+          bind:value={password}
         />
-        <p class="text-xs mt-1" style="color: var(--color-purple-lighter);">
-          Nécessaire pour déchiffrer les résultats. Communiquez-le au destinataire.
-        </p>
       </div>
 
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-1.5" for="prompt">
-          Consignes de conversion <span style="color: var(--color-purple-lighter);" class="font-normal">(optionnel)</span>
-        </label>
-        <textarea
+      <div class="mb-6 upload-field">
+        <Textarea
           id="prompt"
+          label="Consignes de conversion (optionnel)"
           rows={3}
-          bind:value={prompt}
           placeholder="Ex: garder les intitulés exacts, raccourcir les bullets trop longues, conserver le ton exécutif..."
-          class="w-full px-4 py-3 border-2 text-sm resize-none"
-          style="border-color: var(--color-purple-border);"
-        ></textarea>
+          bind:value={prompt}
+        />
       </div>
 
       <ModelSelector bind:selected={selectedProvider} />
 
       {#if error}
-        <div class="mb-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
+        <div class="mb-4">
+          <Alert tone="error" title="Erreur" message={error} />
+        </div>
       {/if}
 
-      <button
+      <Button
+        variant="primary"
+        class="upload-submit-btn"
         onclick={handleSubmit}
         disabled={!files.length || !password || loading}
-        class="w-full btn-primary"
       >
         {loading ? 'Traitement en cours...' : 'Lancer la conversion'}
-      </button>
+      </Button>
     </div>
     {/if}
   </div>
@@ -234,5 +235,14 @@
 
   :global(.upload-file-uploader) {
     max-width: 100%;
+  }
+
+  .upload-field :global(.st-field) {
+    max-width: 100%;
+  }
+
+  :global(.upload-submit-btn) {
+    width: 100%;
+    justify-content: center;
   }
 </style>
