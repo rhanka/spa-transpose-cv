@@ -13,6 +13,16 @@
   import { buildTenantPath } from '$lib/tenant';
   import { sessionPassword } from '$lib/stores/session';
   import { tenantConfig, tenantSlug } from '$lib/stores/tenant';
+  import {
+    Alert,
+    Badge,
+    Button,
+    Card,
+    CopyButton,
+    InlineLoading,
+    PasswordInput,
+    ProgressBar,
+  } from '@sentropic/design-system-svelte';
 
   const id = $derived($page.params.id ?? '');
   const currentTenantSlug = $derived($page.params.tenant ?? $tenantSlug);
@@ -152,13 +162,18 @@
 
   {#if !authenticated}
     <section class="max-w-md mx-auto">
-      <div class="card p-8">
-        <label class="block text-sm font-medium mb-1.5" for="sp">Mot de passe</label>
-        <input id="sp" type="password" bind:value={password} placeholder="Mot de passe de la session"
-          class="w-full px-4 py-3 border-2 text-sm mb-4" style="border-color: var(--color-purple-border);"
-          onkeydown={(e) => { if (e.key === 'Enter') authenticate(); }} />
-        <button onclick={authenticate} class="w-full btn-primary">Accéder</button>
-      </div>
+      <Card class="session-auth-card">
+        <div class="session-auth-stack">
+          <PasswordInput
+            id="sp"
+            label="Mot de passe"
+            placeholder="Mot de passe de la session"
+            bind:value={password}
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') authenticate(); }}
+          />
+          <Button variant="primary" class="session-auth-submit" onclick={authenticate}>Accéder</Button>
+        </div>
+      </Card>
     </section>
   {:else}
     {#if files.length > 0}
@@ -168,11 +183,15 @@
       {@const completedSteps = doneCount + conductorDone}
       {@const pct = Math.round((completedSteps / totalSteps) * 100)}
       <div class="mb-6">
-        <div class="flex justify-between text-xs mb-1">
-          <span>{doneCount}/{files.length} profils + {conductorDone}/{doneCount || 0} validations</span>
-          <span class="font-semibold">{pct}%</span>
-        </div>
-        <div class="w-full h-1.5 bg-gray-100"><div class="h-full transition-all duration-500" style="width: {pct}%; background: var(--color-green);"></div></div>
+        <ProgressBar
+          label="{doneCount}/{files.length} profils + {conductorDone}/{doneCount || 0} validations"
+          value={completedSteps}
+          max={totalSteps}
+          tone={sessionStatus === 'error' ? 'error' : 'success'}
+          size="sm"
+          showValue
+          valueText="{pct}%"
+        />
       </div>
     {/if}
 
@@ -216,14 +235,13 @@
             <div class="p-3 border-r flex flex-col" style="border-color: var(--color-purple-border);">
               <div class="text-sm font-medium truncate mb-2">{file.name}</div>
               {#if isError}
-                <span class="text-xs px-2 py-0.5 inline-block" style="background: #fef2f2; color: #b91c1c;">Erreur</span>
-                {#if file.error}<div class="text-xs mt-1" style="color: #b91c1c;">{file.error}</div>{/if}
+                <Badge tone="error">Erreur</Badge>
+                {#if file.error}<div class="text-xs mt-1" style="color: var(--st-semantic-feedback-error, #b91c1c);">{file.error}</div>{/if}
               {:else if isProcessing && stream}
-                <div class="flex items-center gap-2 text-xs" style="color: var(--color-purple);">
-                  <span class="animate-pulse">&#9711;</span>
-                  <span class="font-medium">{phaseLabel(stream.phase)}</span>
-                  <span style="color: var(--color-purple-lighter);">({formatMs(stream.elapsed_ms)})</span>
-                </div>
+                <InlineLoading
+                  status={isStalled(idx) ? 'error' : 'active'}
+                  label="{phaseLabel(stream.phase)} ({formatMs(stream.elapsed_ms)})"
+                />
                 {#if isStalled(idx)}
                   <div class="text-xs mt-1" style="color: #d97706;">Possible blocage (&gt;2min)</div>
                 {/if}
@@ -231,7 +249,7 @@
                   <div class="text-xs mt-2" style="color: var(--color-purple-light);">Candidat : {stream.parsed_keys.name}</div>
                 {/if}
               {:else}
-                <span class="text-xs" style="color: var(--color-purple-lighter);">En attente</span>
+                <Badge tone="neutral">En attente</Badge>
               {/if}
             </div>
             <div class="stream-panel" use:scrollToEnd>
@@ -247,7 +265,7 @@
     </div>
 
     {#if sessionStatus === 'done' || sessionStatus === 'error'}
-      <div class="card p-6 mb-6">
+      <Card class="session-download-card">
         <h3 class="text-lg font-semibold mb-4">Téléchargements</h3>
         {#each outputs.filter((o) => o.endsWith('.zip')) as zipFile}
           <div class="flex items-center justify-between p-3" style="background: var(--color-purple-bg);">
@@ -255,31 +273,37 @@
               <span class="text-sm font-semibold">Tous les profils (ZIP)</span>
               <span class="text-xs ml-2" style="color: var(--color-purple-lighter);">{zipFile}</span>
             </div>
-            <button onclick={() => handleDownload(zipFile)} class="btn-primary text-xs py-2 px-4">Télécharger</button>
+            <Button variant="primary" size="sm" onclick={() => handleDownload(zipFile)}>Télécharger</Button>
           </div>
         {/each}
         {#if expiresAt}
           <p class="text-xs mt-4" style="color: var(--color-purple-lighter);">Suppression le {formatExpiry(expiresAt)}</p>
         {/if}
+      </Card>
+
+      <div class="mb-6">
+        <Alert
+          tone="info"
+          title="Recommandation de relecture"
+          message="Certaines erreurs de transposition peuvent subsister. Nous recommandons une relecture attentive d'environ 15 minutes pour un CV de 10 ans d'expérience."
+        />
       </div>
 
-      <div class="p-4 mb-6 text-sm" style="background: var(--color-purple-bg); border-left: 3px solid var(--color-purple);">
-        Certaines erreurs de transposition peuvent subsister. Nous recommandons une relecture attentive d'environ 15 minutes pour un CV de 10 ans d'exp&eacute;rience.
-      </div>
-
-      <div class="card p-4">
+      <Card class="session-share-card">
         <p class="text-sm font-medium mb-2">Partager cette session</p>
         <div class="flex items-center gap-2">
           <input readonly value={shareUrl}
             class="flex-1 px-3 py-2 text-xs bg-white border" style="border-color: var(--color-purple-border);" />
-          <button onclick={() => navigator.clipboard.writeText(shareUrl)} class="btn-secondary text-xs py-2 px-3">Copier</button>
+          <CopyButton value={shareUrl} label="Copier" copiedLabel="Copié" size="sm" />
         </div>
         <p class="text-xs mt-2" style="color: var(--color-purple-lighter);">Le destinataire aura besoin du mot de passe.</p>
-      </div>
+      </Card>
     {/if}
 
     {#if error}
-      <div class="mt-4 p-3 text-sm" style="background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;">{error}</div>
+      <div class="mt-4">
+        <Alert tone="error" title="Erreur" message={error} />
+      </div>
     {/if}
   {/if}
 </div>
@@ -361,5 +385,29 @@
     .stream-panel, .attention-cell {
       height: 120px;
     }
+  }
+
+  :global(.session-auth-card) {
+    padding: 2rem;
+  }
+
+  .session-auth-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  :global(.session-auth-submit) {
+    width: 100%;
+    justify-content: center;
+  }
+
+  :global(.session-download-card) {
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  :global(.session-share-card) {
+    padding: 1rem;
   }
 </style>

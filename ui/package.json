@@ -24,9 +24,9 @@
   },
   "dependencies": {
     "@lucide/svelte": "^0.562.0",
-    "@sentropic/design-system-svelte": "^0.3.0",
-    "@sentropic/design-system-themes": "^0.3.0",
-    "@sentropic/design-system-tokens": "^0.3.0",
+    "@sentropic/design-system-svelte": "^0.7.0",
+    "@sentropic/design-system-themes": "^0.7.0",
+    "@sentropic/design-system-tokens": "^0.7.0",
     "marked": "^17.0.5"
   }
 }
