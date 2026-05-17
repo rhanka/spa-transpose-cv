@@ -13,6 +13,15 @@
   import { buildTenantPath } from '$lib/tenant';
   import { sessionPassword } from '$lib/stores/session';
   import { tenantConfig, tenantSlug } from '$lib/stores/tenant';
+  import {
+    Alert,
+    Badge,
+    Button,
+    Card,
+    InlineLoading,
+    PasswordInput,
+    ProgressBar,
+  } from '@sentropic/design-system-svelte';
 
   const id = $derived($page.params.id ?? '');
   const currentTenantSlug = $derived($page.params.tenant ?? $tenantSlug);
@@ -168,11 +177,15 @@
       {@const completedSteps = doneCount + conductorDone}
       {@const pct = Math.round((completedSteps / totalSteps) * 100)}
       <div class="mb-6">
-        <div class="flex justify-between text-xs mb-1">
-          <span>{doneCount}/{files.length} profils + {conductorDone}/{doneCount || 0} validations</span>
-          <span class="font-semibold">{pct}%</span>
-        </div>
-        <div class="w-full h-1.5 bg-gray-100"><div class="h-full transition-all duration-500" style="width: {pct}%; background: var(--color-green);"></div></div>
+        <ProgressBar
+          label="{doneCount}/{files.length} profils + {conductorDone}/{doneCount || 0} validations"
+          value={completedSteps}
+          max={totalSteps}
+          tone={sessionStatus === 'error' ? 'error' : 'success'}
+          size="sm"
+          showValue
+          valueText="{pct}%"
+        />
       </div>
     {/if}
 
@@ -219,11 +232,10 @@
                 <span class="text-xs px-2 py-0.5 inline-block" style="background: #fef2f2; color: #b91c1c;">Erreur</span>
                 {#if file.error}<div class="text-xs mt-1" style="color: #b91c1c;">{file.error}</div>{/if}
               {:else if isProcessing && stream}
-                <div class="flex items-center gap-2 text-xs" style="color: var(--color-purple);">
-                  <span class="animate-pulse">&#9711;</span>
-                  <span class="font-medium">{phaseLabel(stream.phase)}</span>
-                  <span style="color: var(--color-purple-lighter);">({formatMs(stream.elapsed_ms)})</span>
-                </div>
+                <InlineLoading
+                  status={isStalled(idx) ? 'error' : 'active'}
+                  label="{phaseLabel(stream.phase)} ({formatMs(stream.elapsed_ms)})"
+                />
                 {#if isStalled(idx)}
                   <div class="text-xs mt-1" style="color: #d97706;">Possible blocage (&gt;2min)</div>
                 {/if}
