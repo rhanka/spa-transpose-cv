@@ -119,8 +119,12 @@ test-api: ## Run API unit tests
 	$(DOCKER_COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml exec api sh -c 'files=$$(find src \( -name "*.test.ts" -o -name "*.spec.ts" \) | sort); if [ -z "$$files" ]; then echo "No API tests found"; exit 0; fi; node --import tsx --test $$files'
 
 .PHONY: test-core-python
-test-core-python: ## Run Python core unit tests in Docker
-	docker run --rm --user "$$(id -u):$$(id -g)" -v "$$(pwd):/app" -w /app python:3.12-slim sh -lc 'HOME=/tmp PIP_CACHE_DIR=/tmp/pip-cache python -m pip install --disable-pip-version-check '"'"'cryptography>=45,<46'"'"' '"'"'lxml>=5.2,<6'"'"' '"'"'pypdf>=4.2,<6'"'"' '"'"'pytest>=8.2,<9'"'"' '"'"'pytest-asyncio>=0.23,<1'"'"' && HOME=/tmp PYTHONPATH=/app/core/python PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider core/python/tests'
+test-core-python: ## Run Python core unit tests in Docker (excludes opt-in integration tests)
+	docker run --rm --user "$$(id -u):$$(id -g)" -v "$$(pwd):/app" -w /app python:3.12-slim sh -lc 'HOME=/tmp PIP_CACHE_DIR=/tmp/pip-cache python -m pip install --disable-pip-version-check '"'"'cryptography>=45,<46'"'"' '"'"'lxml>=5.2,<6'"'"' '"'"'pypdf>=4.2,<6'"'"' '"'"'pytest>=8.2,<9'"'"' '"'"'pytest-asyncio>=0.23,<1'"'"' && HOME=/tmp PYTHONPATH=/app/core/python PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider --ignore=core/python/tests/integration core/python/tests'
+
+.PHONY: test-gemini-integration
+test-gemini-integration: ## Run Gemini ADK integration smoke (requires GOOGLE_API_KEY env var)
+	docker run --rm --user "$$(id -u):$$(id -g)" -e GOOGLE_API_KEY -v "$$(pwd):/app" -w /app python:3.12-slim sh -lc 'HOME=/tmp PIP_CACHE_DIR=/tmp/pip-cache python -m pip install --disable-pip-version-check '"'"'cryptography>=45,<46'"'"' '"'"'lxml>=5.2,<6'"'"' '"'"'pypdf>=4.2,<6'"'"' '"'"'pytest>=8.2,<9'"'"' '"'"'pytest-asyncio>=0.23,<1'"'"' '"'"'google-adk>=1.0,<2'"'"' '"'"'google-genai>=1.0,<2'"'"' && HOME=/tmp PYTHONPATH=/app/core/python PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -m integration core/python/tests/integration'
 
 .PHONY: smoke-tenant-e2e
 smoke-tenant-e2e: ## Run tenant E2E smoke (TENANT=_default|scalian)

@@ -1,110 +1,140 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
-import base64
 import json
+import os
+import sys
+import traceback
 from pathlib import Path
+from typing import Any
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cv_transpose_core import LlmCompleteResult
 
-from cv_transpose_core import BrandTokens, LlmCompleteResult, TemplateAssets
-from cv_transpose_marketplace.gemini import run_gemini_transpose
-from cv_transpose_marketplace.gemini_adk.tool import transpose_cvs
-from cv_transpose_marketplace.gemini_adk.types import GeminiToolFile, GeminiToolRequest
-from cv_transpose_marketplace.jwt import RuntimeJwtIssuer
-
-
-class FakeLlm:
-    def __init__(self, profile: dict) -> None:
-        self.profile = profile
-
-    async def complete(self, **kwargs):
-        return LlmCompleteResult(text=json.dumps(self.profile), usage={"inputTokens": 10, "outputTokens": 20})
+from ..gemini import run_gemini_transpose
+from ..validation import MarketplaceInputError
+from .model_config import resolve_model_config
+from .tool import encode_tool_result, transpose_cvs
+from .types import GeminiToolFile, GeminiToolRequest
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
-
-
-def _generate_private_key_pem() -> str:
-    return rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    ).decode("utf-8")
-
-
-def _load_fixture_template_assets(repo_root: Path) -> TemplateAssets:
-    return TemplateAssets(
-        manifest=json.loads((repo_root / "core/fixtures/templates-test/scalian/manifest.json").read_text()),
-        base_docx=(repo_root / "core/fixtures/templates-test/scalian/base.docx").read_bytes(),
-        brand=BrandTokens(
-            primary="#0F2137",
-            secondary="#23344A",
-            accent="#7DB7E1",
-            font_family="Lato",
-        ),
-    )
-
-
-async def run_offline_demo() -> dict:
-    repo_root = _repo_root()
-    expected_profile = json.loads(
-        (repo_root / "core/fixtures/cv-001-junior-pm.expected-extraction.json").read_text()
-    )
-    template_assets = _load_fixture_template_assets(repo_root)
-    signer = RuntimeJwtIssuer(
-        issuer="local-gemini.invalid",
-        kid="local-gemini-key",
-        private_key_pem=_generate_private_key_pem(),
-    )
-    request = GeminiToolRequest(
-        claims={"hd": "workspace.example", "email": "user@workspace.example"},
-        files=[
-            GeminiToolFile(
-                name="cv-001-junior-pm.pdf",
-                mime="application/pdf",
-                bytes_=(repo_root / "core/fixtures/cv-001-junior-pm.pdf").read_bytes(),
-            )
-        ],
-        user_prompt=None,
-        assets_base_url="https://local.invalid",
-        assets_bearer_token=signer.mint_token(
-            subject="user@workspace.example",
-            tenant_key="gws:workspace.example",
-            issued_at=1_715_708_800,
-        ),
-    )
-
-    async def offline_run_gemini_transpose(**kwargs):
-        return await run_gemini_transpose(
-            **kwargs,
-            fetch_assets=lambda **_: template_assets,
+def _parse_file_spec(raw: str) -> tuple[str, str, Path]:
+    parts = dict(item.split("=", 1) for item in raw.split(",") if "=" in item)
+    if "name" not in parts or "mime" not in parts or "path" not in parts:
+        raise MarketplaceInputError(
+            "file_spec_invalid: --file expects name=<name>,mime=<mime>,path=<path>"
         )
+    return parts["name"], parts["mime"], Path(parts["path"])
+
+
+def _load_claims(path: Path) -> dict[str, str]:
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as err:
+        raise MarketplaceInputError(f"claims_file_unreadable: {path}: {err}") from err
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise MarketplaceInputError(f"claims_file_invalid_json: {err}") from err
+    if not isinstance(data, dict):
+        raise MarketplaceInputError("claims_file_invalid_json: claims file must be a JSON object")
+    return {str(k): str(v) for k, v in data.items()}
+
+
+def _split_error(err: MarketplaceInputError) -> tuple[str, str]:
+    """Parse a 'code: detail' message into (code, detail).
+
+    Falls back to ('marketplace_input_error', original_message) when the
+    convention is not followed (legacy raises in the runtime that pre-date
+    this convention).
+    """
+    message = str(err)
+    head, sep, tail = message.partition(":")
+    if not sep or " " in head:
+        return ("marketplace_input_error", message)
+    return (head.strip(), tail.strip())
+
+
+class _StubLlm:
+    """Minimal LLM stub: the CLI exercises tool routing only, not Gemini.
+
+    The CLI does not drive the Agent/Runner path — that is the integration
+    target's job. If `run_gemini_transpose` ever decides to call the LLM
+    (which it does only when the upstream wrapper triggers a model call,
+    not in the smoke path), this stub raises so the caller is alerted.
+    """
+
+    async def complete(self, **_: Any) -> LlmCompleteResult:
+        raise MarketplaceInputError(
+            "llm_not_configured: the CLI does not call Gemini directly; provide a custom run_fn "
+            "or use the integration target."
+        )
+
+
+async def _run(args: argparse.Namespace) -> dict[str, Any]:
+    claims = _load_claims(Path(args.claims_file))
+
+    files: list[GeminiToolFile] = []
+    for spec in args.file:
+        name, mime, path = _parse_file_spec(spec)
+        try:
+            data = path.read_bytes()
+        except OSError as err:
+            raise MarketplaceInputError(f"file_path_unreadable: {path}: {err}") from err
+        files.append(GeminiToolFile(name=name, mime=mime, bytes_=data))
+
+    model_config = resolve_model_config(claims=claims, env=os.environ)
+
+    request = GeminiToolRequest(
+        claims=claims,
+        files=files,
+        user_prompt=args.user_prompt,
+        assets_base_url=args.assets_base_url,
+        assets_bearer_token=args.assets_bearer_token,
+    )
 
     result = await transpose_cvs(
         request,
-        llm=FakeLlm(expected_profile),
-        run_fn=offline_run_gemini_transpose,
+        llm=_StubLlm(),
+        run_fn=run_gemini_transpose,
     )
+
     return {
-        "tenantKey": result.tenant_key,
-        "artifact": None
-        if result.artifact is None
-        else {
-            "name": result.artifact.name,
-            "mime": result.artifact.mime,
-            "bytesBase64": base64.b64encode(result.artifact.bytes_).decode("ascii"),
+        **encode_tool_result(result),
+        "modelConfig": {
+            "model": model_config.model,
+            "endpointMode": model_config.endpoint_mode,
+            "region": model_config.region,
+            "projectId": model_config.project_id,
         },
-        "reportCard": result.report_card,
     }
 
 
-async def main() -> None:
-    payload = await run_offline_demo()
-    print(json.dumps(payload, indent=2)[:1000])
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="gemini-adk", description="Run the Gemini ADK transpose tool once.")
+    parser.add_argument("--claims-file", required=True)
+    parser.add_argument("--file", action="append", required=True, help="name=<name>,mime=<mime>,path=<path>")
+    parser.add_argument("--assets-base-url", required=True)
+    parser.add_argument("--assets-bearer-token", required=True)
+    parser.add_argument("--user-prompt", default=None)
+
+    args = parser.parse_args()
+
+    try:
+        payload = asyncio.run(_run(args))
+    except MarketplaceInputError as err:
+        code, detail = _split_error(err)
+        json.dump({"error": code, "detail": detail}, sys.stdout)
+        sys.stdout.write("\n")
+        return 2
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return 1
+
+    json.dump(payload, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(main())
