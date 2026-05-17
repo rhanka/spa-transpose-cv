@@ -166,3 +166,59 @@ def make_transpose_cvs_tool(
     transpose_cvs_tool.__name__ = "transpose_cvs"
     transpose_cvs_tool.__doc__ = _TRANSPOSE_CVS_FUNCTION_DECLARATION["description"]
     return transpose_cvs_tool
+
+
+def make_transpose_cvs_adk_tool(
+    *,
+    claims: Mapping[str, str],
+    llm: LlmProvider,
+    assets_base_url: str,
+    assets_bearer_token: str,
+    assets_cache_ttl_seconds: int = 0,
+    run_fn: Callable[..., Awaitable[Any]] = run_gemini_transpose,
+) -> Any:
+    """Build an ADK tool with an explicit Gemini-compatible declaration."""
+    try:
+        from google.adk.tools import BaseTool  # type: ignore[import-not-found]
+        from google.genai import types  # type: ignore[import-not-found]
+    except ImportError as err:
+        raise ImportError(
+            "google.adk and google-genai are required for make_transpose_cvs_adk_tool(). "
+            "Install the optional extra: pip install cv-transpose-marketplace[gemini-adk]"
+        ) from err
+
+    bound_claims = dict(claims)
+    declaration = build_transpose_cvs_function_declaration()
+
+    class TransposeCvsAdkTool(BaseTool):  # type: ignore[misc, valid-type]
+        def __init__(self) -> None:
+            super().__init__(
+                name=declaration["name"],
+                description=declaration["description"],
+            )
+
+        def _get_declaration(self) -> Any:
+            return types.FunctionDeclaration.model_validate(
+                build_transpose_cvs_function_declaration()
+            )
+
+        async def run_async(self, *, args: dict[str, Any], tool_context: Any) -> Any:
+            if "files" not in args:
+                return {
+                    "error": (
+                        "Invoking `transpose_cvs()` failed: mandatory input parameter "
+                        "`files` is missing."
+                    )
+                }
+            return await transpose_cvs_payload(
+                claims=bound_claims,
+                files=args["files"],
+                llm=llm,
+                assets_base_url=assets_base_url,
+                assets_bearer_token=assets_bearer_token,
+                user_prompt=args.get("user_prompt"),
+                assets_cache_ttl_seconds=assets_cache_ttl_seconds,
+                run_fn=run_fn,
+            )
+
+    return TransposeCvsAdkTool()

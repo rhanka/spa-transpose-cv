@@ -1,6 +1,20 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
+
+
+def make_user_content(text: str) -> Any:
+    """Build a user message compatible with `google.adk.runners.Runner`."""
+    try:
+        from google.genai import types  # type: ignore[import-not-found]
+    except ImportError as err:
+        raise ImportError(
+            "google-genai is required for make_user_content(). Install the optional extra: "
+            "pip install cv-transpose-marketplace[gemini-adk]"
+        ) from err
+
+    return types.Content(role="user", parts=[types.Part(text=text)])
 
 
 def make_local_runner(
@@ -8,6 +22,7 @@ def make_local_runner(
     agent: Any,
     app_name: str = "cv-transpose-gemini",
     session_service: Any | None = None,
+    auto_create_session: bool = True,
 ) -> Any:
     """Build a `google.adk.runners.Runner` for local invocation.
 
@@ -28,4 +43,12 @@ def make_local_runner(
     if session_service is None:
         session_service = InMemorySessionService()
 
-    return Runner(app_name=app_name, agent=agent, session_service=session_service)
+    runner_kwargs = {
+        "app_name": app_name,
+        "agent": agent,
+        "session_service": session_service,
+    }
+    if "auto_create_session" in inspect.signature(Runner).parameters:
+        runner_kwargs["auto_create_session"] = auto_create_session
+
+    return Runner(**runner_kwargs)

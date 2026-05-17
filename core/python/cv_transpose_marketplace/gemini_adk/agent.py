@@ -11,7 +11,7 @@ from cv_transpose_core import LlmProvider
 
 from ..gemini import run_gemini_transpose
 from .model_config import ModelConfig
-from .tool import build_transpose_cvs_function_declaration, make_transpose_cvs_tool
+from .tool import build_transpose_cvs_function_declaration, make_transpose_cvs_adk_tool
 
 
 @lru_cache(maxsize=1)
@@ -95,7 +95,7 @@ def build_root_agent(
             "pip install cv-transpose-marketplace[gemini-adk]"
         ) from err
 
-    tool = make_transpose_cvs_tool(
+    tool = make_transpose_cvs_adk_tool(
         claims=claims,
         llm=llm,
         assets_base_url=assets_base_url,
