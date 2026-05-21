@@ -19,6 +19,10 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   API_PORT: z.coerce.number().default(8686),
   LLM_PROVIDER: z.enum(['anthropic', 'openai', 'mistral', 'gemini', 'cohere']).default('mistral'),
+  /** Opt-in: route LLM calls through the @sentropic/llm-mesh facade (Sentropic
+   * integration spike). When false (default), the concrete provider is used
+   * directly with no behavior change. */
+  LLM_MESH: envBoolean.default(false),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),

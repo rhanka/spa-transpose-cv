@@ -18,7 +18,12 @@ async function resolve(id: ProviderId): Promise<LlmProvider> {
   const factory = factories.get(id);
   if (!factory) throw new Error(`Unknown LLM provider: ${id}`);
 
-  const instance = await factory();
+  let instance = await factory();
+  if (env.LLM_MESH) {
+    const { MeshLlmProvider } = await import('./mesh-adapter.js');
+    instance = new MeshLlmProvider(instance);
+    logger.info({ provider: id }, 'LLM provider wrapped through @sentropic/llm-mesh facade');
+  }
   instances.set(id, instance);
   return instance;
 }
