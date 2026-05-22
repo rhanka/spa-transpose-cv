@@ -42,6 +42,40 @@ test('serves marketplace publication status for a tenant to root admin', async (
   });
 });
 
+test('serves draft marketplace publication status for inactive tenant to root admin', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenants/draft/publication',
+    { headers: rootAdminHeaders() },
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.slug, 'draft');
+  assert.equal(body.displayName, 'Draft Tenant');
+  assert.equal(body.status, 'draft');
+  assert.equal(body.active, false);
+  assert.equal(body.tenantKey, 'direct:draft');
+  assert.deepEqual(body.assets, {
+    manifestUrl: 'https://cv-api.sent-tech.ca/api/v1/tenants/direct%3Adraft/manifest',
+    baseDocxUrl: 'https://cv-api.sent-tech.ca/api/v1/tenants/direct%3Adraft/base.docx',
+    brandUrl: 'https://cv-api.sent-tech.ca/api/v1/tenants/direct%3Adraft/brand',
+    authTenantClaim: 'tk',
+  });
+});
+
+test('returns 404 when root admin requests publication status for an unknown tenant', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenants/missing/publication',
+    { headers: rootAdminHeaders() },
+  );
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), {
+    error: 'Tenant "missing" not found',
+    code: 'tenant_not_found',
+  });
+});
+
 test('rejects marketplace publication status without root admin token', async () => {
   const response = await app.request(
     'https://cv-api.sent-tech.ca/api/admin/tenants/scalian/publication',

@@ -9,7 +9,7 @@ import { analyzeTemplateDocx, type TemplateAnalysisProfile } from './template-an
 import {
   clearTenantConfigCache,
   deriveDirectTenantKey,
-  getTenantConfig,
+  getTenantConfigForAdmin,
   readStorageObjectText,
   writeStorageObjectBuffer,
   writeStorageObjectText,
@@ -116,7 +116,7 @@ export async function getTenantMarketplacePublication(input: {
   slug: string;
   displayName: string;
   active: boolean;
-  status: 'published';
+  status: 'draft' | 'published';
   tenantKey: string;
   assets: {
     manifestUrl: string;
@@ -125,7 +125,7 @@ export async function getTenantMarketplacePublication(input: {
     authTenantClaim: 'tk';
   };
 }> {
-  const config = await getTenantConfig({ explicitSlug: input.slug });
+  const config = await getTenantConfigForAdmin({ explicitSlug: input.slug });
   const baseUrl = normalizeBaseUrl(input.assetsBaseUrl);
   const encodedTenantKey = encodeURIComponent(config.tenantKey);
   const tenantAssetsBaseUrl = `${baseUrl}/api/v1/tenants/${encodedTenantKey}`;
@@ -134,7 +134,7 @@ export async function getTenantMarketplacePublication(input: {
     slug: config.slug,
     displayName: config.displayName,
     active: config.active,
-    status: 'published',
+    status: config.active ? 'published' : 'draft',
     tenantKey: config.tenantKey,
     assets: {
       manifestUrl: `${tenantAssetsBaseUrl}/manifest`,

@@ -14,15 +14,39 @@ import {
   createTenantFromAdminFlow,
   getTenantMarketplacePublication,
 } from '../services/tenant-admin.js';
+import { TenantConfigError } from '../services/tenant-config.js';
 
 export const adminRoutes = new Hono();
+
+function adminRouteStatus(statusCode: number): 400 | 401 | 404 | 409 | 410 | 500 | 503 {
+  return statusCode === 400
+    ? 400
+    : statusCode === 401
+      ? 401
+      : statusCode === 404
+        ? 404
+        : statusCode === 409
+          ? 409
+          : statusCode === 410
+            ? 410
+            : statusCode === 503
+              ? 503
+              : 500;
+}
 
 function handleAdminError(c: Context, error: unknown) {
   if (error instanceof AdminAuthError) {
     return c.json({
       error: error.message,
       code: error.code,
-    }, error.statusCode === 409 ? 409 : error.statusCode === 410 ? 410 : error.statusCode === 404 ? 404 : error.statusCode === 401 ? 401 : error.statusCode === 400 ? 400 : 503);
+    }, adminRouteStatus(error.statusCode));
+  }
+
+  if (error instanceof TenantConfigError) {
+    return c.json({
+      error: error.message,
+      code: error.code,
+    }, adminRouteStatus(error.statusCode));
   }
 
   logger.error({ err: error }, 'Admin route failure');
