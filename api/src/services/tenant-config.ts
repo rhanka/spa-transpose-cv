@@ -349,7 +349,10 @@ async function resolveTenantSlugFromTenantKey(tenantKey: TenantKey): Promise<str
   return match.slug;
 }
 
-async function loadTenantConfigFromStorage(slug: string): Promise<TenantConfig> {
+async function loadTenantConfigFromStorage(
+  slug: string,
+  options: { includeInactive?: boolean } = {},
+): Promise<TenantConfig> {
   const configAssetKey = `tenants/${slug}/config.json`;
 
   let raw: string;
@@ -380,7 +383,7 @@ async function loadTenantConfigFromStorage(slug: string): Promise<TenantConfig> 
     throw new TenantConfigError(500, 'tenant_slug_mismatch', `Tenant config slug mismatch for "${slug}"`);
   }
 
-  if (!config.active) {
+  if (!config.active && !options.includeInactive) {
     throw new TenantConfigError(404, 'tenant_inactive', `Tenant "${slug}" is inactive`);
   }
 
@@ -406,6 +409,14 @@ export async function getTenantConfig(options: {
   });
 
   return config;
+}
+
+export async function getTenantConfigForAdmin(options: {
+  explicitSlug?: string | null;
+  headerTenant?: string | null;
+}): Promise<TenantConfig> {
+  const slug = resolveTenantSlug(options);
+  return loadTenantConfigFromStorage(slug, { includeInactive: true });
 }
 
 export async function getTenantConfigByTenantKey(tenantKey: string): Promise<TenantConfig> {
