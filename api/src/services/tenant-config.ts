@@ -419,6 +419,18 @@ export async function getTenantConfigForAdmin(options: {
   return loadTenantConfigFromStorage(slug, { includeInactive: true });
 }
 
+export async function getTenantConfigByTenantKeyForAdmin(tenantKey: string): Promise<TenantConfig> {
+  const normalizedTenantKey = normalizeTenantKey(tenantKey);
+  const slug = await resolveTenantSlugFromTenantKey(normalizedTenantKey);
+  const config = await getTenantConfigForAdmin({ explicitSlug: slug });
+
+  if (normalizeTenantKey(config.tenantKey) !== normalizedTenantKey) {
+    throw new TenantConfigError(404, 'tenant_not_found', `Tenant "${tenantKey}" not found`);
+  }
+
+  return config;
+}
+
 export async function getTenantConfigByTenantKey(tenantKey: string): Promise<TenantConfig> {
   const normalizedTenantKey = normalizeTenantKey(tenantKey);
   const slug = await resolveTenantSlugFromTenantKey(normalizedTenantKey);
