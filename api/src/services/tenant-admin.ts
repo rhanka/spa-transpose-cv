@@ -11,6 +11,8 @@ import {
   deriveDirectTenantKey,
   getTenantConfigForAdmin,
   readStorageObjectText,
+  TenantConfigError,
+  type TenantConfig,
   writeStorageObjectBuffer,
   writeStorageObjectText,
 } from './tenant-config.js';
@@ -109,10 +111,32 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.trim().replace(/\/+$/g, '');
 }
 
-export async function getTenantMarketplacePublication(input: {
-  slug: string;
-  assetsBaseUrl: string;
-}): Promise<{
+function sortTenantRecords(
+  left: TenantRegistryRecord['tenants'][number],
+  right: TenantRegistryRecord['tenants'][number],
+): number {
+  return left.slug < right.slug ? -1 : left.slug > right.slug ? 1 : 0;
+}
+
+async function loadTenantRegistryForAdmin(): Promise<TenantRegistryRecord> {
+  let raw: string;
+  try {
+    raw = await readStorageObjectText('registry.json');
+  } catch (error) {
+    if (error instanceof TenantConfigError && error.code === 'tenant_asset_not_found') {
+      return { version: 'v1', tenants: [] };
+    }
+    throw error;
+  }
+
+  try {
+    return JSON.parse(raw) as TenantRegistryRecord;
+  } catch {
+    throw new TenantConfigError(500, 'invalid_tenant_registry_json', 'Tenant registry has invalid JSON');
+  }
+}
+
+export interface TenantMarketplacePublication {
   slug: string;
   displayName: string;
   active: boolean;
@@ -124,9 +148,13 @@ export async function getTenantMarketplacePublication(input: {
     brandUrl: string;
     authTenantClaim: 'tk';
   };
-}> {
-  const config = await getTenantConfigForAdmin({ explicitSlug: input.slug });
-  const baseUrl = normalizeBaseUrl(input.assetsBaseUrl);
+}
+
+function buildTenantMarketplacePublication(
+  config: TenantConfig,
+  assetsBaseUrl: string,
+): TenantMarketplacePublication {
+  const baseUrl = normalizeBaseUrl(assetsBaseUrl);
   const encodedTenantKey = encodeURIComponent(config.tenantKey);
   const tenantAssetsBaseUrl = `${baseUrl}/api/v1/tenants/${encodedTenantKey}`;
 
@@ -143,6 +171,30 @@ export async function getTenantMarketplacePublication(input: {
       authTenantClaim: 'tk',
     },
   };
+}
+
+export async function getTenantMarketplacePublication(input: {
+  slug: string;
+  assetsBaseUrl: string;
+}): Promise<TenantMarketplacePublication> {
+  const config = await getTenantConfigForAdmin({ explicitSlug: input.slug });
+  return buildTenantMarketplacePublication(config, input.assetsBaseUrl);
+}
+
+export async function listTenantMarketplacePublications(input: {
+  assetsBaseUrl: string;
+}): Promise<{ tenants: TenantMarketplacePublication[] }> {
+  const registry = await loadTenantRegistryForAdmin();
+  const tenants = await Promise.all(
+    [...registry.tenants]
+      .sort(sortTenantRecords)
+      .map((tenant) => getTenantMarketplacePublication({
+        slug: tenant.slug,
+        assetsBaseUrl: input.assetsBaseUrl,
+      })),
+  );
+
+  return { tenants };
 }
 
 export async function createTenantFromAdminFlow(input: {
