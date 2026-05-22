@@ -9,6 +9,7 @@ import { analyzeTemplateDocx, type TemplateAnalysisProfile } from './template-an
 import {
   clearTenantConfigCache,
   deriveDirectTenantKey,
+  getTenantConfigByTenantKeyForAdmin,
   getTenantConfigForAdmin,
   readStorageObjectText,
   TenantConfigError,
@@ -178,6 +179,14 @@ export async function getTenantMarketplacePublication(input: {
   assetsBaseUrl: string;
 }): Promise<TenantMarketplacePublication> {
   const config = await getTenantConfigForAdmin({ explicitSlug: input.slug });
+  return buildTenantMarketplacePublication(config, input.assetsBaseUrl);
+}
+
+export async function getTenantMarketplacePublicationByTenantKey(input: {
+  tenantKey: string;
+  assetsBaseUrl: string;
+}): Promise<TenantMarketplacePublication> {
+  const config = await getTenantConfigByTenantKeyForAdmin(input.tenantKey);
   return buildTenantMarketplacePublication(config, input.assetsBaseUrl);
 }
 

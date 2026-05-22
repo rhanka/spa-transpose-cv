@@ -92,6 +92,27 @@ test('serves draft marketplace publication status for inactive tenant to root ad
   });
 });
 
+test('serves marketplace publication status by tenant key to root admin', async () => {
+  const tenantKey = 'direct:draft';
+  const response = await app.request(
+    `https://cv-api.sent-tech.ca/api/admin/tenant-publications/${encodeURIComponent(tenantKey)}`,
+    { headers: rootAdminHeaders() },
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.slug, 'draft');
+  assert.equal(body.status, 'draft');
+  assert.equal(body.active, false);
+  assert.equal(body.tenantKey, tenantKey);
+  assert.deepEqual(body.assets, {
+    manifestUrl: 'https://cv-api.sent-tech.ca/api/v1/tenants/direct%3Adraft/manifest',
+    baseDocxUrl: 'https://cv-api.sent-tech.ca/api/v1/tenants/direct%3Adraft/base.docx',
+    brandUrl: 'https://cv-api.sent-tech.ca/api/v1/tenants/direct%3Adraft/brand',
+    authTenantClaim: 'tk',
+  });
+});
+
 test('returns 404 when root admin requests publication status for an unknown tenant', async () => {
   const response = await app.request(
     'https://cv-api.sent-tech.ca/api/admin/tenants/missing/publication',
@@ -105,9 +126,34 @@ test('returns 404 when root admin requests publication status for an unknown ten
   });
 });
 
+test('returns 400 when root admin requests publication status for an invalid tenant key', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenant-publications/bad%3Ascalian',
+    { headers: rootAdminHeaders() },
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'Invalid tenant key "bad:scalian"',
+    code: 'invalid_tenant_key',
+  });
+});
+
 test('rejects marketplace publication status without root admin token', async () => {
   const response = await app.request(
     'https://cv-api.sent-tech.ca/api/admin/tenants/scalian/publication',
+  );
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), {
+    error: 'Missing admin bearer token',
+    code: 'missing_admin_token',
+  });
+});
+
+test('rejects marketplace publication by tenant key without root admin token', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenant-publications/direct%3Ascalian',
   );
 
   assert.equal(response.status, 401);

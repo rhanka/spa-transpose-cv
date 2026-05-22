@@ -12,6 +12,7 @@ import {
 import { logger } from '../config/logger.js';
 import {
   createTenantFromAdminFlow,
+  getTenantMarketplacePublicationByTenantKey,
   getTenantMarketplacePublication,
   listTenantMarketplacePublications,
 } from '../services/tenant-admin.js';
@@ -169,6 +170,24 @@ adminRoutes.get('/tenants/publications', async (c) => {
   try {
     const assetsBaseUrl = new URL(c.req.url).origin;
     return c.json(await listTenantMarketplacePublications({ assetsBaseUrl }));
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.get('/tenant-publications/:tenantKey', async (c) => {
+  try {
+    requireRootAdminToken(c);
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+
+  try {
+    const assetsBaseUrl = new URL(c.req.url).origin;
+    return c.json(await getTenantMarketplacePublicationByTenantKey({
+      tenantKey: c.req.param('tenantKey'),
+      assetsBaseUrl,
+    }));
   } catch (error) {
     return handleAdminError(c, error);
   }
