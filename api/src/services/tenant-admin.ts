@@ -9,6 +9,7 @@ import { analyzeTemplateDocx, type TemplateAnalysisProfile } from './template-an
 import {
   clearTenantConfigCache,
   deriveDirectTenantKey,
+  getTenantConfig,
   readStorageObjectText,
   writeStorageObjectBuffer,
   writeStorageObjectText,
@@ -102,6 +103,46 @@ async function upsertRegistryEntry(entry: {
     version: 'v1',
     tenants: nextTenants,
   }, null, 2));
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/g, '');
+}
+
+export async function getTenantMarketplacePublication(input: {
+  slug: string;
+  assetsBaseUrl: string;
+}): Promise<{
+  slug: string;
+  displayName: string;
+  active: boolean;
+  status: 'published';
+  tenantKey: string;
+  assets: {
+    manifestUrl: string;
+    baseDocxUrl: string;
+    brandUrl: string;
+    authTenantClaim: 'tk';
+  };
+}> {
+  const config = await getTenantConfig({ explicitSlug: input.slug });
+  const baseUrl = normalizeBaseUrl(input.assetsBaseUrl);
+  const encodedTenantKey = encodeURIComponent(config.tenantKey);
+  const tenantAssetsBaseUrl = `${baseUrl}/api/v1/tenants/${encodedTenantKey}`;
+
+  return {
+    slug: config.slug,
+    displayName: config.displayName,
+    active: config.active,
+    status: 'published',
+    tenantKey: config.tenantKey,
+    assets: {
+      manifestUrl: `${tenantAssetsBaseUrl}/manifest`,
+      baseDocxUrl: `${tenantAssetsBaseUrl}/base.docx`,
+      brandUrl: `${tenantAssetsBaseUrl}/brand`,
+      authTenantClaim: 'tk',
+    },
+  };
 }
 
 export async function createTenantFromAdminFlow(input: {
