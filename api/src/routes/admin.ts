@@ -11,6 +11,14 @@ import {
 } from '../services/admin-auth.js';
 import { logger } from '../config/logger.js';
 import {
+  generateAdminPasskeyAuthenticationOptions,
+  generateAdminPasskeyRegistrationOptions,
+  requestAdminAuthOtp,
+  verifyAdminAuthOtp,
+  verifyAdminPasskeyAuthentication,
+  verifyAdminPasskeyRegistration,
+} from '../services/admin-passkey-auth.js';
+import {
   createTenantFromAdminFlow,
   getTenantMarketplacePublicationByTenantKey,
   getTenantMarketplacePublication,
@@ -20,20 +28,22 @@ import { TenantConfigError } from '../services/tenant-config.js';
 
 export const adminRoutes = new Hono();
 
-function adminRouteStatus(statusCode: number): 400 | 401 | 404 | 409 | 410 | 500 | 503 {
+function adminRouteStatus(statusCode: number): 400 | 401 | 403 | 404 | 409 | 410 | 500 | 503 {
   return statusCode === 400
     ? 400
     : statusCode === 401
       ? 401
-      : statusCode === 404
-        ? 404
-        : statusCode === 409
-          ? 409
-          : statusCode === 410
-            ? 410
-            : statusCode === 503
-              ? 503
-              : 500;
+      : statusCode === 403
+        ? 403
+        : statusCode === 404
+          ? 404
+          : statusCode === 409
+            ? 409
+            : statusCode === 410
+              ? 410
+              : statusCode === 503
+                ? 503
+                : 500;
 }
 
 function handleAdminError(c: Context, error: unknown) {
@@ -78,6 +88,122 @@ adminRoutes.post('/session', async (c) => {
 
   try {
     return c.json(createRootAdminSession(parsed.data.password));
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.post('/auth/email/otp', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    email: z.string().email(),
+  }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Valid email is required', code: 'invalid_admin_otp_request' }, 400);
+  }
+
+  try {
+    return c.json(await requestAdminAuthOtp(parsed.data), 202);
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.post('/auth/email/verify', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    challengeId: z.string().min(1),
+    otp: z.string().min(1),
+  }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'challengeId and otp are required', code: 'invalid_admin_otp_verification' }, 400);
+  }
+
+  try {
+    return c.json(await verifyAdminAuthOtp(parsed.data));
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.post('/auth/passkey/register/options', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    email: z.string().email(),
+    verificationToken: z.string().min(1),
+  }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'email and verificationToken are required', code: 'invalid_passkey_registration_options' }, 400);
+  }
+
+  try {
+    return c.json(await generateAdminPasskeyRegistrationOptions(parsed.data));
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.post('/auth/passkey/register/verify', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    email: z.string().email(),
+    verificationToken: z.string().min(1),
+    credential: z.any(),
+    deviceName: z.string().max(100).optional(),
+  }).safeParse(body);
+  if (!parsed.success || !parsed.data.credential) {
+    return c.json({ error: 'email, verificationToken and credential are required', code: 'invalid_passkey_registration' }, 400);
+  }
+
+  try {
+    const result = await verifyAdminPasskeyRegistration({
+      email: parsed.data.email,
+      verificationToken: parsed.data.verificationToken,
+      credential: parsed.data.credential,
+      deviceName: parsed.data.deviceName,
+    });
+    return c.json({
+      ...result.session,
+      credentialId: result.credentialId,
+    });
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.post('/auth/passkey/login/options', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    email: z.string().email().optional(),
+  }).safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid email', code: 'invalid_passkey_login_options' }, 400);
+  }
+
+  try {
+    return c.json(await generateAdminPasskeyAuthenticationOptions(parsed.data));
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.post('/auth/passkey/login/verify', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z.object({
+    credential: z.any(),
+  }).safeParse(body);
+  if (!parsed.success || !parsed.data.credential) {
+    return c.json({ error: 'credential is required', code: 'invalid_passkey_login' }, 400);
+  }
+
+  try {
+    const result = await verifyAdminPasskeyAuthentication({
+      credential: parsed.data.credential,
+    });
+    return c.json({
+      ...result.session,
+      credentialId: result.credentialId,
+    });
   } catch (error) {
     return handleAdminError(c, error);
   }
