@@ -13,6 +13,7 @@ import { logger } from '../config/logger.js';
 import {
   createTenantFromAdminFlow,
   getTenantMarketplacePublication,
+  listTenantMarketplacePublications,
 } from '../services/tenant-admin.js';
 import { TenantConfigError } from '../services/tenant-config.js';
 
@@ -153,6 +154,21 @@ adminRoutes.get('/claims/:slug', async (c) => {
       return c.json({ error: 'Claim not found', code: 'claim_not_found' }, 404);
     }
     return c.json(claim);
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.get('/tenants/publications', async (c) => {
+  try {
+    requireRootAdminToken(c);
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+
+  try {
+    const assetsBaseUrl = new URL(c.req.url).origin;
+    return c.json(await listTenantMarketplacePublications({ assetsBaseUrl }));
   } catch (error) {
     return handleAdminError(c, error);
   }

@@ -9,6 +9,13 @@
       "configKey": "tenants/_default/config.json"
     },
     {
+      "slug": "draft",
+      "tenantKey": "direct:draft",
+      "displayName": "Draft Tenant",
+      "active": false,
+      "configKey": "tenants/draft/config.json"
+    },
+    {
       "slug": "scalian",
       "tenantKey": "direct:scalian",
       "displayName": "Scalian",
