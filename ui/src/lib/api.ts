@@ -58,6 +58,30 @@ export interface AdminTenantCreateResponse {
   companyUrl: string;
 }
 
+export interface AdminSessionResponse {
+  token: string;
+  expiresAt: string;
+  role: 'root-admin';
+}
+
+export interface TenantMarketplacePublication {
+  slug: string;
+  displayName: string;
+  active: boolean;
+  status: 'draft' | 'published';
+  tenantKey: string;
+  assets: {
+    manifestUrl: string;
+    baseDocxUrl: string;
+    brandUrl: string;
+    authTenantClaim: 'tk';
+  };
+}
+
+export interface TenantMarketplacePublicationsResponse {
+  tenants: TenantMarketplacePublication[];
+}
+
 export type TemplateRenderer = 'generic' | 'legacy-scalian';
 
 function getSessionApiBase(tenantSlug = DEFAULT_TENANT_SLUG): string {
@@ -118,6 +142,41 @@ export async function createTenantViaAdmin(params: {
     body: form,
   });
   if (!res.ok) throw new Error(await readApiError(res, `Création de l’espace impossible (${res.status})`));
+  return res.json();
+}
+
+export async function createAdminSession(password: string): Promise<AdminSessionResponse> {
+  const res = await fetch(`${API_BASE}/admin/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Connexion admin impossible (${res.status})`));
+  return res.json();
+}
+
+function adminAuthorizationHeaders(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
+
+export async function fetchTenantMarketplacePublications(
+  token: string,
+): Promise<TenantMarketplacePublicationsResponse> {
+  const res = await fetch(`${API_BASE}/admin/tenants/publications`, {
+    headers: adminAuthorizationHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Chargement des publications impossible (${res.status})`));
+  return res.json();
+}
+
+export async function fetchTenantMarketplacePublicationByTenantKey(
+  token: string,
+  tenantKey: string,
+): Promise<TenantMarketplacePublication> {
+  const res = await fetch(`${API_BASE}/admin/tenant-publications/${encodeURIComponent(tenantKey)}`, {
+    headers: adminAuthorizationHeaders(token),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Publication introuvable (${res.status})`));
   return res.json();
 }
 
