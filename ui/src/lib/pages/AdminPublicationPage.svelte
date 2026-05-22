@@ -6,27 +6,65 @@
     Input,
   } from '@sentropic/design-system-svelte';
   import {
-    createAdminSession,
     fetchTenantMarketplacePublicationByTenantKey,
     fetchTenantMarketplacePublications,
+    getAdminPasskeyLoginOptions,
+    getAdminPasskeyRegistrationOptions,
+    requestAdminAuthOtp,
+    verifyAdminAuthOtp,
+    verifyAdminPasskeyLogin,
+    verifyAdminPasskeyRegistration,
+    type AdminPasskeySessionResponse,
     type TenantMarketplacePublication,
   } from '$lib/api';
+  import {
+    getAdminWebAuthnErrorMessage,
+    isAdminWebAuthnSupported,
+    startAdminPasskeyAuthentication,
+    startAdminPasskeyRegistration,
+  } from '$lib/services/admin-webauthn-client';
 
   const ADMIN_TOKEN_STORAGE_KEY = 'cv-transpose-admin-token';
+  const ADMIN_EMAIL_STORAGE_KEY = 'cv-transpose-admin-email';
 
-  let password = $state('');
+  let email = $state('');
+  let otp = $state('');
+  let otpChallengeId = $state('');
+  let verificationToken = $state('');
+  let verificationExpiresAt = $state('');
   let tenantKey = $state('');
   let adminToken = $state('');
+  let adminEmail = $state('');
   let expiresAt = $state('');
   let publications = $state<TenantMarketplacePublication[]>([]);
   let selectedPublication = $state<TenantMarketplacePublication | null>(null);
+  let webauthnSupported = $state(true);
   let loadingSession = $state(false);
+  let loadingOtp = $state(false);
+  let loadingOtpVerify = $state(false);
+  let loadingRegistration = $state(false);
   let loadingPublications = $state(false);
   let loadingLookup = $state(false);
+  let authNotice = $state('');
   let error = $state('');
 
   const publishedCount = $derived(publications.filter((publication) => publication.status === 'published').length);
   const draftCount = $derived(publications.filter((publication) => publication.status === 'draft').length);
+
+  function storeAdminSession(session: AdminPasskeySessionResponse) {
+    adminToken = session.token;
+    adminEmail = session.email;
+    expiresAt = session.expiresAt;
+    sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, session.token);
+    sessionStorage.setItem(ADMIN_EMAIL_STORAGE_KEY, session.email);
+  }
+
+  function resetEnrollment() {
+    otp = '';
+    otpChallengeId = '';
+    verificationToken = '';
+    verificationExpiresAt = '';
+  }
 
   async function loadPublications(token = adminToken) {
     if (!token) {
@@ -45,25 +83,111 @@
     }
   }
 
-  async function handleLogin() {
-    if (!password.trim()) {
-      error = 'Clé opérateur requise.';
+  async function handlePasskeyLogin() {
+    if (!webauthnSupported) {
+      error = 'Passkeys non supportées par ce navigateur.';
       return;
     }
 
     loadingSession = true;
     error = '';
+    authNotice = '';
     try {
-      const session = await createAdminSession(password.trim());
-      adminToken = session.token;
-      expiresAt = session.expiresAt;
-      sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, session.token);
-      password = '';
+      const response = await getAdminPasskeyLoginOptions(email.trim() || undefined);
+      const credential = await startAdminPasskeyAuthentication(response.options);
+      const session = await verifyAdminPasskeyLogin(credential);
+      email = session.email;
+      storeAdminSession(session);
       await loadPublications(session.token);
+    } catch (err) {
+      error = getAdminWebAuthnErrorMessage(err);
+    } finally {
+      loadingSession = false;
+    }
+  }
+
+  async function handleRequestOtp() {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      error = 'Email admin requis.';
+      return;
+    }
+
+    loadingOtp = true;
+    error = '';
+    authNotice = '';
+    try {
+      const response = await requestAdminAuthOtp(normalizedEmail);
+      email = response.email;
+      otpChallengeId = response.challengeId;
+      otp = '';
+      verificationToken = '';
+      verificationExpiresAt = '';
+      authNotice = response.delivery === 'log' && response.devOtp
+        ? `Code de dev: ${response.devOtp}`
+        : `Code envoyé à ${response.email}.`;
     } catch (err) {
       error = (err as Error).message;
     } finally {
-      loadingSession = false;
+      loadingOtp = false;
+    }
+  }
+
+  async function handleVerifyOtp() {
+    if (!otpChallengeId || !otp.trim()) {
+      error = 'Code email requis.';
+      return;
+    }
+
+    loadingOtpVerify = true;
+    error = '';
+    authNotice = '';
+    try {
+      const response = await verifyAdminAuthOtp(otpChallengeId, otp.trim());
+      email = response.email;
+      verificationToken = response.verificationToken;
+      verificationExpiresAt = response.expiresAt;
+      authNotice = 'Email validé.';
+    } catch (err) {
+      error = (err as Error).message;
+    } finally {
+      loadingOtpVerify = false;
+    }
+  }
+
+  async function handleRegisterPasskey() {
+    if (!webauthnSupported) {
+      error = 'Passkeys non supportées par ce navigateur.';
+      return;
+    }
+    if (!email.trim() || !verificationToken) {
+      error = 'Validation email requise.';
+      return;
+    }
+
+    loadingRegistration = true;
+    error = '';
+    authNotice = '';
+    try {
+      const optionsResponse = await getAdminPasskeyRegistrationOptions({
+        email: email.trim(),
+        verificationToken,
+      });
+      const credential = await startAdminPasskeyRegistration(optionsResponse.options);
+      const session = await verifyAdminPasskeyRegistration({
+        email: optionsResponse.email,
+        verificationToken,
+        credential,
+        deviceName: 'Backoffice',
+      });
+      email = session.email;
+      storeAdminSession(session);
+      resetEnrollment();
+      await loadPublications(session.token);
+    } catch (err) {
+      error = getAdminWebAuthnErrorMessage(err);
+    } finally {
+      loadingRegistration = false;
     }
   }
 
@@ -87,11 +211,14 @@
 
   function handleLogout() {
     adminToken = '';
+    adminEmail = '';
     expiresAt = '';
     publications = [];
     selectedPublication = null;
     tenantKey = '';
+    authNotice = '';
     sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(ADMIN_EMAIL_STORAGE_KEY);
   }
 
   function openPublication(publication: TenantMarketplacePublication) {
@@ -100,7 +227,13 @@
   }
 
   onMount(() => {
+    webauthnSupported = isAdminWebAuthnSupported();
     const storedToken = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
+    const storedEmail = sessionStorage.getItem(ADMIN_EMAIL_STORAGE_KEY);
+    if (storedEmail) {
+      adminEmail = storedEmail;
+      email = storedEmail;
+    }
     if (!storedToken) {
       return;
     }
@@ -123,7 +256,7 @@
       </div>
       {#if adminToken}
         <div class="admin-session">
-          <span>Session</span>
+          <span>{adminEmail || 'Session'}</span>
           <strong>{expiresAt ? new Date(expiresAt).toLocaleString('fr-CA') : 'active'}</strong>
         </div>
       {/if}
@@ -134,17 +267,71 @@
     {/if}
 
     {#if !adminToken}
-      <div class="admin-login">
-        <Input
-          id="admin-password"
-          type="password"
-          label="Clé opérateur"
-          bind:value={password}
-          placeholder="Mot de passe root-admin"
-        />
-        <Button variant="primary" onclick={handleLogin} disabled={loadingSession}>
-          {loadingSession ? 'Ouverture...' : 'Ouvrir'}
-        </Button>
+      <div class="admin-auth-panel">
+        <div class="auth-column">
+          <p class="admin-kicker">Accès admin</p>
+          <h2>Passkey</h2>
+          <Input
+            id="admin-email-login"
+            type="email"
+            label="Email admin"
+            bind:value={email}
+            placeholder="admin@example.com"
+          />
+          <Button variant="primary" onclick={handlePasskeyLogin} disabled={loadingSession || !webauthnSupported}>
+            {loadingSession ? 'Connexion...' : 'Se connecter'}
+          </Button>
+        </div>
+
+        <div class="auth-column">
+          <p class="admin-kicker">Enrôlement</p>
+          <h2>OTP email</h2>
+          <div class="admin-auth-row">
+            <Input
+              id="admin-email-otp"
+              type="email"
+              label="Email admin"
+              bind:value={email}
+              placeholder="admin@example.com"
+            />
+            <Button variant="secondary" onclick={handleRequestOtp} disabled={loadingOtp}>
+              {loadingOtp ? 'Envoi...' : 'Recevoir le code'}
+            </Button>
+          </div>
+
+          {#if otpChallengeId}
+            <div class="admin-auth-row">
+              <Input
+                id="admin-otp"
+                type="text"
+                label="Code email"
+                bind:value={otp}
+                placeholder="123456"
+              />
+              <Button variant="secondary" onclick={handleVerifyOtp} disabled={loadingOtpVerify}>
+                {loadingOtpVerify ? 'Validation...' : 'Valider'}
+              </Button>
+            </div>
+          {/if}
+
+          {#if verificationToken}
+            <div class="admin-auth-actions">
+              <Button variant="primary" onclick={handleRegisterPasskey} disabled={loadingRegistration || !webauthnSupported}>
+                {loadingRegistration ? 'Enregistrement...' : 'Enregistrer la passkey'}
+              </Button>
+              {#if verificationExpiresAt}
+                <span>{new Date(verificationExpiresAt).toLocaleString('fr-CA')}</span>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        {#if authNotice}
+          <p class="auth-notice">{authNotice}</p>
+        {/if}
+        {#if !webauthnSupported}
+          <p class="auth-warning">Passkeys non supportées par ce navigateur.</p>
+        {/if}
       </div>
     {:else}
       <div class="admin-toolbar">
@@ -258,7 +445,7 @@
 
   .admin-header,
   .admin-toolbar,
-  .admin-login,
+  .admin-auth-panel,
   .admin-lookup,
   .publication-detail {
     background: #ffffff;
@@ -320,13 +507,63 @@
     font-size: 0.86rem;
   }
 
-  .admin-login,
+  .admin-auth-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.35fr);
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  .auth-column {
+    display: grid;
+    gap: 0.9rem;
+    align-content: start;
+  }
+
+  .auth-column + .auth-column {
+    padding-left: 1.25rem;
+    border-left: 1px solid #d8e8f6;
+  }
+
+  .admin-auth-row,
   .admin-lookup {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 1rem;
     align-items: end;
+  }
+
+  .admin-lookup {
     padding: 1.25rem;
+  }
+
+  .admin-auth-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    align-items: center;
+  }
+
+  .admin-auth-actions span,
+  .auth-notice,
+  .auth-warning {
+    margin: 0;
+    color: #41627f;
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+
+  .auth-notice,
+  .auth-warning {
+    grid-column: 1 / -1;
+    padding: 0.8rem 0.9rem;
+    border-radius: 8px;
+    background: #f1f7fd;
+  }
+
+  .auth-warning {
+    background: #fff4d7;
+    color: #7b5200;
   }
 
   .admin-toolbar {
@@ -484,10 +721,18 @@
       flex-direction: column;
     }
 
-    .admin-login,
+    .admin-auth-panel,
+    .admin-auth-row,
     .admin-lookup,
     .publication-detail {
       grid-template-columns: 1fr;
+    }
+
+    .auth-column + .auth-column {
+      padding-left: 0;
+      padding-top: 1.25rem;
+      border-left: 0;
+      border-top: 1px solid #d8e8f6;
     }
 
     .admin-session {

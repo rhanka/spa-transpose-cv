@@ -1,4 +1,10 @@
 import { DEFAULT_TENANT_SLUG, type TenantConfig } from '$lib/tenant';
+import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  RegistrationResponseJSON,
+} from '@simplewebauthn/browser';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -62,6 +68,36 @@ export interface AdminSessionResponse {
   token: string;
   expiresAt: string;
   role: 'root-admin';
+}
+
+export interface AdminPasskeySessionResponse extends AdminSessionResponse {
+  email: string;
+  authMethod: 'passkey';
+  credentialId?: string;
+}
+
+export interface AdminAuthOtpResponse {
+  challengeId: string;
+  email: string;
+  expiresAt: string;
+  delivery: 'smtp' | 'log';
+  devOtp?: string;
+}
+
+export interface AdminAuthVerifyResponse {
+  email: string;
+  verified: true;
+  verificationToken: string;
+  expiresAt: string;
+}
+
+export interface AdminPasskeyRegistrationOptionsResponse {
+  email: string;
+  options: PublicKeyCredentialCreationOptionsJSON;
+}
+
+export interface AdminPasskeyAuthenticationOptionsResponse {
+  options: PublicKeyCredentialRequestOptionsJSON;
 }
 
 export interface TenantMarketplacePublication {
@@ -152,6 +188,80 @@ export async function createAdminSession(password: string): Promise<AdminSession
     body: JSON.stringify({ password }),
   });
   if (!res.ok) throw new Error(await readApiError(res, `Connexion admin impossible (${res.status})`));
+  return res.json();
+}
+
+export async function requestAdminAuthOtp(email: string): Promise<AdminAuthOtpResponse> {
+  const res = await fetch(`${API_BASE}/admin/auth/email/otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Envoi du code admin impossible (${res.status})`));
+  return res.json();
+}
+
+export async function verifyAdminAuthOtp(
+  challengeId: string,
+  otp: string,
+): Promise<AdminAuthVerifyResponse> {
+  const res = await fetch(`${API_BASE}/admin/auth/email/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ challengeId, otp }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Validation du code admin impossible (${res.status})`));
+  return res.json();
+}
+
+export async function getAdminPasskeyRegistrationOptions(params: {
+  email: string;
+  verificationToken: string;
+}): Promise<AdminPasskeyRegistrationOptionsResponse> {
+  const res = await fetch(`${API_BASE}/admin/auth/passkey/register/options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Préparation de la passkey impossible (${res.status})`));
+  return res.json();
+}
+
+export async function verifyAdminPasskeyRegistration(params: {
+  email: string;
+  verificationToken: string;
+  credential: RegistrationResponseJSON;
+  deviceName?: string;
+}): Promise<AdminPasskeySessionResponse> {
+  const res = await fetch(`${API_BASE}/admin/auth/passkey/register/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Enregistrement de la passkey impossible (${res.status})`));
+  return res.json();
+}
+
+export async function getAdminPasskeyLoginOptions(email?: string): Promise<AdminPasskeyAuthenticationOptionsResponse> {
+  const body = email?.trim() ? { email: email.trim() } : {};
+  const res = await fetch(`${API_BASE}/admin/auth/passkey/login/options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Préparation de la connexion passkey impossible (${res.status})`));
+  return res.json();
+}
+
+export async function verifyAdminPasskeyLogin(
+  credential: AuthenticationResponseJSON,
+): Promise<AdminPasskeySessionResponse> {
+  const res = await fetch(`${API_BASE}/admin/auth/passkey/login/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res, `Connexion passkey impossible (${res.status})`));
   return res.json();
 }
 

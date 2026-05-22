@@ -27,6 +27,7 @@
     "@sentropic/design-system-svelte": "^0.7.0",
     "@sentropic/design-system-themes": "^0.7.0",
     "@sentropic/design-system-tokens": "^0.7.0",
+    "@simplewebauthn/browser": "^13.3.0",
     "marked": "^17.0.5"
   }
 }
