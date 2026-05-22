@@ -10,7 +10,10 @@ import {
   verifyRootAdminToken,
 } from '../services/admin-auth.js';
 import { logger } from '../config/logger.js';
-import { createTenantFromAdminFlow } from '../services/tenant-admin.js';
+import {
+  createTenantFromAdminFlow,
+  getTenantMarketplacePublication,
+} from '../services/tenant-admin.js';
 
 export const adminRoutes = new Hono();
 
@@ -126,6 +129,24 @@ adminRoutes.get('/claims/:slug', async (c) => {
       return c.json({ error: 'Claim not found', code: 'claim_not_found' }, 404);
     }
     return c.json(claim);
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.get('/tenants/:slug/publication', async (c) => {
+  try {
+    requireRootAdminToken(c);
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+
+  try {
+    const assetsBaseUrl = new URL(c.req.url).origin;
+    return c.json(await getTenantMarketplacePublication({
+      slug: c.req.param('slug'),
+      assetsBaseUrl,
+    }));
   } catch (error) {
     return handleAdminError(c, error);
   }
