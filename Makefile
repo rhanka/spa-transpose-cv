@@ -354,7 +354,7 @@ storage-dev-bootstrap: ## Start local MinIO, create the dev bucket and seed tena
 
 .PHONY: storage-dev-verify
 storage-dev-verify: ## Verify tenant configs resolve from local MinIO
-	$(COMPOSE_DEV) exec api sh -c 'npx tsx scripts/verify-s3-tenants.ts _default scalian'
+	$(COMPOSE_DEV) exec api sh -c 'npx tsx scripts/verify-s3-tenants.ts _default scalian draft'
 
 .PHONY: uat-localhost
 uat-localhost: ## Start the localhost stack with MinIO-backed tenant storage and run UAT

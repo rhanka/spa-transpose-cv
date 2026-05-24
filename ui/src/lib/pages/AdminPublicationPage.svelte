@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     Alert,
     Button,
     Input,
   } from '@sentropic/design-system-svelte';
   import {
+    fetchTenantMarketplacePublicationAsset,
     fetchTenantMarketplacePublicationByTenantKey,
     fetchTenantMarketplacePublications,
     getAdminPasskeyLoginOptions,
@@ -15,6 +16,7 @@
     verifyAdminPasskeyLogin,
     verifyAdminPasskeyRegistration,
     type AdminPasskeySessionResponse,
+    type TenantMarketplaceAssetName,
     type TenantMarketplacePublication,
   } from '$lib/api';
   import {
@@ -26,12 +28,12 @@
 
   const ADMIN_TOKEN_STORAGE_KEY = 'cv-transpose-admin-token';
   const ADMIN_EMAIL_STORAGE_KEY = 'cv-transpose-admin-email';
+  const codeIndexes = [0, 1, 2, 3, 4, 5];
 
   let email = $state('');
-  let otp = $state('');
+  let codeDigits = $state(['', '', '', '', '', '']);
   let otpChallengeId = $state('');
   let verificationToken = $state('');
-  let verificationExpiresAt = $state('');
   let tenantKey = $state('');
   let adminToken = $state('');
   let adminEmail = $state('');
@@ -39,17 +41,25 @@
   let publications = $state<TenantMarketplacePublication[]>([]);
   let selectedPublication = $state<TenantMarketplacePublication | null>(null);
   let webauthnSupported = $state(true);
+  let authView = $state<'login' | 'register'>('login');
+  let registerStep = $state<'email' | 'code' | 'passkey'>('email');
   let loadingSession = $state(false);
   let loadingOtp = $state(false);
   let loadingOtpVerify = $state(false);
   let loadingRegistration = $state(false);
   let loadingPublications = $state(false);
   let loadingLookup = $state(false);
+  let loadingAsset = $state('');
   let authNotice = $state('');
   let error = $state('');
 
   const publishedCount = $derived(publications.filter((publication) => publication.status === 'published').length);
   const draftCount = $derived(publications.filter((publication) => publication.status === 'draft').length);
+  const otpCode = $derived(codeDigits.join(''));
+
+  function isValidEmail(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  }
 
   function storeAdminSession(session: AdminPasskeySessionResponse) {
     adminToken = session.token;
@@ -60,10 +70,16 @@
   }
 
   function resetEnrollment() {
-    otp = '';
+    codeDigits = ['', '', '', '', '', ''];
     otpChallengeId = '';
     verificationToken = '';
-    verificationExpiresAt = '';
+    registerStep = 'email';
+    authNotice = '';
+  }
+
+  function focusCodeInput(index: number) {
+    const input = document.getElementById(`admin-code-${index}`) as HTMLInputElement | null;
+    input?.focus();
   }
 
   async function loadPublications(token = adminToken) {
@@ -93,7 +109,7 @@
     error = '';
     authNotice = '';
     try {
-      const response = await getAdminPasskeyLoginOptions(email.trim() || undefined);
+      const response = await getAdminPasskeyLoginOptions();
       const credential = await startAdminPasskeyAuthentication(response.options);
       const session = await verifyAdminPasskeyLogin(credential);
       email = session.email;
@@ -107,12 +123,13 @@
   }
 
   async function handleRequestOtp() {
-    const normalizedEmail = email.trim();
-    if (!normalizedEmail) {
-      error = 'Email admin requis.';
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      error = 'Email admin invalide.';
       return;
     }
 
+    email = normalizedEmail;
     loadingOtp = true;
     error = '';
     authNotice = '';
@@ -120,12 +137,14 @@
       const response = await requestAdminAuthOtp(normalizedEmail);
       email = response.email;
       otpChallengeId = response.challengeId;
-      otp = '';
+      codeDigits = ['', '', '', '', '', ''];
       verificationToken = '';
-      verificationExpiresAt = '';
+      registerStep = 'code';
       authNotice = response.delivery === 'log' && response.devOtp
         ? `Code de dev: ${response.devOtp}`
         : `Code envoyé à ${response.email}.`;
+      await tick();
+      focusCodeInput(0);
     } catch (err) {
       error = (err as Error).message;
     } finally {
@@ -133,8 +152,45 @@
     }
   }
 
+  function handleCodeInput(index: number, value: string) {
+    const nextDigits = [...codeDigits];
+    const digit = value.replace(/[^0-9]/g, '').slice(0, 1);
+    nextDigits[index] = digit;
+    codeDigits = nextDigits;
+
+    if (digit && index < codeDigits.length - 1) {
+      focusCodeInput(index + 1);
+    }
+  }
+
+  function handleCodeKeydown(index: number, event: KeyboardEvent) {
+    if (event.key === 'Backspace' && !codeDigits[index] && index > 0) {
+      const nextDigits = [...codeDigits];
+      nextDigits[index - 1] = '';
+      codeDigits = nextDigits;
+      focusCodeInput(index - 1);
+    }
+    if (event.key === 'ArrowLeft' && index > 0) {
+      focusCodeInput(index - 1);
+    }
+    if (event.key === 'ArrowRight' && index < codeDigits.length - 1) {
+      focusCodeInput(index + 1);
+    }
+  }
+
+  function handleCodePaste(event: ClipboardEvent) {
+    event.preventDefault();
+    const digits = event.clipboardData?.getData('text').replace(/[^0-9]/g, '').slice(0, 6).split('') ?? [];
+    const nextDigits = ['', '', '', '', '', ''];
+    for (const [index, digit] of digits.entries()) {
+      nextDigits[index] = digit;
+    }
+    codeDigits = nextDigits;
+    focusCodeInput(Math.min(digits.length, 5));
+  }
+
   async function handleVerifyOtp() {
-    if (!otpChallengeId || !otp.trim()) {
+    if (!otpChallengeId || otpCode.length !== 6) {
       error = 'Code email requis.';
       return;
     }
@@ -143,13 +199,16 @@
     error = '';
     authNotice = '';
     try {
-      const response = await verifyAdminAuthOtp(otpChallengeId, otp.trim());
+      const response = await verifyAdminAuthOtp(otpChallengeId, otpCode);
       email = response.email;
       verificationToken = response.verificationToken;
-      verificationExpiresAt = response.expiresAt;
+      registerStep = 'passkey';
       authNotice = 'Email validé.';
     } catch (err) {
+      codeDigits = ['', '', '', '', '', ''];
       error = (err as Error).message;
+      await tick();
+      focusCodeInput(0);
     } finally {
       loadingOtpVerify = false;
     }
@@ -209,6 +268,47 @@
     }
   }
 
+  async function openPublicationAsset(publication: TenantMarketplacePublication, asset: TenantMarketplaceAssetName) {
+    const assetKey = `${publication.tenantKey}:${asset}`;
+    loadingAsset = assetKey;
+    error = '';
+    try {
+      const blob = await fetchTenantMarketplacePublicationAsset({
+        token: adminToken,
+        tenantKey: publication.tenantKey,
+        asset,
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      if (asset === 'base.docx') {
+        link.download = `${publication.slug}-base.docx`;
+      } else {
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+      }
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err) {
+      error = (err as Error).message;
+    } finally {
+      loadingAsset = '';
+    }
+  }
+
+  async function openSelectedPublicationAsset(asset: TenantMarketplaceAssetName) {
+    if (!selectedPublication) {
+      return;
+    }
+    await openPublicationAsset(selectedPublication, asset);
+  }
+
+  function isSelectedPublicationAssetLoading(asset: TenantMarketplaceAssetName): boolean {
+    return Boolean(selectedPublication && loadingAsset === `${selectedPublication.tenantKey}:${asset}`);
+  }
+
   function handleLogout() {
     adminToken = '';
     adminEmail = '';
@@ -217,6 +317,9 @@
     selectedPublication = null;
     tenantKey = '';
     authNotice = '';
+    error = '';
+    authView = 'login';
+    resetEnrollment();
     sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
     sessionStorage.removeItem(ADMIN_EMAIL_STORAGE_KEY);
   }
@@ -256,8 +359,11 @@
       </div>
       {#if adminToken}
         <div class="admin-session">
-          <span>{adminEmail || 'Session'}</span>
-          <strong>{expiresAt ? new Date(expiresAt).toLocaleString('fr-CA') : 'active'}</strong>
+          <div>
+            <span>{adminEmail || 'Session'}</span>
+            <strong>{expiresAt ? new Date(expiresAt).toLocaleString('fr-CA') : 'active'}</strong>
+          </div>
+          <Button variant="secondary" onclick={handleLogout}>Déconnexion</Button>
         </div>
       {/if}
     </header>
@@ -267,70 +373,94 @@
     {/if}
 
     {#if !adminToken}
-      <div class="admin-auth-panel">
-        <div class="auth-column">
-          <p class="admin-kicker">Accès admin</p>
-          <h2>Passkey</h2>
-          <Input
-            id="admin-email-login"
-            type="email"
-            label="Email admin"
-            bind:value={email}
-            placeholder="admin@example.com"
-          />
-          <Button variant="primary" onclick={handlePasskeyLogin} disabled={loadingSession || !webauthnSupported}>
-            {loadingSession ? 'Connexion...' : 'Se connecter'}
-          </Button>
-        </div>
-
-        <div class="auth-column">
-          <p class="admin-kicker">Enrôlement</p>
-          <h2>OTP email</h2>
-          <div class="admin-auth-row">
-            <Input
-              id="admin-email-otp"
-              type="email"
-              label="Email admin"
-              bind:value={email}
-              placeholder="admin@example.com"
-            />
-            <Button variant="secondary" onclick={handleRequestOtp} disabled={loadingOtp}>
-              {loadingOtp ? 'Envoi...' : 'Recevoir le code'}
-            </Button>
+      <div class="auth-card">
+        {#if !webauthnSupported}
+          <Alert tone="error" title="Passkey indisponible" message="Passkeys non supportées par ce navigateur." />
+        {:else if authView === 'login'}
+          <div class="auth-heading">
+            <p class="admin-kicker">Accès admin</p>
+            <h2>Connexion par passkey</h2>
+            <p>Utilise la passkey déjà enregistrée pour ce backoffice.</p>
           </div>
 
-          {#if otpChallengeId}
-            <div class="admin-auth-row">
+          <Button variant="primary" onclick={handlePasskeyLogin} disabled={loadingSession}>
+            {loadingSession ? 'Connexion...' : 'Se connecter avec une passkey'}
+          </Button>
+
+          <button type="button" class="text-button" onclick={() => { authView = 'register'; resetEnrollment(); }}>
+            Enregistrer ou remplacer une passkey
+          </button>
+        {:else}
+          <div class="auth-heading">
+            <p class="admin-kicker">Enrôlement</p>
+            <h2>OTP email + passkey</h2>
+            <p>Valide l’email admin, puis enregistre une passkey sur cet appareil.</p>
+          </div>
+
+          {#if registerStep === 'email'}
+            <form class="auth-form" onsubmit={(event) => { event.preventDefault(); handleRequestOtp(); }}>
               <Input
-                id="admin-otp"
-                type="text"
-                label="Code email"
-                bind:value={otp}
-                placeholder="123456"
+                id="admin-register-email"
+                type="email"
+                label="Email admin"
+                bind:value={email}
+                placeholder="admin@example.com"
               />
-              <Button variant="secondary" onclick={handleVerifyOtp} disabled={loadingOtpVerify}>
-                {loadingOtpVerify ? 'Validation...' : 'Valider'}
+              <Button type="submit" variant="primary" disabled={loadingOtp || !isValidEmail(email)}>
+                {loadingOtp ? 'Envoi...' : 'Recevoir le code'}
               </Button>
+            </form>
+          {:else if registerStep === 'code'}
+            <form class="auth-form" onsubmit={(event) => { event.preventDefault(); handleVerifyOtp(); }}>
+              <Input
+                id="admin-register-email-locked"
+                type="email"
+                label="Email admin"
+                value={email}
+                disabled
+              />
+              <div>
+                <label class="code-label" for="admin-code-0">Code email</label>
+                <div class="code-grid" onpaste={handleCodePaste}>
+                  {#each codeIndexes as index}
+                    <input
+                      id={`admin-code-${index}`}
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="1"
+                      value={codeDigits[index]}
+                      disabled={loadingOtpVerify}
+                      oninput={(event) => handleCodeInput(index, event.currentTarget.value)}
+                      onkeydown={(event) => handleCodeKeydown(index, event)}
+                      autocomplete="one-time-code"
+                    />
+                  {/each}
+                </div>
+              </div>
+              <Button type="submit" variant="primary" disabled={loadingOtpVerify || otpCode.length !== 6}>
+                {loadingOtpVerify ? 'Validation...' : 'Valider le code'}
+              </Button>
+              <button type="button" class="text-button" onclick={() => { registerStep = 'email'; codeDigits = ['', '', '', '', '', '']; }}>
+                Changer d’email
+              </button>
+            </form>
+          {:else if registerStep === 'passkey'}
+            <div class="auth-confirmation">
+              <strong>Email validé</strong>
+              <span>{email}</span>
             </div>
+            <Button variant="primary" onclick={handleRegisterPasskey} disabled={loadingRegistration}>
+              {loadingRegistration ? 'Enregistrement...' : 'Enregistrer la passkey'}
+            </Button>
           {/if}
 
-          {#if verificationToken}
-            <div class="admin-auth-actions">
-              <Button variant="primary" onclick={handleRegisterPasskey} disabled={loadingRegistration || !webauthnSupported}>
-                {loadingRegistration ? 'Enregistrement...' : 'Enregistrer la passkey'}
-              </Button>
-              {#if verificationExpiresAt}
-                <span>{new Date(verificationExpiresAt).toLocaleString('fr-CA')}</span>
-              {/if}
-            </div>
+          {#if authNotice}
+            <p class="auth-notice">{authNotice}</p>
           {/if}
-        </div>
 
-        {#if authNotice}
-          <p class="auth-notice">{authNotice}</p>
-        {/if}
-        {#if !webauthnSupported}
-          <p class="auth-warning">Passkeys non supportées par ce navigateur.</p>
+          <button type="button" class="text-button" onclick={() => { authView = 'login'; resetEnrollment(); }}>
+            Retour à la connexion
+          </button>
         {/if}
       </div>
     {:else}
@@ -354,7 +484,7 @@
           <Button variant="secondary" onclick={() => loadPublications()} disabled={loadingPublications}>
             {loadingPublications ? 'Chargement...' : 'Rafraîchir'}
           </Button>
-          <Button variant="secondary" onclick={handleLogout}>Fermer</Button>
+          <Button variant="secondary" onclick={handleLogout}>Déconnexion</Button>
         </div>
       </div>
 
@@ -382,9 +512,15 @@
             {selectedPublication.status === 'published' ? 'Publié' : 'Brouillon'}
           </span>
           <div class="asset-links">
-            <a href={selectedPublication.assets.manifestUrl} target="_blank" rel="noreferrer">manifest</a>
-            <a href={selectedPublication.assets.baseDocxUrl} target="_blank" rel="noreferrer">base.docx</a>
-            <a href={selectedPublication.assets.brandUrl} target="_blank" rel="noreferrer">brand</a>
+            <button type="button" onclick={() => openSelectedPublicationAsset('manifest')} disabled={isSelectedPublicationAssetLoading('manifest')}>
+              manifest
+            </button>
+            <button type="button" onclick={() => openSelectedPublicationAsset('base.docx')} disabled={isSelectedPublicationAssetLoading('base.docx')}>
+              base.docx
+            </button>
+            <button type="button" onclick={() => openSelectedPublicationAsset('brand')} disabled={isSelectedPublicationAssetLoading('brand')}>
+              brand
+            </button>
           </div>
         </article>
       {/if}
@@ -415,9 +551,15 @@
                 </td>
                 <td><code>{publication.tenantKey}</code></td>
                 <td class="asset-links">
-                  <a href={publication.assets.manifestUrl} target="_blank" rel="noreferrer">manifest</a>
-                  <a href={publication.assets.baseDocxUrl} target="_blank" rel="noreferrer">docx</a>
-                  <a href={publication.assets.brandUrl} target="_blank" rel="noreferrer">brand</a>
+                  <button type="button" onclick={() => openPublicationAsset(publication, 'manifest')} disabled={loadingAsset === `${publication.tenantKey}:manifest`}>
+                    manifest
+                  </button>
+                  <button type="button" onclick={() => openPublicationAsset(publication, 'base.docx')} disabled={loadingAsset === `${publication.tenantKey}:base.docx`}>
+                    docx
+                  </button>
+                  <button type="button" onclick={() => openPublicationAsset(publication, 'brand')} disabled={loadingAsset === `${publication.tenantKey}:brand`}>
+                    brand
+                  </button>
                 </td>
               </tr>
             {/each}
@@ -445,7 +587,7 @@
 
   .admin-header,
   .admin-toolbar,
-  .admin-auth-panel,
+  .auth-card,
   .admin-lookup,
   .publication-detail {
     background: #ffffff;
@@ -488,12 +630,13 @@
   }
 
   .admin-session {
-    min-width: 12rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     padding: 0.75rem 0.9rem;
     border: 1px solid #d8e8f6;
     border-radius: 8px;
     color: #41627f;
-    text-align: right;
   }
 
   .admin-session span,
@@ -507,63 +650,95 @@
     font-size: 0.86rem;
   }
 
-  .admin-auth-panel {
+  .auth-card {
+    width: min(480px, 100%);
+    margin: 0 auto;
     display: grid;
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.35fr);
-    gap: 1.25rem;
-    padding: 1.25rem;
+    gap: 1rem;
+    padding: 1.5rem;
   }
 
-  .auth-column {
+  .auth-heading {
     display: grid;
-    gap: 0.9rem;
-    align-content: start;
+    gap: 0.35rem;
+    text-align: center;
   }
 
-  .auth-column + .auth-column {
-    padding-left: 1.25rem;
-    border-left: 1px solid #d8e8f6;
+  .auth-heading p:last-child,
+  .auth-confirmation span {
+    margin: 0;
+    color: #41627f;
+    font-size: 0.9rem;
   }
 
-  .admin-auth-row,
+  .auth-form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .text-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #1b4f98;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .text-button:hover,
+  .asset-links button:hover {
+    text-decoration: underline;
+  }
+
+  .code-label {
+    display: block;
+    margin-bottom: 0.7rem;
+    color: #123154;
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .code-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .code-grid input {
+    width: 100%;
+    aspect-ratio: 1;
+    border: 2px solid #d8e8f6;
+    border-radius: 8px;
+    color: #123154;
+    font-size: 1.4rem;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .auth-confirmation,
+  .auth-notice {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.85rem 0.95rem;
+    border-radius: 8px;
+    background: #f1f7fd;
+    color: #41627f;
+    font-size: 0.9rem;
+  }
+
+  .auth-confirmation strong {
+    color: #123154;
+  }
+
   .admin-lookup {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 1rem;
     align-items: end;
-  }
-
-  .admin-lookup {
     padding: 1.25rem;
-  }
-
-  .admin-auth-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem;
-    align-items: center;
-  }
-
-  .admin-auth-actions span,
-  .auth-notice,
-  .auth-warning {
-    margin: 0;
-    color: #41627f;
-    font-size: 0.84rem;
-    font-weight: 700;
-  }
-
-  .auth-notice,
-  .auth-warning {
-    grid-column: 1 / -1;
-    padding: 0.8rem 0.9rem;
-    border-radius: 8px;
-    background: #f1f7fd;
-  }
-
-  .auth-warning {
-    background: #fff4d7;
-    color: #7b5200;
   }
 
   .admin-toolbar {
@@ -649,15 +824,20 @@
     gap: 0.5rem;
   }
 
-  .asset-links a {
+  .asset-links button {
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: #1b4f98;
+    font: inherit;
     font-size: 0.84rem;
     font-weight: 800;
-    text-decoration: none;
+    cursor: pointer;
   }
 
-  .asset-links a:hover {
-    text-decoration: underline;
+  .asset-links button:disabled {
+    cursor: progress;
+    opacity: 0.6;
   }
 
   .publication-table {
@@ -721,22 +901,14 @@
       flex-direction: column;
     }
 
-    .admin-auth-panel,
-    .admin-auth-row,
     .admin-lookup,
     .publication-detail {
       grid-template-columns: 1fr;
     }
 
-    .auth-column + .auth-column {
-      padding-left: 0;
-      padding-top: 1.25rem;
-      border-left: 0;
-      border-top: 1px solid #d8e8f6;
-    }
-
     .admin-session {
-      text-align: left;
+      align-items: stretch;
+      flex-direction: column;
     }
 
     .admin-metrics {

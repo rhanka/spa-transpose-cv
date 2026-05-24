@@ -4,7 +4,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { env } from '../src/config/env.js';
 
 const slugs = process.argv.slice(2);
-const selectedSlugs = slugs.length > 0 ? slugs : ['_default', 'scalian'];
+const selectedSlugs = slugs.length > 0 ? slugs : ['_default', 'scalian', 'draft'];
 
 if (!env.TENANT_S3_BUCKET || !env.TENANT_S3_ACCESS_KEY || !env.TENANT_S3_SECRET_KEY) {
   throw new Error('TENANT_S3_BUCKET, TENANT_S3_ACCESS_KEY and TENANT_S3_SECRET_KEY are required');
@@ -39,14 +39,18 @@ function contentTypeFor(filePath: string): string {
 }
 
 const templatesRoot = resolve('templates');
-const uploads = [
-  'registry.json',
-  ...selectedSlugs.flatMap((slug) => [
-    `tenants/${slug}/config.json`,
-    `tenants/${slug}/theme.css`,
-    `tenants/${slug}/template.docx`,
-  ]),
-];
+const uploads = new Set<string>(['registry.json']);
+
+for (const slug of selectedSlugs) {
+  const configPath = `tenants/${slug}/config.json`;
+  const config = JSON.parse(await readFile(join(templatesRoot, configPath), 'utf8')) as {
+    templateKey?: string;
+    themeKey?: string;
+  };
+  uploads.add(configPath);
+  if (config.templateKey) uploads.add(config.templateKey);
+  if (config.themeKey) uploads.add(config.themeKey);
+}
 
 for (const relativePath of uploads) {
   const absolutePath = join(templatesRoot, relativePath);

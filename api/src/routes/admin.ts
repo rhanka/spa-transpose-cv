@@ -24,7 +24,15 @@ import {
   getTenantMarketplacePublication,
   listTenantMarketplacePublications,
 } from '../services/tenant-admin.js';
-import { TenantConfigError } from '../services/tenant-config.js';
+import {
+  getTenantConfigByTenantKeyForAdmin,
+  readStorageObjectBuffer,
+  TenantConfigError,
+} from '../services/tenant-config.js';
+import {
+  tenantConfigToBrandTokens,
+  tenantConfigToTemplateManifest,
+} from '../services/tenant-template-assets.js';
 
 export const adminRoutes = new Hono();
 
@@ -296,6 +304,64 @@ adminRoutes.get('/tenants/publications', async (c) => {
   try {
     const assetsBaseUrl = new URL(c.req.url).origin;
     return c.json(await listTenantMarketplacePublications({ assetsBaseUrl }));
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+
+function requireRootAdminForRoute(c: Context): Response | null {
+  try {
+    requireRootAdminToken(c);
+    return null;
+  } catch (error) {
+    return handleAdminError(c, error) as Response;
+  }
+}
+
+adminRoutes.get('/tenant-publication-assets/:tenantKey/manifest', async (c) => {
+  const authError = requireRootAdminForRoute(c);
+  if (authError) return authError;
+
+  try {
+    const config = await getTenantConfigByTenantKeyForAdmin(c.req.param('tenantKey'));
+    return c.json(tenantConfigToTemplateManifest(config), 200, {
+      'Cache-Control': 'private, max-age=300',
+    });
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.get('/tenant-publication-assets/:tenantKey/base.docx', async (c) => {
+  const authError = requireRootAdminForRoute(c);
+  if (authError) return authError;
+
+  try {
+    const config = await getTenantConfigByTenantKeyForAdmin(c.req.param('tenantKey'));
+    const templateBytes = await readStorageObjectBuffer(config.templateKey);
+    return new Response(new Uint8Array(templateBytes), {
+      status: 200,
+      headers: {
+        'Cache-Control': 'private, max-age=300',
+        'Content-Disposition': `attachment; filename="${config.slug}-base.docx"`,
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      },
+    });
+  } catch (error) {
+    return handleAdminError(c, error);
+  }
+});
+
+adminRoutes.get('/tenant-publication-assets/:tenantKey/brand', async (c) => {
+  const authError = requireRootAdminForRoute(c);
+  if (authError) return authError;
+
+  try {
+    const config = await getTenantConfigByTenantKeyForAdmin(c.req.param('tenantKey'));
+    return c.json(tenantConfigToBrandTokens(config), 200, {
+      'Cache-Control': 'private, max-age=300',
+    });
   } catch (error) {
     return handleAdminError(c, error);
   }

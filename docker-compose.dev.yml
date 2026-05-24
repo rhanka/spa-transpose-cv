@@ -107,7 +107,7 @@ services:
       - TENANT_S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - TENANT_S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - TENANT_S3_PREFIX=
-    command: sh -c "cd /app && npm install && cd /app/api && npx tsx scripts/migrate-tenants-to-s3.ts _default scalian"
+    command: sh -c "cd /app && npm install && cd /app/api && npx tsx scripts/migrate-tenants-to-s3.ts _default scalian draft"
     restart: "no"
 
 volumes:
