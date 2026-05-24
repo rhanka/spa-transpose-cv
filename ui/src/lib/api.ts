@@ -118,6 +118,8 @@ export interface TenantMarketplacePublicationsResponse {
   tenants: TenantMarketplacePublication[];
 }
 
+export type TenantMarketplaceAssetName = 'manifest' | 'base.docx' | 'brand';
+
 export type TemplateRenderer = 'generic' | 'legacy-scalian';
 
 function getSessionApiBase(tenantSlug = DEFAULT_TENANT_SLUG): string {
@@ -288,6 +290,19 @@ export async function fetchTenantMarketplacePublicationByTenantKey(
   });
   if (!res.ok) throw new Error(await readApiError(res, `Publication introuvable (${res.status})`));
   return res.json();
+}
+
+export async function fetchTenantMarketplacePublicationAsset(params: {
+  token: string;
+  tenantKey: string;
+  asset: TenantMarketplaceAssetName;
+}): Promise<Blob> {
+  const res = await fetch(
+    `${API_BASE}/admin/tenant-publication-assets/${encodeURIComponent(params.tenantKey)}/${params.asset}`,
+    { headers: adminAuthorizationHeaders(params.token) },
+  );
+  if (!res.ok) throw new Error(await readApiError(res, `Asset publication introuvable (${res.status})`));
+  return res.blob();
 }
 
 export async function createSession(

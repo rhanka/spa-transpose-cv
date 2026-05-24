@@ -174,3 +174,43 @@ test('rejects marketplace publication list without root admin token', async () =
     code: 'missing_admin_token',
   });
 });
+
+
+test('serves marketplace manifest asset by tenant key to root admin', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenant-publication-assets/direct%3Ascalian/manifest',
+    { headers: rootAdminHeaders() },
+  );
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') ?? '', /application\/json/);
+  const manifest = await response.json();
+  assert.equal(manifest.tenantKey, 'direct:scalian');
+});
+
+test('serves marketplace base docx asset by tenant key to root admin', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenant-publication-assets/direct%3Ascalian/base.docx',
+    { headers: rootAdminHeaders() },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(
+    response.headers.get('content-type'),
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  );
+  const buffer = Buffer.from(await response.arrayBuffer());
+  assert.equal(buffer.subarray(0, 4).toString('hex'), '504b0304');
+});
+
+test('rejects marketplace asset without root admin token', async () => {
+  const response = await app.request(
+    'https://cv-api.sent-tech.ca/api/admin/tenant-publication-assets/direct%3Ascalian/manifest',
+  );
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), {
+    error: 'Missing admin bearer token',
+    code: 'missing_admin_token',
+  });
+});

@@ -16,6 +16,7 @@
   const activeTenantSlug = $derived($tenantSlug);
   const activeBranding = $derived($tenantConfig?.branding);
   const homeHref = $derived(buildTenantPath(activeTenantSlug, '/'));
+  const isAdminRoute = $derived($page.url.pathname.startsWith('/admin'));
   const showDefaultWordmark = $derived(activeTenantSlug === DEFAULT_TENANT_SLUG && activeBranding?.logoPath === '/SENT-logo.png');
   const isDefaultLanding = $derived(activeTenantSlug === DEFAULT_TENANT_SLUG && $page.url.pathname === '/');
   const sentTechNavLinks = [
@@ -54,6 +55,16 @@
   }
 
   $effect(() => {
+    if (isAdminRoute) {
+      tenantSlug.set(DEFAULT_TENANT_SLUG);
+      tenantConfig.set(null);
+      tenantLoadError.set('');
+      loadingTenant = false;
+      applyTenantTheme(null);
+      applyTenantBranding(null);
+      return;
+    }
+
     syncTenant($page.url.pathname);
   });
 
@@ -64,59 +75,63 @@
 </script>
 
 <ThemeProvider theme={sentTechTheme}>
-<Disclaimer />
+{#if !isAdminRoute}
+  <Disclaimer />
+{/if}
 
 <div class="min-h-screen flex flex-col">
-  <header
-    class:tenant-header--overlay={isDefaultLanding}
-    style={!isDefaultLanding ? 'background: var(--tenant-shell-bg, var(--color-purple-dark));' : ''}
-  >
-    <div
-      class="max-w-[1216px] mx-auto px-4 flex items-center justify-between gap-4"
-      class:tenant-header-row--overlay={isDefaultLanding}
-      style="padding-top: 1.25rem; padding-bottom: 1.25rem;"
+  {#if !isAdminRoute}
+    <header
+      class:tenant-header--overlay={isDefaultLanding}
+      style={!isDefaultLanding ? 'background: var(--tenant-shell-bg, var(--color-purple-dark));' : ''}
     >
-      <a href={homeHref} class="flex items-center gap-3">
-        {#if activeBranding?.logoPath}
-          <img
-            class="tenant-logo"
-            class:tenant-logo--wordmark={showDefaultWordmark}
-            class:tenant-logo--inverted={showDefaultWordmark}
-            class:tenant-logo--landing={isDefaultLanding}
-            src={activeBranding.logoPath}
-            alt={$tenantConfig?.displayName ?? 'Sent Tech'}
-          />
-        {:else}
-          <div class="tenant-badge">{$tenantConfig?.displayName?.slice(0, 1) ?? 'S'}</div>
-        {/if}
-        {#if !showDefaultWordmark}
-        <div>
-          <div class="tenant-name">{$tenantConfig?.displayName ?? 'Sent Tech'}</div>
-          <div class="tenant-subtitle">
-            {activeBranding?.subtitle ?? (activeTenantSlug === DEFAULT_TENANT_SLUG ? 'Studio CV Sent Tech' : `/${activeTenantSlug}`)}
+      <div
+        class="max-w-[1216px] mx-auto px-4 flex items-center justify-between gap-4"
+        class:tenant-header-row--overlay={isDefaultLanding}
+        style="padding-top: 1.25rem; padding-bottom: 1.25rem;"
+      >
+        <a href={homeHref} class="flex items-center gap-3">
+          {#if activeBranding?.logoPath}
+            <img
+              class="tenant-logo"
+              class:tenant-logo--wordmark={showDefaultWordmark}
+              class:tenant-logo--inverted={showDefaultWordmark}
+              class:tenant-logo--landing={isDefaultLanding}
+              src={activeBranding.logoPath}
+              alt={$tenantConfig?.displayName ?? 'Sent Tech'}
+            />
+          {:else}
+            <div class="tenant-badge">{$tenantConfig?.displayName?.slice(0, 1) ?? 'S'}</div>
+          {/if}
+          {#if !showDefaultWordmark}
+          <div>
+            <div class="tenant-name">{$tenantConfig?.displayName ?? 'Sent Tech'}</div>
+            <div class="tenant-subtitle">
+              {activeBranding?.subtitle ?? (activeTenantSlug === DEFAULT_TENANT_SLUG ? 'Studio CV Sent Tech' : `/${activeTenantSlug}`)}
+            </div>
           </div>
-        </div>
-        {/if}
-      </a>
+          {/if}
+        </a>
 
-      {#if isDefaultLanding}
-        <nav class="tenant-nav" aria-label="Navigation Sent Tech">
-          {#each sentTechNavLinks as link}
-            <a
-              href={link.href}
-              target="_blank"
-              rel="noreferrer"
-              class="tenant-nav-link"
-            >
-              {link.label}
-            </a>
-          {/each}
-        </nav>
-      {:else if loadingTenant}
-        <span class="tenant-loading">Chargement...</span>
-      {/if}
-    </div>
-  </header>
+        {#if isDefaultLanding}
+          <nav class="tenant-nav" aria-label="Navigation Sent Tech">
+            {#each sentTechNavLinks as link}
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                class="tenant-nav-link"
+              >
+                {link.label}
+              </a>
+            {/each}
+          </nav>
+        {:else if loadingTenant}
+          <span class="tenant-loading">Chargement...</span>
+        {/if}
+      </div>
+    </header>
+  {/if}
 
   {#if $tenantLoadError}
     <div class="tenant-error">
@@ -128,17 +143,19 @@
     {@render children()}
   </main>
 
-  <footer style="background: var(--color-purple-dark); padding-top: 2.25rem; padding-bottom: 2.25rem;">
-    <div class="max-w-[1216px] mx-auto px-4 flex items-center justify-between gap-4">
-      <div>
-        <div class="tenant-name text-white/75">{$tenantConfig?.displayName ?? 'Sent Tech'}</div>
-        <div class="tenant-subtitle text-white/40">{$tenantConfig?.brandUrl ?? 'https://www.sent-tech.ca/'}</div>
+  {#if !isAdminRoute}
+    <footer style="background: var(--color-purple-dark); padding-top: 2.25rem; padding-bottom: 2.25rem;">
+      <div class="max-w-[1216px] mx-auto px-4 flex items-center justify-between gap-4">
+        <div>
+          <div class="tenant-name text-white/75">{$tenantConfig?.displayName ?? 'Sent Tech'}</div>
+          <div class="tenant-subtitle text-white/40">{$tenantConfig?.brandUrl ?? 'https://www.sent-tech.ca/'}</div>
+        </div>
+        <p class="text-white/40 text-xs" style="font-family: var(--font-body);">
+          Données chiffrées AES-256, purgées sous 48h
+        </p>
       </div>
-      <p class="text-white/40 text-xs" style="font-family: var(--font-body);">
-        Données chiffrées AES-256, purgées sous 48h
-      </p>
-    </div>
-  </footer>
+    </footer>
+  {/if}
 </div>
 </ThemeProvider>
 
