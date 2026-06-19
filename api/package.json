@@ -22,7 +22,7 @@
     "hono": "^4.12.8",
     "hono-rate-limiter": "^0.5.3",
     "jszip": "^3.10.1",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "^9.0.1",
     "openai": "^4.85.0",
     "pino": "^9.1.0",
     "pino-pretty": "^11.0.0",
