@@ -141,11 +141,36 @@ jobs:
             | kubectl apply -f -
 
       - name: Wait for rollout
+        shell: bash
         run: |
-          kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-api --timeout=10m
-          kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-ui --timeout=5m
+          set -o pipefail
+          kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-api --timeout=6m
+          kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-ui --timeout=4m
 
       - name: Show status
         if: always()
+        shell: bash
         run: |
-          kubectl -n "$NAMESPACE" get deploy,po,svc,ingress
+          set +e
+          kubectl -n "$NAMESPACE" get deploy,rs,po,svc,ingress -o wide
+          echo "::group::Deployment descriptions"
+          kubectl -n "$NAMESPACE" describe deploy/transpose-cv-api
+          kubectl -n "$NAMESPACE" describe deploy/transpose-cv-ui
+          echo "::endgroup::"
+          echo "::group::Recent events"
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -120
+          echo "::endgroup::"
+          echo "::group::Pod descriptions"
+          for pod in $(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/name=transpose-cv -o name); do
+            echo "### $pod"
+            kubectl -n "$NAMESPACE" describe "$pod"
+          done
+          echo "::endgroup::"
+          echo "::group::Pod logs"
+          for pod in $(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/name=transpose-cv -o name); do
+            echo "### current logs $pod"
+            kubectl -n "$NAMESPACE" logs "$pod" --all-containers --tail=200
+            echo "### previous logs $pod"
+            kubectl -n "$NAMESPACE" logs "$pod" --all-containers --previous --tail=200
+          done
+          echo "::endgroup::"
