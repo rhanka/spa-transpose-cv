@@ -1,0 +1,37 @@
+# The platform owner creates a namespace-level default deny. These policies reopen only
+# what transpose-cv needs: public ingress to HTTP services and outbound calls for
+# DNS/S3/LLM/SMTP. Tighten namespaceSelectors once platform labels are confirmed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: transpose-cv-allow-http-ingress
+  namespace: transpose-cv
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: transpose-cv
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8686
+        - protocol: TCP
+          port: 5173
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: transpose-cv-api-allow-egress
+  namespace: transpose-cv
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: transpose-cv
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Egress
+  egress:
+    - {}

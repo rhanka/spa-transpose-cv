@@ -1,0 +1,45 @@
+# KEDA HTTP add-on scale-to-zero routing.
+# Public traffic enters Traefik through the normal Ingress, then goes to this
+# ExternalName service, which points at the KEDA HTTP interceptor. The
+# HTTPScaledObject forwards active traffic to the real UI service and scales the
+# UI Deployment from 0 to 2 replicas. The API stays at 1 replica for the first
+# k8s cut-over because /api requests are long-running and provider-backed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: transpose-cv-ui-http-interceptor
+  namespace: transpose-cv
+  labels:
+    app.kubernetes.io/name: transpose-cv
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/part-of: scale-to-zero
+spec:
+  type: ExternalName
+  externalName: keda-add-ons-http-interceptor-proxy.keda.svc.cluster.local
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: transpose-cv-ui
+  namespace: transpose-cv
+  labels:
+    app.kubernetes.io/name: transpose-cv
+    app.kubernetes.io/component: ui
+spec:
+  hosts:
+    - transpose-cv.sent-tech.ca
+  pathPrefixes:
+    - /
+  scaleTargetRef:
+    deployment: transpose-cv-ui
+    service: transpose-cv-ui
+    port: 5173
+  replicas:
+    min: 0
+    max: 2
+  scaledownPeriod: 900
+  targetPendingRequests: 20

@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: transpose-cv
+  namespace: transpose-cv
+  labels:
+    app.kubernetes.io/name: transpose-cv
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-dns01
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - transpose-cv.sent-tech.ca
+      secretName: transpose-cv-tls
+  rules:
+    - host: transpose-cv.sent-tech.ca
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: transpose-cv-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: transpose-cv-ui-http-interceptor
+                port:
+                  name: http

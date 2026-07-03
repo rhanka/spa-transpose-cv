@@ -1,0 +1,151 @@
+name: Deploy k8s
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Git SHA image tag to build, push, and deploy
+        required: false
+        type: string
+  push:
+    branches: [master]
+    paths:
+      - api/**
+      - core/**
+      - ui/**
+      - k8s/**
+      - package.json
+      - package-lock.json
+      - tsconfig.base.json
+      - .github/workflows/deploy-k8s.yml
+
+env:
+  REGISTRY: rg.fr-par.scw.cloud/transpose-cv
+  API_IMAGE: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-api
+  UI_IMAGE: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-ui
+  NAMESPACE: transpose-cv
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-k8s-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tag
+        id: meta
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            tag="${{ inputs.image_tag }}"
+          else
+            tag="${GITHUB_SHA}"
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Scaleway Container Registry
+        env:
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+        run: |
+          echo "$SCW_SECRET_KEY" | docker login "$REGISTRY" -u nologin --password-stdin
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          target: production
+          push: true
+          tags: ${{ env.API_IMAGE }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=transpose-cv-api
+          cache-to: type=gha,scope=transpose-cv-api,mode=max
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ui
+          file: ui/Dockerfile
+          target: production
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=/api
+          tags: ${{ env.UI_IMAGE }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=transpose-cv-ui
+          cache-to: type=gha,scope=transpose-cv-ui,mode=max
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.kube"
+          if echo "$KUBE_CONFIG_DATA" | base64 -d > "$HOME/.kube/config" 2>/dev/null; then
+            echo "Decoded base64 KUBE_CONFIG_DATA"
+          else
+            echo "$KUBE_CONFIG_DATA" > "$HOME/.kube/config"
+            echo "Used raw KUBE_CONFIG_DATA"
+          fi
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Ensure application secret exists
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          TENANT_S3_ACCESS_KEY: ${{ secrets.TENANT_S3_ACCESS_KEY }}
+          TENANT_S3_SECRET_KEY: ${{ secrets.TENANT_S3_SECRET_KEY }}
+          ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+          ADMIN_PASSWORD_SALT: ${{ secrets.ADMIN_PASSWORD_SALT }}
+          ADMIN_SEED_SECRET: ${{ secrets.ADMIN_SEED_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+        shell: bash
+        run: |
+          kubectl -n "$NAMESPACE" create secret generic transpose-cv-api-secrets \
+            --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            --from-literal=MISTRAL_API_KEY="$MISTRAL_API_KEY" \
+            --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
+            --from-literal=COHERE_API_KEY="$COHERE_API_KEY" \
+            --from-literal=TENANT_S3_ACCESS_KEY="$TENANT_S3_ACCESS_KEY" \
+            --from-literal=TENANT_S3_SECRET_KEY="$TENANT_S3_SECRET_KEY" \
+            --from-literal=ADMIN_PASSWORD_HASH="$ADMIN_PASSWORD_HASH" \
+            --from-literal=ADMIN_PASSWORD_SALT="$ADMIN_PASSWORD_SALT" \
+            --from-literal=ADMIN_SEED_SECRET="$ADMIN_SEED_SECRET" \
+            --from-literal=SMTP_HOST="$SMTP_HOST" \
+            --from-literal=SMTP_USER="$SMTP_USER" \
+            --from-literal=SMTP_PASS="$SMTP_PASS" \
+            --from-literal=SMTP_FROM="${SMTP_FROM:-cv-transpose@sent-tech.ca}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy manifests
+        shell: bash
+        run: |
+          kubectl kustomize k8s \
+            | sed "s/REPLACE_WITH_GIT_SHA/${{ steps.meta.outputs.tag }}/g" \
+            | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-api --timeout=10m
+          kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-ui --timeout=5m
+
+      - name: Show status
+        if: always()
+        run: |
+          kubectl -n "$NAMESPACE" get deploy,po,svc,ingress
