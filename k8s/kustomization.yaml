@@ -7,7 +7,6 @@ resources:
   - ui.yaml
   - ingress.yaml
   - networkpolicy.yaml
-  - scale-to-zero.yaml
 images:
   - name: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-api
     newTag: REPLACE_WITH_GIT_SHA

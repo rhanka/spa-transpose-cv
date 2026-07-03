@@ -29,6 +29,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: transpose-cv-ui-http-interceptor
+                name: transpose-cv-ui
                 port:
                   name: http
