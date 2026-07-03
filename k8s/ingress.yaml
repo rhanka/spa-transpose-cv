@@ -6,7 +6,7 @@ metadata:
   labels:
     app.kubernetes.io/name: transpose-cv
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-dns01
+    cert-manager.io/cluster-issuer: letsencrypt-prod
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
 spec:
   ingressClassName: traefik
