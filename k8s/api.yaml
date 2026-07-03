@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/component: api
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: transpose-cv
@@ -62,12 +64,12 @@ spec:
             failureThreshold: 30
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 200m
+              memory: 448Mi
               ephemeral-storage: 1Gi
             limits:
-              cpu: 1500m
-              memory: 1800Mi
+              cpu: 1200m
+              memory: 1536Mi
               ephemeral-storage: 3Gi
       volumes:
         - name: tmp
