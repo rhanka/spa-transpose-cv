@@ -21,3 +21,13 @@ test('redirects the legacy Scalian UI root without duplicating the tenant slug',
     'https://cv.sent-tech.ca/scalian/?from=legacy',
   );
 });
+
+
+test('serves an API index at /api', async () => {
+  const response = await app.request('https://cv-api.sent-tech.ca/api');
+
+  assert.equal(response.status, 200);
+  const body = await response.json() as { name: string; routes: string[] };
+  assert.equal(body.name, 'spa-transpose-cv-api');
+  assert.ok(body.routes.includes('/api/health'));
+});

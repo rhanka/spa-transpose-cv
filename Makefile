@@ -186,20 +186,12 @@ publish-api: docker-login ## Push API image to registry
 publish: publish-api ## Push API image to registry
 
 # -----------------------------------------------------------------------------
-# Scaleway deployment
+# Scaleway Serverless deployment (decommissioned)
 # -----------------------------------------------------------------------------
 
 .PHONY: check-scw
 check-scw:
-	@if ! command -v scw >/dev/null 2>&1; then \
-		echo "scw (Scaleway CLI) not found. Installing..."; \
-		curl -sL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh; \
-	fi
-
-.PHONY: scw-create-namespace
-scw-create-namespace: check-scw ## Create Scaleway container namespace
-	@echo "Creating namespace transpose-cv..."
-	@scw container namespace create name=transpose-cv
+	@if ! command -v scw >/dev/null 2>&1; then 		echo "scw (Scaleway CLI) not found. Installing..."; 		curl -sL https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh; 	fi
 
 .PHONY: storage-status
 storage-status: check-scw ## List Object Storage buckets in the configured region
@@ -212,115 +204,28 @@ storage-create: check-scw ## Create the tenant Object Storage bucket in Scaleway
 
 .PHONY: admin-hash
 admin-hash: ## Generate ADMIN_PASSWORD_HASH and ADMIN_PASSWORD_SALT (PASSWORD="...")
-	@if [ -z "$(PASSWORD)" ]; then \
-		echo "Error: PASSWORD is required (e.g. make admin-hash PASSWORD='change-me')"; \
-		exit 1; \
-	fi
+	@if [ -z "$(PASSWORD)" ]; then 		echo "Error: PASSWORD is required (e.g. make admin-hash PASSWORD='change-me')"; 		exit 1; 	fi
 	@node api/scripts/hash-admin-password.mjs "$(PASSWORD)"
 
-.PHONY: deploy-api-init
-deploy-api-init: check-scw ## Create API container in Scaleway namespace (first time)
-	@echo "Creating container $(API_IMAGE_NAME) in namespace $(SCW_NAMESPACE_ID)..."
-	@API_CONTAINER_ID=$$(scw container container list | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}'); \
-	if [ -n "$${API_CONTAINER_ID}" ]; then \
-		echo "Container $(API_IMAGE_NAME) already exists (ID: $${API_CONTAINER_ID})"; \
-	else \
-		scw container container create \
-			name=$(API_IMAGE_NAME) \
-			namespace-id=$(SCW_NAMESPACE_ID) \
-			registry-image=$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION) \
-			port=8787 \
-			min-scale=0 \
-			max-scale=1 \
-			memory-limit=2048 \
-			cpu-limit=1000 \
-			timeout=300s \
-			privacy=public \
-			protocol=http1 \
-			http-option=redirected; \
-		echo "Container created."; \
-	fi
+.PHONY: legacy-serverless-disabled
+legacy-serverless-disabled:
+	@echo "Legacy Scaleway Serverless deployment has been decommissioned. Use .github/workflows/deploy-k8s.yml and k8s/ manifests."
+	@exit 1
 
+.PHONY: scw-create-namespace deploy-api-init deploy-api deploy wait-for-api dns-setup dns-api dns-ui dns-ui-legacy scw-custom-domain scw-custom-domain-legacy
+scw-create-namespace deploy-api-init deploy-api deploy wait-for-api dns-setup dns-api dns-ui dns-ui-legacy scw-custom-domain scw-custom-domain-legacy: legacy-serverless-disabled
+
+# Legacy Serverless metadata retained for audit only.
 SCW_API_CONTAINER_ID ?= 10379fdb-ef44-4ceb-8630-5a22cc30827b
-
-.PHONY: deploy-api
-deploy-api: check-scw ## Update API container with new image (rollout)
-	@echo "Updating $(API_IMAGE_NAME) to $(API_VERSION)..."
-	scw container container update $(SCW_API_CONTAINER_ID) registry-image="$(REGISTRY)/$(API_IMAGE_NAME):$(API_VERSION)" http-option=enabled region=fr-par
-	@echo "Deployment initiated."
-
-.PHONY: deploy
-deploy: build-api publish deploy-api wait-for-api ## Full deploy: build, push, rollout, wait
-
-.PHONY: wait-for-api
-wait-for-api: check-scw ## Wait for API container to be ready
-	@printf "Waiting for API container..."
-	@API_STATUS="pending"; \
-	while [ "$${API_STATUS}" != "ready" ]; do \
-		API_STATUS=$$(scw container container list | awk '($$2=="$(API_IMAGE_NAME)"){print $$4}'); \
-		printf "."; \
-		sleep 3; \
-	done; \
-	echo " ready!"
-
-# -----------------------------------------------------------------------------
-# DNS (Cloudflare) + SCW custom domains
-# -----------------------------------------------------------------------------
-
-SCW_API_CONTAINER_ID ?= $(shell scw container container list 2>/dev/null | awk '($$2=="$(API_IMAGE_NAME)"){print $$1}')
 SCW_API_DOMAIN       = transposecv5ntjukr9-transpose-cv-api.functions.fnc.fr-par.scw.cloud
 CUSTOM_API_DOMAIN    = cv-api.sent-tech.ca
 CUSTOM_UI_DOMAIN     = cv.sent-tech.ca
 LEGACY_UI_DOMAIN     = scalian-cv.sent-tech.ca
 
-.PHONY: dns-setup
-dns-setup: dns-api dns-ui dns-ui-legacy scw-custom-domain scw-custom-domain-legacy ## Setup canonical DNS records + legacy UI redirect
-
-.PHONY: dns-api
-dns-api: ## Create CNAME cv-api.sent-tech.ca → SCW (Cloudflare)
-	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
-		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
-	fi
-	@echo "Creating CNAME $(CUSTOM_API_DOMAIN) → $(SCW_API_DOMAIN)..."
-	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
-		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
-		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"cv-api","content":"$(SCW_API_DOMAIN)","ttl":1,"proxied":false}' \
-		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
-
-.PHONY: dns-ui
-dns-ui: ## Create CNAME cv.sent-tech.ca → rhanka.github.io (Cloudflare CDN)
-	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
-		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
-	fi
-	@echo "Creating CNAME $(CUSTOM_UI_DOMAIN) → rhanka.github.io..."
-	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
-		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
-		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"cv","content":"rhanka.github.io","ttl":1,"proxied":true}' \
-		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
-
-.PHONY: dns-ui-legacy
-dns-ui-legacy: ## Create legacy CNAME scalian-cv.sent-tech.ca → SCW API redirect
-	@if [ -z "$(CLOUDFLARE_API_TOKEN)" ] || [ -z "$(CLOUDFLARE_ZONE_ID)" ]; then \
-		echo "Error: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID required in .env"; exit 1; \
-	fi
-	@echo "Creating legacy CNAME $(LEGACY_UI_DOMAIN) → $(CUSTOM_UI_DOMAIN)..."
-	@curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$(CLOUDFLARE_ZONE_ID)/dns_records" \
-		-H "Authorization: Bearer $(CLOUDFLARE_API_TOKEN)" \
-		-H "Content-Type: application/json" \
-		--data '{"type":"CNAME","name":"scalian-cv","content":"$(SCW_API_DOMAIN)","ttl":1,"proxied":false}' \
-		| node -e "let raw='';process.stdin.setEncoding('utf8');process.stdin.on('data',chunk=>raw+=chunk);process.stdin.on('end',()=>{const r=JSON.parse(raw);console.log(r.success?'OK':`Error: ${JSON.stringify(r.errors ?? r)}`);});"
-
-.PHONY: scw-custom-domain
-scw-custom-domain: check-scw ## Register custom domain on SCW API container
-	@echo "Registering $(CUSTOM_API_DOMAIN) on SCW container $(SCW_API_CONTAINER_ID)..."
-	@scw container domain create container-id=$(SCW_API_CONTAINER_ID) hostname=$(CUSTOM_API_DOMAIN)
-
-.PHONY: scw-custom-domain-legacy
-scw-custom-domain-legacy: check-scw ## Register legacy redirect domain on SCW API container
-	@echo "Registering $(LEGACY_UI_DOMAIN) on SCW container $(SCW_API_CONTAINER_ID)..."
-	@scw container domain create container-id=$(SCW_API_CONTAINER_ID) hostname=$(LEGACY_UI_DOMAIN)
+.PHONY: dns-info
+dns-info: ## Show Kubernetes ingress DNS target information
+	@echo "Kubernetes ingress host: transpose-cv.sent-tech.ca"
+	@echo "Legacy Serverless DNS/custom-domain targets are decommissioned."
 
 # -----------------------------------------------------------------------------
 # Utilities

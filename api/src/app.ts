@@ -72,6 +72,11 @@ app.use(async (c, next) => {
 });
 
 // Routes
+app.get('/api', (c) => c.json({
+  name: 'spa-transpose-cv-api',
+  version: '0.1.0',
+  routes: ['/api/health', '/api/models', '/api/v1/tenants', '/api/tenants', '/api/admin', '/api/sessions'],
+}));
 app.route('/api/health', healthRoutes);
 app.route('/api/models', modelRoutes);
 app.route('/api/v1/tenants', tenantAssetRoutes);
