@@ -23,10 +23,13 @@ env:
   REGISTRY: rg.fr-par.scw.cloud/transpose-cv
   API_IMAGE: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-api
   UI_IMAGE: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-ui
+  GHCR_API_IMAGE: ghcr.io/rhanka/transpose-cv-api
+  GHCR_UI_IMAGE: ghcr.io/rhanka/transpose-cv-ui
   NAMESPACE: transpose-cv
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: deploy-k8s-${{ github.ref }}
@@ -57,6 +60,12 @@ jobs:
         run: |
           echo "$SCW_SECRET_KEY" | docker login "$REGISTRY" -u nologin --password-stdin
 
+      - name: Login to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
       - name: Build and push API image
         uses: docker/build-push-action@v6
         with:
@@ -64,7 +73,9 @@ jobs:
           file: api/Dockerfile
           target: production
           push: true
-          tags: ${{ env.API_IMAGE }}:${{ steps.meta.outputs.tag }}
+          tags: |
+            ${{ env.API_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.GHCR_API_IMAGE }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=transpose-cv-api
           cache-to: type=gha,scope=transpose-cv-api,mode=max
 
@@ -77,7 +88,9 @@ jobs:
           push: true
           build-args: |
             VITE_API_BASE_URL=/api
-          tags: ${{ env.UI_IMAGE }}:${{ steps.meta.outputs.tag }}
+          tags: |
+            ${{ env.UI_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ env.GHCR_UI_IMAGE }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=transpose-cv-ui
           cache-to: type=gha,scope=transpose-cv-ui,mode=max
 
