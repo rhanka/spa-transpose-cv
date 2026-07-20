@@ -75,9 +75,15 @@ jobs:
           push: true
           tags: |
             ${{ env.API_IMAGE }}:${{ steps.meta.outputs.tag }}
-            ${{ env.GHCR_API_IMAGE }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=transpose-cv-api
           cache-to: type=gha,scope=transpose-cv-api,mode=max
+
+      - name: Mirror API image to GHCR
+        continue-on-error: true
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.GHCR_API_IMAGE }}:${{ steps.meta.outputs.tag }} \
+            ${{ env.API_IMAGE }}:${{ steps.meta.outputs.tag }}
 
       - name: Build and push UI image
         uses: docker/build-push-action@v6
@@ -90,9 +96,15 @@ jobs:
             VITE_API_BASE_URL=/api
           tags: |
             ${{ env.UI_IMAGE }}:${{ steps.meta.outputs.tag }}
-            ${{ env.GHCR_UI_IMAGE }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=transpose-cv-ui
           cache-to: type=gha,scope=transpose-cv-ui,mode=max
+
+      - name: Mirror UI image to GHCR
+        continue-on-error: true
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.GHCR_UI_IMAGE }}:${{ steps.meta.outputs.tag }} \
+            ${{ env.UI_IMAGE }}:${{ steps.meta.outputs.tag }}
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
