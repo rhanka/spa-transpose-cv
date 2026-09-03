@@ -26,6 +26,9 @@ env:
   GHCR_API_IMAGE: ghcr.io/rhanka/transpose-cv-api
   GHCR_UI_IMAGE: ghcr.io/rhanka/transpose-cv-ui
   NAMESPACE: transpose-cv
+  OVH_API_SERVER: https://hlhedx.c1.bhs5.k8s.ovh.net
+  PUBLIC_HOST: transpose-cv.sent-tech.ca
+  OVH_INGRESS_IP: 51.79.100.177
 
 permissions:
   contents: read
@@ -123,6 +126,18 @@ jobs:
           fi
           chmod 600 "$HOME/.kube/config"
 
+      - name: Verify OVH deployment target
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_server="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          if [ "$actual_server" != "$OVH_API_SERVER" ]; then
+            echo "KUBE_CONFIG_DATA targets $actual_server; expected $OVH_API_SERVER" >&2
+            exit 1
+          fi
+          kubectl -n "$NAMESPACE" auth can-i get deployments | grep -qx yes
+          echo "Verified OVH API server and deployment access for $NAMESPACE"
+
       - name: Ensure application secret exists
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -171,6 +186,28 @@ jobs:
           set -o pipefail
           kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-api --timeout=6m
           kubectl -n "$NAMESPACE" rollout status deploy/transpose-cv-ui --timeout=4m
+
+      - name: Verify public route terminates on OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          certificate_serial() {
+            timeout 20s openssl s_client -connect "$1:443" -servername "$PUBLIC_HOST" </dev/null 2>/dev/null \
+              | openssl x509 -noout -serial \
+              | cut -d= -f2
+          }
+
+          public_serial="$(certificate_serial "$PUBLIC_HOST")"
+          ovh_serial="$(certificate_serial "$OVH_INGRESS_IP")"
+          if [ -z "$public_serial" ] || [ -z "$ovh_serial" ]; then
+            echo "Could not read the TLS certificate serial for $PUBLIC_HOST or $OVH_INGRESS_IP" >&2
+            exit 1
+          fi
+          if [ "$public_serial" != "$ovh_serial" ]; then
+            echo "$PUBLIC_HOST does not terminate on the OVH ingress ($OVH_INGRESS_IP)" >&2
+            exit 1
+          fi
+          echo "Verified $PUBLIC_HOST terminates on the OVH ingress"
 
       - name: Show status
         if: always()
