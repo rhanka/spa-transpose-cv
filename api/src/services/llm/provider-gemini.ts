@@ -7,8 +7,8 @@ const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export class GeminiProvider implements LlmProvider {
   readonly config: LlmProviderConfig = {
     id: 'gemini',
-    modelId: 'gemini-3.1-pro-preview-customtools',
-    label: 'Gemini 3.1 Pro',
+    modelId: 'gemini-3.6-flash',
+    label: 'Gemini 3.6 Flash',
     costPer1MInput: 1.25,
     costPer1MOutput: 10,
     co2ePer1kOutput: 8.10,
