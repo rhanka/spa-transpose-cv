@@ -112,7 +112,7 @@ const results = await Promise.allSettled(
 5. Le script génère le DOCX via `scalian-xml.ts` + `docx-tools.ts`
 6. Chiffre le résultat et le stocke
 
-**Modèle** : `claude-sonnet-4-6` (rapport coût/qualité optimal pour l'extraction)
+**Modèle** : `claude-sonnet-5` (rapport coût/qualité optimal pour l'extraction)
 **Concurrence** : limité à 5 agents simultanés (rate limit Anthropic)
 
 ## 6. Frontend — écrans
@@ -177,7 +177,7 @@ const results = await Promise.allSettled(
 | Build | Vite (UI), esbuild (API) |
 | CV processing | scalian-xml.ts, docx-tools.ts (port existant) |
 | Extraction texte | pdftotext (poppler-utils), pandoc |
-| LLM | @anthropic-ai/sdk (Claude claude-sonnet-4-6) |
+| LLM | @anthropic-ai/sdk (Claude claude-sonnet-5) |
 | Chiffrement | Node.js crypto (AES-256-GCM + PBKDF2) |
 | Containerisation | Docker multi-stage |
 | Déploiement | Scaleway Serverless Container |

@@ -62,11 +62,14 @@ export function listAvailableProviders(): LlmProviderConfig[] {
 }
 
 /** Static metadata — avoids instantiating providers just to list them */
+// FinOps overlays (costPer1M*, co2ePer1kOutput) are carried over from the previous
+// model generation and are STALE after the 2026-09 model swap (sonnet-5, gpt-5.6-luna,
+// gemini-3.6-flash). TODO(finops): re-source cost + CO2 per model (see CO2_METHODOLOGY.md).
 const PROVIDER_META: Record<ProviderId, LlmProviderConfig> = {
-  anthropic: { id: 'anthropic', modelId: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', costPer1MInput: 3, costPer1MOutput: 15, co2ePer1kOutput: 8.75 },
-  openai: { id: 'openai', modelId: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', costPer1MInput: 0.5, costPer1MOutput: 2, co2ePer1kOutput: 1.44 },
+  anthropic: { id: 'anthropic', modelId: 'claude-sonnet-5', label: 'Claude Sonnet 5', costPer1MInput: 3, costPer1MOutput: 15, co2ePer1kOutput: 8.75 },
+  openai: { id: 'openai', modelId: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', costPer1MInput: 0.5, costPer1MOutput: 2, co2ePer1kOutput: 1.44 },
   mistral: { id: 'mistral', modelId: 'mistral-small-2603', label: 'Mistral Small 4', costPer1MInput: 0.15, costPer1MOutput: 0.6, co2ePer1kOutput: 0.51 },
-  gemini: { id: 'gemini', modelId: 'gemini-3.1-pro-preview-customtools', label: 'Gemini 3.1 Pro', costPer1MInput: 1.25, costPer1MOutput: 10, co2ePer1kOutput: 8.10 },
+  gemini: { id: 'gemini', modelId: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', costPer1MInput: 1.25, costPer1MOutput: 10, co2ePer1kOutput: 8.10 },
   cohere: { id: 'cohere', modelId: 'command-a-reasoning-08-2025', label: 'Command A Reasoning', costPer1MInput: 2.5, costPer1MOutput: 10, co2ePer1kOutput: 20.0 },
 };
 

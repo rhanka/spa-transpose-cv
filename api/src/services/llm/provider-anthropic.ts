@@ -5,8 +5,8 @@ import type { LlmProvider, LlmProviderConfig, LlmRequest, LlmResponse, LlmStream
 export class AnthropicProvider implements LlmProvider {
   readonly config: LlmProviderConfig = {
     id: 'anthropic',
-    modelId: 'claude-sonnet-4-6',
-    label: 'Claude Sonnet 4.6',
+    modelId: 'claude-sonnet-5',
+    label: 'Claude Sonnet 5',
     costPer1MInput: 3,
     costPer1MOutput: 15,
     co2ePer1kOutput: 8.75,

@@ -5,8 +5,8 @@ import type { LlmProvider, LlmProviderConfig, LlmRequest, LlmResponse, LlmStream
 export class OpenAIProvider implements LlmProvider {
   readonly config: LlmProviderConfig = {
     id: 'openai',
-    modelId: 'gpt-5.4-nano',
-    label: 'GPT-5.4 Nano',
+    modelId: 'gpt-5.6-luna',
+    label: 'GPT-5.6 Luna',
     costPer1MInput: 0.5,
     costPer1MOutput: 2,
     co2ePer1kOutput: 1.44,
