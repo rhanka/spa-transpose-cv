@@ -1,6 +1,6 @@
-# transpose-cv on k8s `poc`
+# transpose-cv on OVH Managed Kubernetes
 
-Manifests for the FinOps migration from Scaleway Serverless Containers to the shared `poc` Kubernetes cluster.
+Manifests for `transpose-cv` on OVH MKS BHS5. The legacy Scaleway cluster is retained at zero replicas for rollback only.
 
 ## Platform-owned prerequisites
 
@@ -13,6 +13,14 @@ The `poc-k8s` lane owns:
 - image pull secret `transpose-cv-registry`
 - DNS record for `transpose-cv.sent-tech.ca`
 - cert-manager DNS-01 issuer used by the Ingress
+
+## OVH deployment contract
+
+- The `KUBE_CONFIG_DATA` GitHub secret contains the base64-encoded namespace-scoped OVH kubeconfig.
+- CI refuses to deploy unless its Kubernetes API server is `https://hlhedx.c1.bhs5.k8s.ovh.net`.
+- The public ingress IP is `51.79.100.177`. After each rollout, CI compares the TLS certificate serial obtained through normal DNS with the serial obtained by connecting directly to that IP. An HTTP status alone cannot prove which cluster answered.
+- Ingress remains `traefik` with the existing `letsencrypt-prod` TLS annotations. No `scw-loadbalancer-*` annotation is required.
+- Images remain sourced from Scaleway Container Registry for this migration. The separate GHCR mirror is readiness only; changing the deployed image source is a separate rollout.
 
 ## Application shape
 
