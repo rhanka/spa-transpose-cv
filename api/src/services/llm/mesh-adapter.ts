@@ -30,10 +30,10 @@ import {
   type GenerateRequest,
   type GenerateResponse,
   type LlmMesh,
-  type ProviderId,
 } from '@sentropic/llm-mesh';
 import { LocalProviderClient } from './mesh-client-bridge.js';
 import type {
+  ProviderId,
   LlmProvider,
   LlmProviderConfig,
   LlmRequest,
