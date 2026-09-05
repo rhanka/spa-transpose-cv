@@ -2,6 +2,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { env } from '../../config/env.js';
 import type { LlmProvider, LlmProviderConfig, LlmRequest, LlmResponse, LlmStreamCallbacks } from './types.js';
 
+type ReasoningEffort = 'low' | 'medium' | 'high';
+
+// Map the legacy numeric reasoning budget to the adaptive-thinking effort tier.
+function reasoningEffort(budget?: number): ReasoningEffort {
+  if (budget === undefined) return 'low';
+  if (budget <= 4096) return 'low';
+  if (budget <= 12288) return 'medium';
+  return 'high';
+}
+
 export class AnthropicProvider implements LlmProvider {
   readonly config: LlmProviderConfig = {
     id: 'anthropic',
@@ -26,9 +36,12 @@ export class AnthropicProvider implements LlmProvider {
       messages: [{ role: 'user', content: req.userMessage }],
     };
     if (req.enableReasoning) {
-      (params as unknown as Record<string, unknown>).thinking = {
-        type: 'enabled',
-        budget_tokens: req.reasoningBudget ?? 4096,
+      // Claude Sonnet 5+ replaced budget-based thinking with adaptive thinking
+      // controlled via output_config.effort. The old {type:'enabled',budget_tokens}
+      // is rejected (400) by the newer models.
+      (params as unknown as Record<string, unknown>).thinking = { type: 'adaptive' };
+      (params as unknown as Record<string, unknown>).output_config = {
+        effort: reasoningEffort(req.reasoningBudget),
       };
     }
 
@@ -55,9 +68,12 @@ export class AnthropicProvider implements LlmProvider {
       stream: true,
     };
     if (req.enableReasoning) {
-      (params as unknown as Record<string, unknown>).thinking = {
-        type: 'enabled',
-        budget_tokens: req.reasoningBudget ?? 4096,
+      // Claude Sonnet 5+ replaced budget-based thinking with adaptive thinking
+      // controlled via output_config.effort. The old {type:'enabled',budget_tokens}
+      // is rejected (400) by the newer models.
+      (params as unknown as Record<string, unknown>).thinking = { type: 'adaptive' };
+      (params as unknown as Record<string, unknown>).output_config = {
+        effort: reasoningEffort(req.reasoningBudget),
       };
     }
 
