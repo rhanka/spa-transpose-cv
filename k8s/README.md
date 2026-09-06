@@ -30,7 +30,7 @@ The `poc-k8s` lane owns:
   - `/api` -> `transpose-cv-api:8686`
   - `/` -> `transpose-cv-ui:5173`
 - No DB.
-- No PVC. Runtime tenant/config/template storage is S3/Object Storage via `TENANT_STORAGE_BACKEND=s3`.
+- No PVC. Runtime tenant/config/template storage is OVH Object Storage (BHS, S3-compatible) via `TENANT_STORAGE_BACKEND=s3`.
 - API uses in-memory `emptyDir` mounts for native tool scratch space:
   - `/tmp`: 1 GiB
   - `/var/tmp`: 256 MiB
