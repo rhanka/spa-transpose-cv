@@ -8,7 +8,7 @@ resources:
   - ingress.yaml
   - networkpolicy.yaml
 images:
-  - name: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-api
+  - name: ghcr.io/rhanka/transpose-cv-api
     newTag: REPLACE_WITH_GIT_SHA
-  - name: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-ui
+  - name: ghcr.io/rhanka/transpose-cv-ui
     newTag: REPLACE_WITH_GIT_SHA

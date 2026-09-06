@@ -1,6 +1,6 @@
 # transpose-cv on OVH Managed Kubernetes
 
-Manifests for `transpose-cv` on OVH MKS BHS5. The legacy Scaleway cluster is retained at zero replicas for rollback only.
+Manifests for `transpose-cv` on OVH MKS BHS5. Scaleway is fully decommissioned for transpose-cv (registry, object storage, IAM, serverless).
 
 ## Platform-owned prerequisites
 
@@ -9,8 +9,8 @@ The `poc-k8s` lane owns:
 - namespace `transpose-cv`
 - ResourceQuota / LimitRange / default-deny NetworkPolicy
 - namespace-scoped ServiceAccount + kubeconfig (`KUBE_CONFIG_DATA` GitHub secret)
-- SCR registry `rg.fr-par.scw.cloud/transpose-cv`
-- image pull secret `transpose-cv-registry`
+- GHCR registry `ghcr.io/rhanka` (public)
+- public GHCR images (no pull secret required)
 - DNS record for `transpose-cv.sent-tech.ca`
 - cert-manager DNS-01 issuer used by the Ingress
 
@@ -20,7 +20,7 @@ The `poc-k8s` lane owns:
 - CI refuses to deploy unless its Kubernetes API server is `https://hlhedx.c1.bhs5.k8s.ovh.net`.
 - The public ingress IP is `51.79.100.177`. After each rollout, CI compares the TLS certificate serial obtained through normal DNS with the serial obtained by connecting directly to that IP. An HTTP status alone cannot prove which cluster answered.
 - Ingress remains `traefik` with the existing `letsencrypt-prod` TLS annotations. No `scw-loadbalancer-*` annotation is required.
-- Images remain sourced from Scaleway Container Registry for this migration. The separate GHCR mirror is readiness only; changing the deployed image source is a separate rollout.
+- Images are sourced from public GHCR (`ghcr.io/rhanka/transpose-cv-{api,ui}`). Scaleway has been fully decommissioned for transpose-cv (registry, object storage, IAM).
 
 ## Application shape
 
@@ -40,8 +40,8 @@ The `poc-k8s` lane owns:
 Pin images by commit SHA; do not deploy `latest`:
 
 ```text
-rg.fr-par.scw.cloud/transpose-cv/transpose-cv-api:<sha>
-rg.fr-par.scw.cloud/transpose-cv/transpose-cv-ui:<sha>
+ghcr.io/rhanka/transpose-cv-api:<sha>
+ghcr.io/rhanka/transpose-cv-ui:<sha>
 ```
 
 Update tags before applying:
@@ -73,7 +73,7 @@ Create/update the secret from CI or a private operator command before rollout.
 After platform provisioning is complete:
 
 1. Create `transpose-cv-api-secrets` from private values.
-2. Build and push both images to SCR with the same git SHA tag.
+2. Build and push both images to GHCR with the same git SHA tag.
 3. Apply these manifests.
 4. Wait for rollout:
 

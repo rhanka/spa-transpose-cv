@@ -18,11 +18,9 @@ spec:
         app.kubernetes.io/name: transpose-cv
         app.kubernetes.io/component: ui
     spec:
-      imagePullSecrets:
-        - name: transpose-cv-registry
       containers:
         - name: ui
-          image: rg.fr-par.scw.cloud/transpose-cv/transpose-cv-ui:REPLACE_WITH_GIT_SHA
+          image: ghcr.io/rhanka/transpose-cv-ui:REPLACE_WITH_GIT_SHA
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
