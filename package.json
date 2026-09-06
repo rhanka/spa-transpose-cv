@@ -1,5 +1,12 @@
 {
   "name": "spa-transpose-cv-monorepo",
   "private": true,
-  "workspaces": ["api", "ui", "core/typescript"]
+  "workspaces": ["api", "ui", "core/typescript"],
+  "overrides": {
+    "cookie": "^0.7.2",
+    "@sveltejs/kit": {
+      "cookie": "^0.7.2"
+    },
+    "esbuild": "^0.28.2"
+  }
 }
