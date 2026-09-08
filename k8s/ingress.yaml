@@ -14,9 +14,28 @@ spec:
   tls:
     - hosts:
         - transpose-cv.sent-tech.ca
+        - cv.sent-tech.ca
       secretName: transpose-cv-tls
   rules:
     - host: transpose-cv.sent-tech.ca
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: transpose-cv-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: transpose-cv-ui
+                port:
+                  name: http
+    # Canonical domain, repointed from the decommissioned SCW/GitHub-Pages setup to OVH.
+    - host: cv.sent-tech.ca
       http:
         paths:
           - path: /api
