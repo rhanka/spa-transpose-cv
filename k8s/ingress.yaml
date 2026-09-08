@@ -15,6 +15,7 @@ spec:
     - hosts:
         - transpose-cv.sent-tech.ca
         - cv.sent-tech.ca
+        - scalian-cv.sent-tech.ca
       secretName: transpose-cv-tls
   rules:
     - host: transpose-cv.sent-tech.ca
@@ -50,5 +51,17 @@ spec:
             backend:
               service:
                 name: transpose-cv-ui
+                port:
+                  name: http
+    # Legacy native tenant host: all paths go to the API, whose app.ts issues a
+    # 301 redirect to https://cv.sent-tech.ca/scalian/... (legacyTenantHosts).
+    - host: scalian-cv.sent-tech.ca
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: transpose-cv-api
                 port:
                   name: http
