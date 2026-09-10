@@ -9,7 +9,7 @@ metadata:
 data:
   NODE_ENV: "production"
   API_PORT: "8686"
-  LLM_PROVIDER: "anthropic"
+  LLM_PROVIDER: "mistral"
   LLM_MESH: "false"
   CORS_ALLOWED_ORIGINS: "https://transpose-cv.sent-tech.ca,https://cv.sent-tech.ca"
   SESSION_MAX_AGE_HOURS: "48"
