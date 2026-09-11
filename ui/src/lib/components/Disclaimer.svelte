@@ -34,7 +34,7 @@
               <li><strong>GPT-5.6 Luna</strong> (OpenAI) &mdash; US</li>
               <li><strong>Claude Sonnet 5</strong> (Anthropic) &mdash; US</li>
               <li><strong>Command A Reasoning</strong> (Cohere, Canada) &mdash; US</li>
-              <li><strong>Gemini 3.6 Flash</strong> (Google) &mdash; US</li>
+              <li><strong>Gemini 3.8 Flash</strong> (Google) &mdash; US</li>
             </ul>
           </li>
           <li>Quel que soit le fournisseur, les fichiers sont <strong>chiffrés avant leur transmission</strong> et vos données ne sont <strong>pas utilisées à des fins d’entraînement</strong> dans le cadre de l’utilisation de ces API.</li>

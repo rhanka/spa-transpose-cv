@@ -35,8 +35,13 @@ export class CohereProvider implements LlmProvider {
       ],
     });
 
-    const firstBlock = response.message?.content?.[0] as Record<string, unknown> | undefined;
-    const text = (firstBlock?.text as string) || '';
+    // Reasoning models (command-a-reasoning) return a `thinking` block before the
+    // `text` block, so pick the text-type block(s) rather than content[0].
+    const blocks = (response.message?.content ?? []) as unknown as Array<Record<string, unknown>>;
+    const text = blocks
+      .filter((b) => b.type === 'text' && typeof b.text === 'string')
+      .map((b) => b.text as string)
+      .join('') || '';
     return {
       text,
       usage: {
