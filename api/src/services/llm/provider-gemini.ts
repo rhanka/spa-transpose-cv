@@ -28,14 +28,17 @@ export class GeminiProvider implements LlmProvider {
         maxOutputTokens: req.maxTokens,
       },
     };
-    if (req.enableReasoning) {
+    if (req.responseFormat === 'json') {
+      (body.generationConfig as Record<string, unknown>).responseMimeType = 'application/json';
+      // Gemini flash "thinking" shares the output-token budget with the answer and
+      // truncates large structured extractions ("Unexpected end of JSON input").
+      // Disable thinking for JSON output so the full budget goes to the JSON.
+      (body.generationConfig as Record<string, unknown>).thinkingConfig = { thinkingBudget: 0 };
+    } else if (req.enableReasoning) {
       (body.generationConfig as Record<string, unknown>).thinkingConfig = {
         thinkingBudget: req.reasoningBudget ?? 8192,
         includeThoughts: true,
       };
-    }
-    if (req.responseFormat === 'json') {
-      (body.generationConfig as Record<string, unknown>).responseMimeType = 'application/json';
     }
     return body;
   }
