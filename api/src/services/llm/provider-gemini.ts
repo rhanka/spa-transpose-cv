@@ -1,5 +1,4 @@
 import { env } from '../../config/env.js';
-import { logger } from '../../config/logger.js';
 import type { LlmProvider, LlmProviderConfig, LlmRequest, LlmResponse, LlmStreamCallbacks } from './types.js';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
@@ -94,7 +93,6 @@ export class GeminiProvider implements LlmProvider {
 
     let fullText = '';
     let usage = { input_tokens: 0, output_tokens: 0 };
-    let debugLogged = false;
 
     // Parse SSE stream
     const reader = res.body!.getReader();
@@ -118,11 +116,6 @@ export class GeminiProvider implements LlmProvider {
           const chunk = JSON.parse(payload) as Record<string, unknown>;
           const candidates = (chunk.candidates as Record<string, unknown>[]) || [];
           const parts = (candidates[0]?.content as Record<string, unknown>)?.parts as Record<string, unknown>[] || [];
-
-          if (!debugLogged && parts.length > 0) {
-            logger.info({ geminiPart: JSON.stringify(parts[0]).slice(0, 500) }, 'Gemini first stream part');
-            debugLogged = true;
-          }
 
           for (const part of parts) {
             if (typeof part.text === 'string') {
