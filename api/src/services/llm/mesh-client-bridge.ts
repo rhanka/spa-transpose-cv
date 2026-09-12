@@ -147,16 +147,22 @@ interface EventQueue {
 
 function createEventQueue(): EventQueue {
   const buffer: StreamEvent[] = [];
-  let waiter:
-    | { resolve: (v: IteratorResult<StreamEvent>) => void; reject: (e: unknown) => void }
-    | null = null;
+  // FIFO of pending consumers. A single slot is unsafe: the mesh runtime can
+  // read ahead (issue a second next() before the first resolves), and when the
+  // producer's SSE chunks arrive with real network gaps the buffer empties
+  // between them — a single slot would then let the second next() overwrite the
+  // first waiter, orphaning it and truncating the stream intermittently. A
+  // queue delivers each event to the oldest waiter, in order, with no loss.
+  const waiters: Array<{
+    resolve: (v: IteratorResult<StreamEvent>) => void;
+    reject: (e: unknown) => void;
+  }> = [];
   let closed = false;
   let error: unknown = undefined;
 
   const push = (e: StreamEvent): void => {
-    if (waiter) {
-      const w = waiter;
-      waiter = null;
+    const w = waiters.shift();
+    if (w) {
       w.resolve({ value: e, done: false });
     } else {
       buffer.push(e);
@@ -166,9 +172,9 @@ function createEventQueue(): EventQueue {
   const close = (err?: unknown): void => {
     closed = true;
     if (err !== undefined) error = err;
-    if (waiter) {
-      const w = waiter;
-      waiter = null;
+    // Settle every pending consumer, not just one.
+    while (waiters.length > 0) {
+      const w = waiters.shift() as (typeof waiters)[number];
       if (err !== undefined) w.reject(err);
       else w.resolve({ value: undefined, done: true } as IteratorResult<StreamEvent>);
     }
@@ -178,6 +184,7 @@ function createEventQueue(): EventQueue {
     [Symbol.asyncIterator]() {
       return {
         next(): Promise<IteratorResult<StreamEvent>> {
+          // Drain buffered events before honoring close, so nothing is dropped.
           if (buffer.length > 0) {
             return Promise.resolve({ value: buffer.shift() as StreamEvent, done: false });
           }
@@ -189,7 +196,7 @@ function createEventQueue(): EventQueue {
             } as IteratorResult<StreamEvent>);
           }
           return new Promise<IteratorResult<StreamEvent>>((resolve, reject) => {
-            waiter = { resolve, reject };
+            waiters.push({ resolve, reject });
           });
         },
       };
