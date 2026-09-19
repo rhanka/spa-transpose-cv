@@ -31,7 +31,9 @@ import {
   type GenerateResponse,
   type LlmMesh,
 } from '@sentropic/llm-mesh';
+import type { KeyringAdapter } from '@sentropic/llm-mesh/node';
 import { LocalProviderClient } from './mesh-client-bridge.js';
+import { createMeshKeyring, PROVIDER_SECRET_KEYS } from './mesh-keyring.js';
 import type {
   ProviderId,
   LlmProvider,
@@ -100,22 +102,31 @@ export class MeshLlmProvider implements LlmProvider {
   private readonly providerId: ProviderId;
   private readonly modelId: string;
 
-  constructor(private readonly local: LlmProvider) {
+  constructor(
+    private readonly local: LlmProvider,
+    keyring: KeyringAdapter = createMeshKeyring(),
+  ) {
     this.config = local.config;
     this.providerId = local.config.id;
     this.modelId = local.config.modelId;
     const AdapterCtor = ADAPTER_BY_PROVIDER[this.providerId];
     const adapter = new AdapterCtor({ client: new LocalProviderClient(local) });
     const registry = createProviderRegistry([adapter]);
-    // Provide a dummy auth resolver: the injected client owns its own SDK key,
-    // but the mesh `prepare()` step calls adapter.validateAuth() which expects
-    // a non-empty auth source by default.
+    // Resolve real credentials for mesh validation. The injected local SDK
+    // still uses its own environment-configured key.
     this.mesh = createLlmMesh({
       registry,
-      authResolver: () => ({
-        material: { type: 'direct-token', token: 'injected-client-owns-auth' },
-        descriptor: { sourceType: 'direct-token' },
-      }),
+      authResolver: async () => {
+        const secretKey = PROVIDER_SECRET_KEYS[this.providerId];
+        const token = await keyring.getSecret(secretKey);
+        if (!token?.trim()) {
+          throw new Error(`Missing keyring secret: ${secretKey}`);
+        }
+        return {
+          material: { type: 'direct-token', token },
+          descriptor: { sourceType: 'direct-token' },
+        };
+      },
     });
   }
 

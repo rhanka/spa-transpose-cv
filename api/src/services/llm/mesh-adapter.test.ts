@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { InMemoryKeyring } from '@sentropic/llm-mesh/node';
 import type {
   GenerateRequest,
   GenerateResponse,
@@ -319,7 +320,9 @@ test('MeshLlmProvider.generate: round-trip through mesh', async () => {
     text: 'mesh-text',
     usage: { input_tokens: 100, output_tokens: 200 },
   };
-  const mesh = new MeshLlmProvider(local);
+  const keyring = new InMemoryKeyring();
+  await keyring.setSecret('MISTRAL_API_KEY', 'test-key');
+  const mesh = new MeshLlmProvider(local, keyring);
   const result = await mesh.generate({
     system: 'sys',
     userMessage: 'usr',
@@ -343,7 +346,9 @@ test('MeshLlmProvider.generateStream: emits thinking + content callbacks, return
     text: 'Hello World',
     usage: { input_tokens: 9, output_tokens: 8 },
   };
-  const mesh = new MeshLlmProvider(local);
+  const keyring = new InMemoryKeyring();
+  await keyring.setSecret('MISTRAL_API_KEY', 'test-key');
+  const mesh = new MeshLlmProvider(local, keyring);
   const thinking: string[] = [];
   const content: string[] = [];
   const out = await mesh.generateStream(
@@ -368,11 +373,22 @@ test('MeshLlmProvider.generateStream: tolerates done.usage absent (zeros fallbac
     text: 'X',
     usage: { input_tokens: 0, output_tokens: 0 },
   };
-  const mesh = new MeshLlmProvider(local);
+  const keyring = new InMemoryKeyring();
+  await keyring.setSecret('MISTRAL_API_KEY', 'test-key');
+  const mesh = new MeshLlmProvider(local, keyring);
   const out = await mesh.generateStream(
     { system: 's', userMessage: 'u', maxTokens: 50 },
     {},
   );
   assert.equal(out.text, 'X');
   assert.deepEqual(out.usage, { input_tokens: 0, output_tokens: 0 });
+});
+
+test('MeshLlmProvider: missing credentials reject before calling the local provider', async () => {
+  const local = new StubLocalProvider();
+  const mesh = new MeshLlmProvider(local, new InMemoryKeyring());
+  const request = { system: 's', userMessage: 'u', maxTokens: 50 };
+  await assert.rejects(mesh.generate(request), /Missing keyring secret: MISTRAL_API_KEY/);
+  await assert.rejects(mesh.generateStream(request, {}), /Missing keyring secret: MISTRAL_API_KEY/);
+  assert.equal(local.lastRequest, null);
 });
