@@ -11,7 +11,7 @@
     "jszip": "^3.10.1",
     "@xmldom/xmldom": "^0.8.15",
     "yaml": "^2.5.0",
-    "zod": "^3.22.4"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "vitest": "^3.2.7",
